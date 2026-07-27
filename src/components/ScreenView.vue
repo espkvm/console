@@ -12,7 +12,7 @@
  * being locked out of the picture because a transport changed would be worse
  * than using the older one.
  */
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import type { VideoStatus } from "../state/device";
 import { VideoStream } from "../video/stream";
@@ -41,58 +41,127 @@ const streamUrl = ref("/stream");
 let stream: VideoStream | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 
-/* Demo build only (static site at /demo/): there is no device, so instead of a
-   real stream the "screen" is a plain backdrop with a cursor drifting across it,
-   just to show the pane is live. Tree-shaken out of the firmware build. */
+/* Demo build only (static site at /demo/): there is no device, so the "screen"
+   is an abstract animation - a constellation of points that lights up around a
+   cursor which lags behind the real one - just to make the pane feel live and
+   reactive. Tree-shaken out of the firmware build. */
 const DEMO = import.meta.env.MODE === "demo";
 let demoRAF = 0;
+let demoCleanup: (() => void) | null = null;
+
 function startDemoScreen() {
   const el = canvas.value;
   const c = el?.getContext("2d");
   if (!el || !c) return;
-  el.width = 1280;
-  el.height = 720;
+  const W = 1280;
+  const H = 720;
+  el.width = W;
+  el.height = H;
   loaded.value = true;
   failed.value = false;
+
+  const pts = Array.from({ length: 120 }, () => ({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    vx: (Math.random() - 0.5) * 0.3,
+    vy: (Math.random() - 0.5) * 0.3,
+  }));
+  const target = { x: W / 2, y: H / 2 };
+  const cur = { x: W / 2, y: H / 2 };
+  let hasPointer = false;
+  let clickT = -1e9;
+  const PULSE = 520;
+
+  /* Track the real cursor on the window and map it into canvas space; the drawn
+     cursor eases toward it, so it trails slightly behind. A click sends a
+     discharge running out along the rays. */
+  const onMove = (e: PointerEvent) => {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    target.x = Math.max(0, Math.min(W, ((e.clientX - r.left) / r.width) * W));
+    target.y = Math.max(0, Math.min(H, ((e.clientY - r.top) / r.height) * H));
+    hasPointer = true;
+  };
+  const onDown = () => {
+    clickT = performance.now();
+  };
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerdown", onDown);
+  demoCleanup = () => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerdown", onDown);
+  };
+
   const t0 = performance.now();
   const draw = (t: number) => {
     const s = (t - t0) / 1000;
-    c.fillStyle = "#0c1a26";
-    c.fillRect(0, 0, 1280, 720);
-    c.strokeStyle = "rgba(255,255,255,0.05)";
-    c.lineWidth = 1;
-    for (let x = 0; x <= 1280; x += 64) {
-      c.beginPath();
-      c.moveTo(x, 0);
-      c.lineTo(x, 720);
-      c.stroke();
+    /* Gentle autonomous motion until the visitor moves the mouse. */
+    if (!hasPointer) {
+      target.x = W / 2 + Math.cos(s * 0.6) * W * 0.34;
+      target.y = H / 2 + Math.sin(s * 0.9) * H * 0.34;
     }
-    for (let y = 0; y <= 720; y += 64) {
+    cur.x += (target.x - cur.x) * 0.08;
+    cur.y += (target.y - cur.y) * 0.08;
+
+    c.fillStyle = "#0a141d";
+    c.fillRect(0, 0, W, H);
+    const glow = c.createRadialGradient(cur.x, cur.y, 0, cur.x, cur.y, 340);
+    glow.addColorStop(0, "rgba(76,154,255,0.20)");
+    glow.addColorStop(1, "rgba(76,154,255,0)");
+    c.fillStyle = glow;
+    c.fillRect(0, 0, W, H);
+
+    const age = t - clickT;
+    const pulse = age >= 0 && age < PULSE ? 1 - age / PULSE : 0;
+    const ease = pulse > 0 ? 1 - Math.pow(1 - age / PULSE, 3) : 0;
+    const R = 260;
+    for (const p of pts) {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x += W;
+      else if (p.x > W) p.x -= W;
+      if (p.y < 0) p.y += H;
+      else if (p.y > H) p.y -= H;
+      const d = Math.hypot(p.x - cur.x, p.y - cur.y);
+      const near = d < R ? 1 - d / R : 0;
       c.beginPath();
-      c.moveTo(0, y);
-      c.lineTo(1280, y);
-      c.stroke();
+      c.arc(p.x, p.y, 1 + near * 2.5 + pulse * near * 3, 0, Math.PI * 2);
+      c.fillStyle = `rgba(150,190,230,${0.1 + near * 0.6 + pulse * near * 0.3})`;
+      c.fill();
+      if (near > 0) {
+        c.beginPath();
+        c.moveTo(p.x, p.y);
+        c.lineTo(cur.x, cur.y);
+        c.strokeStyle = `rgba(76,154,255,${near * 0.28 + pulse * near * 0.5})`;
+        c.lineWidth = 1;
+        c.stroke();
+        if (pulse > 0) {
+          const sx = cur.x + (p.x - cur.x) * ease;
+          const sy = cur.y + (p.y - cur.y) * ease;
+          c.beginPath();
+          c.arc(sx, sy, 2 + pulse * 2.5, 0, Math.PI * 2);
+          c.fillStyle = `rgba(200,225,255,${Math.min(1, pulse * (0.6 + near))})`;
+          c.fill();
+        }
+      }
     }
-    c.fillStyle = "rgba(255,255,255,0.35)";
-    c.font = "28px system-ui, sans-serif";
-    c.textAlign = "center";
-    c.fillText("ESP-KVM demo - simulated screen, no device connected", 640, 360);
-    const cx = 640 + Math.cos(s * 0.7) * 420;
-    const cy = 380 + Math.sin(s * 1.13) * 230;
+
+    /* The lagging cursor arrow. */
     c.beginPath();
-    c.moveTo(cx, cy);
-    c.lineTo(cx, cy + 22);
-    c.lineTo(cx + 6, cy + 16);
-    c.lineTo(cx + 13, cy + 24);
-    c.lineTo(cx + 17, cy + 21);
-    c.lineTo(cx + 10, cy + 13);
-    c.lineTo(cx + 18, cy + 12);
+    c.moveTo(cur.x, cur.y);
+    c.lineTo(cur.x, cur.y + 22);
+    c.lineTo(cur.x + 6, cur.y + 16);
+    c.lineTo(cur.x + 13, cur.y + 24);
+    c.lineTo(cur.x + 17, cur.y + 21);
+    c.lineTo(cur.x + 10, cur.y + 13);
+    c.lineTo(cur.x + 18, cur.y + 12);
     c.closePath();
     c.fillStyle = "#fff";
     c.strokeStyle = "#000";
     c.lineWidth = 1.5;
     c.fill();
     c.stroke();
+
     demoRAF = requestAnimationFrame(draw);
   };
   demoRAF = requestAnimationFrame(draw);
@@ -196,11 +265,12 @@ watch(failed, (isFailed) => {
   retryDelay = Math.min(retryDelay * 2, 30000);
 });
 
-if (DEMO) startDemoScreen();
+if (DEMO) onMounted(startDemoScreen);
 else if (!props.paused) startStream();
 onUnmounted(() => {
   stream?.stop();
   if (demoRAF) cancelAnimationFrame(demoRAF);
+  demoCleanup?.();
 });
 
 const noSignal = computed(() => props.status !== null && !props.status.signal);
@@ -221,6 +291,7 @@ const showOverlay = computed(
       ]"
     />
     <img
+      v-if="!DEMO"
       v-show="!useWebsocket"
       ref="img"
       :class="[
@@ -241,7 +312,7 @@ const showOverlay = computed(
       "
     />
 
-    <div v-if="showOverlay" class="screen-overlay">
+    <div v-if="!DEMO && showOverlay" class="screen-overlay">
       <div class="screen-message">
         <span class="screen-message-icon">
           <Icon :name="noSignal || failed || codecError ? 'warning' : 'screen'" :size="26" />
