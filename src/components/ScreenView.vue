@@ -72,10 +72,12 @@ function startDemoScreen() {
   let clickT = -1e9;
   const PULSE = 520;
 
-  /* Track the real cursor on the window and map it into canvas space; the drawn
-     cursor eases toward it, so it trails slightly behind. A click sends a
-     discharge running out along the rays. */
+  /* Follow the real cursor only once the visitor has engaged (clicked to take
+     control), like the real KVM; otherwise the screen drifts on its own. The
+     eased cursor trails slightly behind; a click sends a discharge along the
+     rays. */
   const onMove = (e: PointerEvent) => {
+    if (!props.engaged) return;
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height) return;
     target.x = Math.max(0, Math.min(W, ((e.clientX - r.left) / r.width) * W));
@@ -83,7 +85,7 @@ function startDemoScreen() {
     hasPointer = true;
   };
   const onDown = () => {
-    clickT = performance.now();
+    if (props.engaged) clickT = performance.now();
   };
   window.addEventListener("pointermove", onMove);
   window.addEventListener("pointerdown", onDown);
@@ -95,6 +97,8 @@ function startDemoScreen() {
   const t0 = performance.now();
   const draw = (t: number) => {
     const s = (t - t0) / 1000;
+    /* Until engaged, ignore the real cursor and drift on our own. */
+    if (!props.engaged) hasPointer = false;
     /* Gentle autonomous motion until the visitor moves the mouse. */
     if (!hasPointer) {
       target.x = W / 2 + Math.cos(s * 0.6) * W * 0.34;
