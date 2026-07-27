@@ -41,6 +41,63 @@ const streamUrl = ref("/stream");
 let stream: VideoStream | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 
+/* Demo build only (static site at /demo/): there is no device, so instead of a
+   real stream the "screen" is a plain backdrop with a cursor drifting across it,
+   just to show the pane is live. Tree-shaken out of the firmware build. */
+const DEMO = import.meta.env.MODE === "demo";
+let demoRAF = 0;
+function startDemoScreen() {
+  const el = canvas.value;
+  const c = el?.getContext("2d");
+  if (!el || !c) return;
+  el.width = 1280;
+  el.height = 720;
+  loaded.value = true;
+  failed.value = false;
+  const t0 = performance.now();
+  const draw = (t: number) => {
+    const s = (t - t0) / 1000;
+    c.fillStyle = "#0c1a26";
+    c.fillRect(0, 0, 1280, 720);
+    c.strokeStyle = "rgba(255,255,255,0.05)";
+    c.lineWidth = 1;
+    for (let x = 0; x <= 1280; x += 64) {
+      c.beginPath();
+      c.moveTo(x, 0);
+      c.lineTo(x, 720);
+      c.stroke();
+    }
+    for (let y = 0; y <= 720; y += 64) {
+      c.beginPath();
+      c.moveTo(0, y);
+      c.lineTo(1280, y);
+      c.stroke();
+    }
+    c.fillStyle = "rgba(255,255,255,0.35)";
+    c.font = "28px system-ui, sans-serif";
+    c.textAlign = "center";
+    c.fillText("ESP-KVM demo - simulated screen, no device connected", 640, 360);
+    const cx = 640 + Math.cos(s * 0.7) * 420;
+    const cy = 380 + Math.sin(s * 1.13) * 230;
+    c.beginPath();
+    c.moveTo(cx, cy);
+    c.lineTo(cx, cy + 22);
+    c.lineTo(cx + 6, cy + 16);
+    c.lineTo(cx + 13, cy + 24);
+    c.lineTo(cx + 17, cy + 21);
+    c.lineTo(cx + 10, cy + 13);
+    c.lineTo(cx + 18, cy + 12);
+    c.closePath();
+    c.fillStyle = "#fff";
+    c.strokeStyle = "#000";
+    c.lineWidth = 1.5;
+    c.fill();
+    c.stroke();
+    demoRAF = requestAnimationFrame(draw);
+  };
+  demoRAF = requestAnimationFrame(draw);
+}
+
 function surfaceEl(): HTMLElement | null {
   return useWebsocket.value ? canvas.value : img.value;
 }
@@ -91,6 +148,7 @@ function startStream() {
 watch(
   () => props.paused,
   (isPaused) => {
+    if (DEMO) return;
     if (isPaused) {
       loaded.value = false;
       stream?.stop();
@@ -138,8 +196,12 @@ watch(failed, (isFailed) => {
   retryDelay = Math.min(retryDelay * 2, 30000);
 });
 
-if (!props.paused) startStream();
-onUnmounted(() => stream?.stop());
+if (DEMO) startDemoScreen();
+else if (!props.paused) startStream();
+onUnmounted(() => {
+  stream?.stop();
+  if (demoRAF) cancelAnimationFrame(demoRAF);
+});
 
 const noSignal = computed(() => props.status !== null && !props.status.signal);
 const showOverlay = computed(
