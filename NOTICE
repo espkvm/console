@@ -1,0 +1,17 @@
+ESP-KVM console
+Copyright 2026 ESP-KVM contributors
+
+Licensed under the Apache License, Version 2.0. The full text is in LICENSE.
+
+This is the web console of ESP-KVM (https://github.com/espkvm/espkvm), which
+builds on the p4kvm project by Jonathan Rowny (https://github.com/jrowny/p4kvm),
+also under the Apache License, Version 2.0.
+
+The interface icons in src/components/Icon.vue were drawn for this project
+following the conventions of the Feather and Lucide icon sets - a 24x24 box, 2px
+strokes, round caps and joins. Drawn to those conventions, several shapes came
+out close to theirs, and are acknowledged here rather than pretended away:
+  Feather - https://github.com/feathericons/feather
+  Copyright (c) 2013-2023 Cole Bemis, MIT License
+  Lucide - https://github.com/lucide-icons/lucide
+  Copyright (c) 2020 Lucide Contributors, ISC License
