@@ -58,9 +58,12 @@ export default defineConfig(({ mode }) => {
       minify: "esbuild",
       cssMinify: true,
     },
+    /* host: true binds the dev server to all interfaces, so the console can be
+       opened from a phone on the LAN (Vite prints the Network URL). */
     server: useMock
-      ? {}
+      ? { host: true }
       : {
+          host: true,
           proxy: {
             "/stream": proxyRoute(target, { timeout: 0 }),
             "/api": proxyRoute(target),

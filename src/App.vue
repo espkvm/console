@@ -390,18 +390,18 @@ const LED_BITS: Array<[number, string]> = [
 
       <template v-if="online && status!.signal">
         <span class="stat mono">{{ status!.width }}x{{ status!.height }}</span>
-        <span class="stat mono" title="Codec and published frame rate">
+        <span class="stat mono hide-narrow" title="Codec and published frame rate">
           {{ codec }} {{ status!.fps.toFixed(1) }} fps
         </span>
-        <span class="stat mono" title="Encoded frames skipped as unchanged">
+        <span class="stat mono hide-narrow" title="Encoded frames skipped as unchanged">
           {{ status!.skippedFps.toFixed(0) }} skipped
         </span>
-        <span class="stat mono" title="Outgoing video bitrate">
+        <span class="stat mono hide-narrow" title="Outgoing video bitrate">
           {{ formatRate(status!.kbps) }}
         </span>
         <span
           v-if="status!.encoderBusyPct >= 90"
-          class="stat mono warn"
+          class="stat mono warn hide-narrow"
           title="The encoder has no headroom left; lower the frame rate limit or the resolution"
         >
           encoder {{ status!.encoderBusyPct }}%

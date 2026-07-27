@@ -290,6 +290,17 @@
 /* ---- narrow screens ------------------------------------------------------ */
 
 @media (max-width: 640px) {
+  /* The status bar is tight on a phone: keep the online state, resolution, the
+     version widget and the theme toggle; the rest of the video stats live in the
+     Video panel. Also tighten the spacing. */
+  .statusbar {
+    gap: var(--space-2);
+  }
+
+  .hide-narrow {
+    display: none;
+  }
+
   .panel {
     width: 100%;
   }
