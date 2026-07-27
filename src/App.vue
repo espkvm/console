@@ -30,6 +30,8 @@ import {
   loadUsbProbe,
   loadValues,
   loadVideoStatus,
+  loadImages,
+  type StorageInfo,
   wakeTarget,
   type UsbProbe,
   Unauthorized,
@@ -53,6 +55,7 @@ const caps = ref<Record<string, Capability>>({});
 const status = ref<VideoStatus | null>(null);
 const system = ref<SystemInfo | null>(null);
 const usbProbe = ref<UsbProbe | null>(null);
+const storage = ref<StorageInfo | null>(null);
 
 /* Wake-on-LAN: the target MAC is a setting, the button is here. */
 const wolMac = computed(() => String(values.value.pwr_wol_mac ?? "").trim());
@@ -113,6 +116,44 @@ const codec = computed(
   () => status.value?.codec || enumName(schema.value, values.value, "vid_codec") || "-",
 );
 const online = computed(() => status.value !== null);
+
+/* Connection state for the footer icons: what is plugged in and live. "on" is
+   lit, "idle" is present-but-inactive (HDMI cable up, no picture), "off" is
+   nothing. */
+const conns = computed<
+  Array<{ id: "hdmi" | "usb" | "sd" | "ethernet"; title: string; state: "on" | "idle" | "off" }>
+>(() => [
+  {
+    id: "hdmi",
+    title: online.value
+      ? status.value?.signal
+        ? `HDMI in - ${status.value.width}x${status.value.height}`
+        : "HDMI in - no signal"
+      : "HDMI in",
+    state: online.value ? (status.value?.signal ? "on" : "idle") : "off",
+  },
+  {
+    id: "usb",
+    title: !input.target.value.known
+      ? "USB - control channel down"
+      : input.target.value.attached
+        ? "USB - the target sees the keyboard and mouse"
+        : "USB - no target on the OTG port",
+    state: input.target.value.attached ? "on" : "off",
+  },
+  {
+    id: "sd",
+    title: storage.value?.mounted ? "microSD card inserted" : "no microSD card",
+    state: storage.value?.mounted ? "on" : "off",
+  },
+  {
+    id: "ethernet",
+    title: system.value?.net?.up
+      ? `Ethernet - link up${system.value.net.mbps ? ` (${system.value.net.mbps} Mbps)` : ""}`
+      : "Ethernet - link down",
+    state: system.value?.net?.up ? "on" : "off",
+  },
+]);
 
 let pollId = 0;
 let systemPollId = 0;
@@ -184,12 +225,14 @@ async function startConsole() {
     try {
       system.value = await loadSystemInfo();
       usbProbe.value = await loadUsbProbe();
+      storage.value = await loadImages();
     } catch {
       /* The video poll reports loss of contact, and handles being signed out. */
     }
   }, 10000);
 
   usbProbe.value = await loadUsbProbe().catch(() => null);
+  storage.value = await loadImages().catch(() => null);
 
   window.addEventListener("keydown", onGlobalKey);
 }
@@ -600,25 +643,17 @@ const LED_BITS: Array<[number, string]> = [
 
     <footer class="actionbar">
       <div class="actionbar-left">
-        <span class="stat">
+        <span class="conns" aria-label="Connections">
           <span
-            :class="[
-              'dot',
-              !input.target.value.known
-                ? 'dot-bad'
-                : input.target.value.attached
-                  ? 'dot-ok'
-                  : 'dot-warn',
-            ]"
-          />
-          {{
-            !input.target.value.known
-              ? "Control channel down"
-              : input.target.value.attached
-                ? "USB attached"
-                : "No target on USB"
-          }}
+            v-for="c in conns"
+            :key="c.id"
+            :class="['conn', 'conn-' + c.state]"
+            :title="c.title"
+          >
+            <Icon :name="c.id" :size="16" />
+          </span>
         </span>
+
 
         <span class="leds">
           <span

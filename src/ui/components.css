@@ -221,6 +221,32 @@
   color: var(--ok);
 }
 
+/* Footer connection icons: HDMI in, USB to target, microSD, Ethernet. */
+.conns {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.conn {
+  display: inline-flex;
+  line-height: 0;
+  color: var(--text-faint);
+}
+
+.conn-on {
+  color: var(--ok);
+}
+
+.conn-idle {
+  color: var(--warn);
+}
+
+.conn-off {
+  color: var(--text-faint);
+  opacity: 0.45;
+}
+
 .input-panel,
 .power-panel,
 .media-panel {

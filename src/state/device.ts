@@ -69,6 +69,8 @@ export interface SystemInfo {
   psramFree: number;
   /** 0 when the sensor is unavailable. */
   tempC: number;
+  /** Ethernet link state, when the firmware reports it. */
+  net?: { up: boolean; mbps: number };
 }
 
 export type Values = Record<string, number | string | boolean>;
