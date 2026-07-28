@@ -231,6 +231,17 @@ async function doReset() {
       </button>
     </form>
 
+    <div v-if="currentSection === 'security'" class="firmware">
+      <h3>Device certificate</h3>
+      <p class="setting-note">
+        The device is its own certificate authority, so a browser warns until you trust it - and
+        refuses the WebSocket and the H.264 decoder until you do. Download the CA and add it to
+        your operating system or browser's trusted authorities (not "your certificates"), then
+        reach the device by its name. That clears the warning and enables H.264.
+      </p>
+      <a class="btn btn-sm" href="/cert.pem" download="espkvm-ca.pem">Download CA certificate</a>
+    </div>
+
     <div class="settings-footer">
       <button type="button" class="btn btn-sm btn-danger" :disabled="busy" @click="doReset">
         Restore defaults
