@@ -120,6 +120,12 @@ p {
   padding: 0;
 }
 
+/* An active toggle button (e.g. touch mode on). */
+.btn-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ---- form controls ------------------------------------------------------ */
 
 input[type="text"],

@@ -9,7 +9,13 @@
 
 import { onScopeDispose, ref, watchEffect, type Ref } from "vue";
 
-import { ABS_MAX, Control, type ConnectionState, type TargetState } from "./control";
+import {
+  ABS_MAX,
+  Control,
+  type ConnectionState,
+  type ControlState,
+  type TargetState,
+} from "./control";
 import { isModifierCode, modifierMask, usageForCode } from "./keymap";
 
 export interface InputOptions {
@@ -21,6 +27,8 @@ export interface InputOptions {
   invertScroll: Ref<boolean>;
   /** Element showing the target's screen; pointer coordinates map onto it. */
   surface: Ref<HTMLElement | null>;
+  /** When true, touch mode owns the surface and desktop pointer handling stands down. */
+  touchActive?: Ref<boolean>;
   onDisengage(): void;
 }
 
@@ -29,6 +37,9 @@ const MAX_KEYS = 6;
 export function useInput(opts: InputOptions) {
   const target = ref<TargetState>({ attached: false, leds: 0, known: false });
   const connection = ref<ConnectionState>("connecting");
+  /* Who holds the single control session. Assume it is ours until the device
+     says otherwise, so a lone operator is never told to "take control". */
+  const controlState = ref<ControlState>("you");
   const held = new Set<number>();
   const lastPos = { x: 0, y: 0 };
   /* Mouse buttons currently pressed on the target, so a lost up can be undone. */
@@ -37,6 +48,7 @@ export function useInput(opts: InputOptions) {
   const control = new Control({
     onTarget: (t) => (target.value = t),
     onConnection: (c) => (connection.value = c),
+    onControl: (s) => (controlState.value = s),
   });
   onScopeDispose(() => control.dispose());
 
@@ -114,6 +126,9 @@ export function useInput(opts: InputOptions) {
   watchEffect((onCleanup) => {
     const el = opts.surface.value;
     if (!el) return;
+    /* Touch mode drives the surface through useTouch; stay out of its way so a
+       single touch is not read as both a gesture and a desktop pointer event. */
+    if (opts.touchActive?.value) return;
 
     const relative = () => opts.pointerMode.value === "relative";
     const tracking = () =>
@@ -265,5 +280,5 @@ export function useInput(opts: InputOptions) {
     control.mouseAbsolute(0, p.x, p.y);
   }
 
-  return { target, connection, control, engageFromPointer };
+  return { target, connection, controlState, control, engageFromPointer };
 }

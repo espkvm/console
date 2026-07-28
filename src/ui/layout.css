@@ -109,6 +109,13 @@
   background: var(--bg-sunken);
 }
 
+/* In touch mode the screen is a trackpad: keep the browser from turning a
+   swipe or pinch into a page scroll or zoom before the gesture handler sees it. */
+.stage-touch canvas,
+.stage-touch img {
+  touch-action: none;
+}
+
 /* The panel floats over the picture instead of shrinking it: a KVM screen that
    resizes whenever a panel opens forces the operator to re-find everything. */
 .panel {
@@ -272,6 +279,23 @@
 .screen-engage-hint {
   font-size: var(--text-xs);
   color: var(--text-faint);
+}
+
+/* Shown centred over the picture when another browser holds the control
+   session; the button asks the device to hand control here. */
+.screen-notice {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  text-align: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--bg-sunken) 55%, transparent);
+  backdrop-filter: blur(2px);
+  color: var(--text);
 }
 
 /* ---- fatal -------------------------------------------------------------- */

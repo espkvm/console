@@ -4,7 +4,7 @@
  * doing, a rail of panels that slide over the picture rather than displacing
  * it, and the target's screen filling everything else.
  */
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import Icon from "./components/Icon.vue";
 import InputPanel from "./components/InputPanel.vue";
@@ -15,8 +15,11 @@ import OsWidget from "./components/OsWidget.vue";
 import MediaPanel from "./components/MediaPanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import ToastHost from "./components/ToastHost.vue";
+import TouchControls from "./components/TouchControls.vue";
 import UpdateWidget from "./components/UpdateWidget.vue";
 import { useInput } from "./input/useInput";
+import { useTouch } from "./input/useTouch";
+import { DEFAULT_LAYOUT } from "./layouts.js";
 import {
   type Capability,
   type Setting,
@@ -133,14 +136,44 @@ const invertScroll = computed(() => Boolean(values.value.scroll_inv));
 /* Which side the rail and its panels sit on, from the ui_side setting. */
 const uiRight = computed(() => enumName(schema.value, values.value, "ui_side") === "right");
 
+/*
+ * Touch mode: on a phone or tablet the desktop pointer mapping is unusable, so
+ * the screen becomes a trackpad instead (see useTouch). Auto-detected from a
+ * coarse pointer, but also a manual toggle - a laptop with a touchscreen can
+ * want either. The keyboard uses the target's own layout, like paste does.
+ */
+const touchMode = ref(false);
+const touchSensitivity = ref(1.6);
+const layout = computed(() => enumName(schema.value, values.value, "kbd_layout") ?? DEFAULT_LAYOUT);
+
 const input = useInput({
   engaged,
   engageMode,
   pointerMode,
   invertScroll,
   surface,
+  touchActive: touchMode,
   onDisengage: () => (engaged.value = false),
 });
+
+useTouch({
+  surface,
+  control: input.control,
+  active: touchMode,
+  invertScroll,
+  sensitivity: touchSensitivity,
+});
+
+/* Another browser is driving this target. Input from here is ignored until the
+   operator takes control, so say so instead of leaving a dead pointer. */
+const heldByOther = computed(() => input.controlState.value === "held");
+/* Losing control while engaged would strand a captured keyboard doing nothing. */
+watch(heldByOther, (held) => {
+  if (held) engaged.value = false;
+});
+function takeControl() {
+  input.control.takeControl();
+}
 
 /* What is actually being encoded, not what was asked for: an encoder that
    fails to start falls back, and the status bar should show the truth. */
@@ -271,6 +304,8 @@ async function startConsole() {
 
 onMounted(async () => {
   document.documentElement.dataset.theme = theme.value;
+  /* Start in touch mode on a device whose primary pointer is a finger. */
+  if (window.matchMedia?.("(pointer: coarse)").matches) touchMode.value = true;
   try {
     session.value = await loadSession();
   } catch (err) {
@@ -552,7 +587,7 @@ const LED_BITS: Array<[number, string]> = [
         </button>
       </nav>
 
-      <main class="stage">
+      <main class="stage" :class="{ 'stage-touch': touchMode }">
         <ScreenView
           :status="status"
           :engaged="engaged"
@@ -563,7 +598,7 @@ const LED_BITS: Array<[number, string]> = [
         />
 
         <button
-          v-if="!engaged && !paused"
+          v-if="!engaged && !paused && !touchMode && !heldByOther"
           type="button"
           class="screen-engage"
           @pointerdown="onEngage($event)"
@@ -575,6 +610,17 @@ const LED_BITS: Array<[number, string]> = [
           }}
           <span class="screen-engage-hint">Esc gives control back</span>
         </button>
+
+        <div v-if="heldByOther && !paused" class="screen-notice">
+          <p>Another session is in control of this target.</p>
+          <button type="button" class="btn" @click="takeControl">Take control</button>
+        </div>
+
+        <TouchControls
+          v-if="touchMode && !paused && !heldByOther"
+          :control="input.control"
+          :layout="layout"
+        />
 
         <aside v-if="panel" class="panel" :aria-label="PANEL_TITLES[panel]">
           <header class="panel-head">
@@ -733,6 +779,15 @@ const LED_BITS: Array<[number, string]> = [
         </span>
       </div>
       <div class="actionbar-right">
+        <button
+          type="button"
+          class="btn btn-sm"
+          :class="{ 'btn-on': touchMode }"
+          :title="touchMode ? 'Touch mode: screen is a trackpad' : 'Use the screen as a trackpad'"
+          @click="touchMode = !touchMode"
+        >
+          Touch
+        </button>
         <button
           type="button"
           class="btn btn-sm"

@@ -9,9 +9,11 @@
  *     0x04 consumer    usage:u16
  *     0x05 release all
  *     0x06 ping
+ *     0x07 take control
  *   device -> client
  *     0x81 status      flags:u8 (bit0 target attached), leds:u8
  *     0x82 pong
+ *     0x83 control      state:u8 (0 held by another, 1 you hold it, 2 free)
  *
  * The device serves one control client at a time and drops whatever was held
  * down when the socket closes, so reconnecting is always safe.
@@ -25,7 +27,13 @@ const MSG_KEYBOARD = 0x03;
 const MSG_CONSUMER = 0x04;
 const MSG_RELEASE_ALL = 0x05;
 const MSG_PING = 0x06;
+const MSG_TAKEOVER = 0x07;
 const MSG_STATUS = 0x81;
+const MSG_CONTROL = 0x83;
+
+/* How often to poll control/target state, so a viewer notices the session was
+   freed or taken without needing to interact. */
+const PING_INTERVAL_MS = 2500;
 
 export interface TargetState {
   /** The target machine has enumerated our USB device. */
@@ -39,14 +47,19 @@ export interface TargetState {
 
 export type ConnectionState = "connecting" | "open" | "closed";
 
+/** Who holds the single control session: this client, nobody, or someone else. */
+export type ControlState = "you" | "free" | "held";
+
 interface Handlers {
   onTarget(state: TargetState): void;
   onConnection(state: ConnectionState): void;
+  onControl(state: ControlState): void;
 }
 
 export class Control {
   #ws: WebSocket | null = null;
   #retry: number | null = null;
+  #ping: number | null = null;
   #closed = false;
   #handlers: Handlers;
   #backoff = 500;
@@ -72,9 +85,11 @@ export class Control {
       this.#backoff = 500;
       this.#handlers.onConnection("open");
       /* The device cannot push during the handshake, so ask for the current
-         target state rather than showing blank indicators until something
-         happens to change them. */
+         target and control state rather than showing blank indicators until
+         something happens to change them. Repeat on a timer so a viewer learns
+         the session was freed or taken over without having to interact. */
       this.#send(new Uint8Array([MSG_PING]));
+      this.#ping = window.setInterval(() => this.#send(new Uint8Array([MSG_PING])), PING_INTERVAL_MS);
     };
 
     ws.onmessage = (ev) => {
@@ -82,6 +97,8 @@ export class Control {
       const b = new Uint8Array(ev.data);
       if (b[0] === MSG_STATUS && b.length >= 3) {
         this.#handlers.onTarget({ attached: (b[1] & 1) !== 0, leds: b[2], known: true });
+      } else if (b[0] === MSG_CONTROL && b.length >= 2) {
+        this.#handlers.onControl(b[1] === 1 ? "you" : b[1] === 2 ? "free" : "held");
       }
     };
 
@@ -89,6 +106,10 @@ export class Control {
 
     ws.onclose = () => {
       this.#ws = null;
+      if (this.#ping !== null) {
+        clearInterval(this.#ping);
+        this.#ping = null;
+      }
       this.#handlers.onConnection("closed");
       /* Not "the target is gone" - we simply stopped being told. */
       this.#handlers.onTarget({ attached: false, leds: 0, known: false });
@@ -106,8 +127,14 @@ export class Control {
   dispose() {
     this.#closed = true;
     if (this.#retry !== null) clearTimeout(this.#retry);
+    if (this.#ping !== null) clearInterval(this.#ping);
     this.#ws?.close();
     this.#ws = null;
+  }
+
+  /** Ask the device to make this client the controlling one, demoting any other. */
+  takeControl() {
+    this.#send(new Uint8Array([MSG_TAKEOVER]));
   }
 
   #send(data: Uint8Array) {
