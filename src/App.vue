@@ -33,6 +33,9 @@ import {
   loadImages,
   type StorageInfo,
   wakeTarget,
+  powerClick,
+  powerHold,
+  powerReset,
   type UsbProbe,
   Unauthorized,
 } from "./state/device";
@@ -70,6 +73,35 @@ async function wake() {
   } finally {
     waking.value = false;
   }
+}
+
+/* ATX power control. The device holds each button pulse itself, so these calls
+ * return at once; the destructive ones confirm first, matching the rest of the
+ * console. Power state, when a LED is sensed, comes from system/info. */
+const atxBusy = ref(false);
+const atxKnown = computed(() => Boolean(system.value?.atx?.known));
+const atxOn = computed(() => Boolean(system.value?.atx?.on));
+async function atxAction(run: () => Promise<void>, ok: string) {
+  atxBusy.value = true;
+  try {
+    await run();
+    toast.info(ok);
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    atxBusy.value = false;
+  }
+}
+function atxPower() {
+  atxAction(powerClick, "Power button pressed");
+}
+function atxForceOff() {
+  if (!confirm("Hold the power button to force the target off? Unsaved work is lost.")) return;
+  atxAction(powerHold, "Holding power button (force off)");
+}
+function atxReset() {
+  if (!confirm("Press the reset button on the target?")) return;
+  atxAction(powerReset, "Reset button pressed");
 }
 const ready = ref(false);
 const loadError = ref<string | null>(null);
@@ -617,6 +649,40 @@ const LED_BITS: Array<[number, string]> = [
             />
             <MediaPanel v-else-if="panel === 'media'" @values="values = $event" />
             <div v-else-if="panel === 'power'" class="power-panel">
+              <template v-if="caps.atx?.active">
+                <h3>ATX power</h3>
+                <p class="muted">
+                  <template v-if="atxKnown">
+                    Target power:
+                    <span :class="['pill', atxOn ? 'pill-on' : 'pill-off']">{{
+                      atxOn ? "on" : "off"
+                    }}</span>
+                  </template>
+                  <template v-else>
+                    "Press" the target's front-panel buttons through the wired optocouplers.
+                  </template>
+                </p>
+                <div class="power-buttons">
+                  <button type="button" class="btn btn-sm" :disabled="atxBusy" @click="atxPower">
+                    Power
+                  </button>
+                  <button type="button" class="btn btn-sm" :disabled="atxBusy" @click="atxReset">
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-danger"
+                    :disabled="atxBusy"
+                    @click="atxForceOff"
+                  >
+                    Force off
+                  </button>
+                </div>
+              </template>
+              <p v-else-if="caps.atx?.available && !caps.atx?.enabled" class="muted">
+                ATX control is wired but switched off. Enable it under Settings &rarr; Power.
+              </p>
+
               <template v-if="caps.wol?.available">
                 <h3>Wake on LAN</h3>
                 <p v-if="!wolMac" class="muted">
@@ -632,7 +698,8 @@ const LED_BITS: Array<[number, string]> = [
                   </button>
                 </template>
               </template>
-              <p v-else class="muted">
+
+              <p v-if="!caps.atx?.available && !caps.wol?.available" class="muted">
                 {{ caps.atx?.reason ?? "Power control is not available." }}
               </p>
             </div>

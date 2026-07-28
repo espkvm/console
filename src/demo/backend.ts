@@ -104,6 +104,10 @@ async function route(
         return json({ status: "restarting" });
       case "/api/v1/power/wake":
         return json({ status: "sent" });
+      case "/api/v1/power/click":
+      case "/api/v1/power/hold":
+      case "/api/v1/power/reset":
+        return json({ status: "ok" });
       /* Actions that would move real bytes are not part of a demo. */
       case "/api/v1/system/update":
       case "/api/v1/storage/upload":

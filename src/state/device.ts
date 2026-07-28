@@ -71,6 +71,12 @@ export interface SystemInfo {
   tempC: number;
   /** Ethernet link state, when the firmware reports it. */
   net?: { up: boolean; mbps: number };
+  /**
+   * ATX power control state, when the firmware reports it.
+   * `enabled` - wired and switched on; `known` - a power LED is sensed, so
+   * `on` is meaningful rather than a guess.
+   */
+  atx?: { enabled: boolean; known: boolean; on: boolean };
 }
 
 export type Values = Record<string, number | string | boolean>;
@@ -172,6 +178,25 @@ export async function wakeTarget(): Promise<void> {
     throw new Error((body as { error?: string }).error ?? `wake failed (${res.status})`);
   }
 }
+
+/**
+ * ATX power actions: "press" the target's front-panel buttons through the
+ * device's optocouplers. Each returns as soon as the press is queued; the
+ * device holds the pulse itself. `click` is a normal power tap, `hold` is a
+ * five-second hard off, `reset` taps the reset button.
+ */
+async function powerAction(action: "click" | "hold" | "reset"): Promise<void> {
+  const res = await fetch(`/api/v1/power/${action}`, { method: "POST" });
+  if (res.status === 401) throw new Unauthorized();
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((body as { error?: string }).error ?? `power ${action} failed (${res.status})`);
+  }
+}
+
+export const powerClick = () => powerAction("click");
+export const powerHold = () => powerAction("hold");
+export const powerReset = () => powerAction("reset");
 
 /**
  * Send a firmware image. The device writes it to the inactive slot and
