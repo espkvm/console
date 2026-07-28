@@ -170,18 +170,17 @@ async function doReset() {
             <option v-for="(c, i) in s.choices ?? []" :key="c" :value="String(i)">{{ c }}</option>
           </select>
 
-          <div v-else-if="s.type === 'int'" class="range-row">
-            <input
-              :id="`set-${s.key}`"
-              type="range"
-              :min="s.min"
-              :max="s.max"
-              :value="Number(values[s.key] ?? 0)"
-              :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
-              @change="write(s.key, Number(($event.target as HTMLInputElement).value))"
-            />
-            <span class="mono range-value">{{ values[s.key] }}</span>
-          </div>
+          <input
+            v-else-if="s.type === 'int'"
+            :id="`set-${s.key}`"
+            type="number"
+            class="num-input"
+            :min="s.min"
+            :max="s.max"
+            :value="Number(values[s.key] ?? 0)"
+            :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
+            @change="write(s.key, Number(($event.target as HTMLInputElement).value))"
+          />
 
           <input
             v-else

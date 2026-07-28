@@ -101,16 +101,10 @@
   cursor: pointer;
 }
 
-.range-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.range-value {
-  min-width: 3.5em;
-  text-align: right;
-  color: var(--text-muted);
+/* Numeric settings (GPIO pins, durations): a plain number field is easier to
+ * set precisely than a slider. */
+.num-input {
+  width: 8rem;
 }
 
 .settings-footer {

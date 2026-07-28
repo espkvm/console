@@ -529,8 +529,8 @@ const LED_BITS: Array<[number, string]> = [
           type="button"
           :class="['rail-btn', { 'rail-btn-active': panel === 'power' }]"
           aria-label="Power"
-          :disabled="!(caps.wol?.available || caps.atx?.available)"
-          :title="caps.wol?.available || caps.atx?.available ? 'Power' : (caps.atx?.reason ?? 'Power')"
+          :disabled="!(caps.wol?.available || caps.atx?.active)"
+          :title="caps.wol?.available || caps.atx?.active ? 'Power' : 'Power control is off'"
           @click="togglePanel('power')"
         >
           <Icon name="power" :size="18" />
@@ -679,9 +679,6 @@ const LED_BITS: Array<[number, string]> = [
                   </button>
                 </div>
               </template>
-              <p v-else-if="caps.atx?.available && !caps.atx?.enabled" class="muted">
-                ATX control is wired but switched off. Enable it under Settings &rarr; Power.
-              </p>
 
               <template v-if="caps.wol?.available">
                 <h3>Wake on LAN</h3>
@@ -699,7 +696,7 @@ const LED_BITS: Array<[number, string]> = [
                 </template>
               </template>
 
-              <p v-if="!caps.atx?.available && !caps.wol?.available" class="muted">
+              <p v-if="!caps.atx?.active && !caps.wol?.available" class="muted">
                 {{ caps.atx?.reason ?? "Power control is not available." }}
               </p>
             </div>
