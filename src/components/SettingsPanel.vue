@@ -17,6 +17,7 @@ import {
   type Setting,
   type Values,
   resetSettings,
+  restartDevice,
   saveSettings,
   settingBlockedReason,
 } from "../state/device";
@@ -102,6 +103,18 @@ async function submitPassword() {
     toast.error(err instanceof Error ? err.message : String(err));
   } finally {
     changingPassword.value = false;
+  }
+}
+
+async function doRestart() {
+  if (!confirm("Restart the device? It drops off the network for a few seconds. The target is not affected.")) {
+    return;
+  }
+  try {
+    await restartDevice();
+    toast.info("Restarting - the console will reconnect on its own");
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -243,6 +256,7 @@ async function doReset() {
     </div>
 
     <div class="settings-footer">
+      <button type="button" class="btn btn-sm" @click="doRestart">Restart device</button>
       <button type="button" class="btn btn-sm btn-danger" :disabled="busy" @click="doReset">
         Restore defaults
       </button>

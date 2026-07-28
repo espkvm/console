@@ -198,6 +198,13 @@ export const powerClick = () => powerAction("click");
 export const powerHold = () => powerAction("hold");
 export const powerReset = () => powerAction("reset");
 
+/** Reboot the device itself (not the target). It drops off the network briefly. */
+export async function restartDevice(): Promise<void> {
+  const res = await fetch("/api/v1/system/restart", { method: "POST" });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(`restart failed (${res.status})`);
+}
+
 /**
  * Send a firmware image. The device writes it to the inactive slot and
  * restarts; if the new image never comes up, the bootloader returns to this
