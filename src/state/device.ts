@@ -480,6 +480,7 @@ export const SECTION_TITLES: Record<string, string> = {
   storage: "Virtual media",
   power: "Power",
   network: "Network",
+  mqtt: "MQTT / Home Assistant",
   security: "Security",
   system: "System",
 };
@@ -490,6 +491,7 @@ export const SECTION_ORDER = [
   "storage",
   "power",
   "network",
+  "mqtt",
   "security",
   "system",
 ];
