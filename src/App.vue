@@ -186,7 +186,7 @@ const online = computed(() => status.value !== null);
    lit, "idle" is present-but-inactive (HDMI cable up, no picture), "off" is
    nothing. */
 type Conn = {
-  id: "hdmi" | "usb" | "sd" | "ethernet" | "mqtt";
+  id: "hdmi" | "usb" | "sd" | "ethernet" | "vpn" | "mqtt";
   title: string;
   state: "on" | "idle" | "off";
 };
@@ -224,6 +224,16 @@ const conns = computed<Conn[]>(() => {
       state: system.value?.net?.up ? "on" : "off",
     },
   ];
+  /* Shown only when the WireGuard tunnel is turned on - like MQTT, a persistent
+     grey icon would be noise for those who do not use it. */
+  const w = system.value?.wg;
+  if (w?.enabled) {
+    list.push({
+      id: "vpn",
+      title: w.up ? "WireGuard - tunnel up" : "WireGuard - connecting to the peer",
+      state: w.up ? "on" : "idle",
+    });
+  }
   /* Shown only when MQTT is turned on - a persistent grey icon would be noise
      for the majority who do not use Home Assistant. */
   const m = system.value?.mqtt;

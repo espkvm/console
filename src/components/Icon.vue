@@ -59,6 +59,11 @@ const PATHS = {
     "M6 7.5h12v6h-2v2h-3v2h-2v-2H8v-2H6z",
     "M8 9.5v2.5M10.7 9.5v2.5M13.3 9.5v2.5M16 9.5v2.5",
   ],
+  /* Shield with a check: the WireGuard / VPN tunnel. */
+  vpn: [
+    "M12 3l7 3v5.5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6z",
+    "M9 12l2 2 4-4",
+  ],
   /* Broadcast/telemetry: a centre dot with two pairs of concentric arcs. */
   mqtt: [
     "M4.9 16.1a7 7 0 0 1 0-8.2",

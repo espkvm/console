@@ -83,6 +83,12 @@ export interface SystemInfo {
    * the broker right now.
    */
   mqtt?: { enabled: boolean; connected: boolean };
+  /**
+   * WireGuard tunnel state, when the firmware reports it.
+   * `enabled` - turned on and started; `up` - a handshake with the peer has
+   * completed. `publicKey` is the device's own key, to add to the peer.
+   */
+  wg?: { enabled: boolean; up: boolean; address: string; publicKey: string };
 }
 
 export type Values = Record<string, number | string | boolean>;
@@ -486,6 +492,7 @@ export const SECTION_TITLES: Record<string, string> = {
   storage: "Virtual media",
   power: "Power",
   network: "Network",
+  vpn: "WireGuard",
   mqtt: "MQTT / Home Assistant",
   security: "Security",
   system: "System",
@@ -497,6 +504,7 @@ export const SECTION_ORDER = [
   "storage",
   "power",
   "network",
+  "vpn",
   "mqtt",
   "security",
   "system",
