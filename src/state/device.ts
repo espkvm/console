@@ -77,6 +77,12 @@ export interface SystemInfo {
    * `on` is meaningful rather than a guess.
    */
   atx?: { enabled: boolean; known: boolean; on: boolean };
+  /**
+   * MQTT bridge state, when the firmware reports it.
+   * `enabled` - turned on with a broker set; `connected` - a live session with
+   * the broker right now.
+   */
+  mqtt?: { enabled: boolean; connected: boolean };
 }
 
 export type Values = Record<string, number | string | boolean>;

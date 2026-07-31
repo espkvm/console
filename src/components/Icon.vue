@@ -59,6 +59,14 @@ const PATHS = {
     "M6 7.5h12v6h-2v2h-3v2h-2v-2H8v-2H6z",
     "M8 9.5v2.5M10.7 9.5v2.5M13.3 9.5v2.5M16 9.5v2.5",
   ],
+  /* Broadcast/telemetry: a centre dot with two pairs of concentric arcs. */
+  mqtt: [
+    "M4.9 16.1a7 7 0 0 1 0-8.2",
+    "M8.4 13.6a3 3 0 0 1 0-3.2",
+    "M19.1 7.9a7 7 0 0 1 0 8.2",
+    "M15.6 10.4a3 3 0 0 1 0 3.2",
+    "M12 12h.01",
+  ],
 } as const;
 
 defineProps<{ name: keyof typeof PATHS; size?: number }>();

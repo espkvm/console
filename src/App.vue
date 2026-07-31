@@ -185,40 +185,57 @@ const online = computed(() => status.value !== null);
 /* Connection state for the footer icons: what is plugged in and live. "on" is
    lit, "idle" is present-but-inactive (HDMI cable up, no picture), "off" is
    nothing. */
-const conns = computed<
-  Array<{ id: "hdmi" | "usb" | "sd" | "ethernet"; title: string; state: "on" | "idle" | "off" }>
->(() => [
-  {
-    id: "hdmi",
-    title: online.value
-      ? status.value?.signal
-        ? `HDMI in - ${status.value.width}x${status.value.height}`
-        : "HDMI in - no signal"
-      : "HDMI in",
-    state: online.value ? (status.value?.signal ? "on" : "idle") : "off",
-  },
-  {
-    id: "usb",
-    title: !input.target.value.known
-      ? "USB - control channel down"
-      : input.target.value.attached
-        ? "USB - the target sees the keyboard and mouse"
-        : "USB - no target on the OTG port",
-    state: input.target.value.attached ? "on" : "off",
-  },
-  {
-    id: "sd",
-    title: storage.value?.mounted ? "microSD card inserted" : "no microSD card",
-    state: storage.value?.mounted ? "on" : "off",
-  },
-  {
-    id: "ethernet",
-    title: system.value?.net?.up
-      ? `Ethernet - link up${system.value.net.mbps ? ` (${system.value.net.mbps} Mbps)` : ""}`
-      : "Ethernet - link down",
-    state: system.value?.net?.up ? "on" : "off",
-  },
-]);
+type Conn = {
+  id: "hdmi" | "usb" | "sd" | "ethernet" | "mqtt";
+  title: string;
+  state: "on" | "idle" | "off";
+};
+
+const conns = computed<Conn[]>(() => {
+  const list: Conn[] = [
+    {
+      id: "hdmi",
+      title: online.value
+        ? status.value?.signal
+          ? `HDMI in - ${status.value.width}x${status.value.height}`
+          : "HDMI in - no signal"
+        : "HDMI in",
+      state: online.value ? (status.value?.signal ? "on" : "idle") : "off",
+    },
+    {
+      id: "usb",
+      title: !input.target.value.known
+        ? "USB - control channel down"
+        : input.target.value.attached
+          ? "USB - the target sees the keyboard and mouse"
+          : "USB - no target on the OTG port",
+      state: input.target.value.attached ? "on" : "off",
+    },
+    {
+      id: "sd",
+      title: storage.value?.mounted ? "microSD card inserted" : "no microSD card",
+      state: storage.value?.mounted ? "on" : "off",
+    },
+    {
+      id: "ethernet",
+      title: system.value?.net?.up
+        ? `Ethernet - link up${system.value.net.mbps ? ` (${system.value.net.mbps} Mbps)` : ""}`
+        : "Ethernet - link down",
+      state: system.value?.net?.up ? "on" : "off",
+    },
+  ];
+  /* Shown only when MQTT is turned on - a persistent grey icon would be noise
+     for the majority who do not use Home Assistant. */
+  const m = system.value?.mqtt;
+  if (m?.enabled) {
+    list.push({
+      id: "mqtt",
+      title: m.connected ? "MQTT - connected to the broker" : "MQTT - connecting to the broker",
+      state: m.connected ? "on" : "idle",
+    });
+  }
+  return list;
+});
 
 let pollId = 0;
 let systemPollId = 0;
