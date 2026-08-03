@@ -22,6 +22,10 @@ type Json = Record<string, unknown>;
 /* Settings the visitor changes live here, so toggles and dropdowns behave. */
 let settings: Json = { ...(settingsFixture as Json) };
 
+/* Whether the demo is serving an "operator" certificate, so the TLS panel can be
+   tried out (install flips it on, revert flips it off). No real restart happens. */
+let tlsCustom = false;
+
 /* The captured status has no HDMI source (signal:false). Present a live picture
    instead, so the demo shows the interface working rather than "No signal". */
 const DEMO_STATUS = {
@@ -80,6 +84,8 @@ async function route(
         return json(usbprobe);
       case "/api/v1/auth/session":
         return json(authSession);
+      case "/api/v1/tls":
+        return json({ https: true, custom: tlsCustom });
     }
     return null;
   }
@@ -88,6 +94,14 @@ async function route(
     const patch = await bodyJson(init, req);
     settings = { ...settings, ...patch };
     return json(settings);
+  }
+  if (method === "PUT" && path === "/api/v1/tls/cert") {
+    tlsCustom = true;
+    return json({ status: "stored", restarting: true });
+  }
+  if (method === "DELETE" && path === "/api/v1/tls/cert") {
+    tlsCustom = false;
+    return json({ status: "cleared", restarting: true });
   }
   if (method === "POST") {
     switch (path) {

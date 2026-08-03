@@ -217,6 +217,47 @@ export async function restartDevice(): Promise<void> {
   if (!res.ok) throw new Error(`restart failed (${res.status})`);
 }
 
+/** Which TLS certificate the device is serving. `custom` is the operator's own. */
+export interface TlsStatus {
+  https: boolean;
+  custom: boolean;
+}
+
+export async function getTlsStatus(): Promise<TlsStatus> {
+  const res = await fetch("/api/v1/tls", { cache: "no-store" });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(`tls status failed (${res.status})`);
+  return (await res.json()) as TlsStatus;
+}
+
+/**
+ * Install an operator certificate: one PEM blob, the certificate chain (leaf
+ * first) followed by its private key - exactly `cat fullchain.pem privkey.pem`.
+ * The device validates it, stores it, and restarts to apply.
+ */
+export async function installCert(pem: string): Promise<void> {
+  const res = await fetch("/api/v1/tls/cert", {
+    method: "PUT",
+    headers: { "Content-Type": "application/x-pem-file" },
+    body: pem,
+  });
+  if (res.status === 401) throw new Unauthorized();
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((body as { error?: string }).error ?? `certificate rejected (${res.status})`);
+  }
+}
+
+/** Remove the operator certificate and revert to the self-signed one; restarts. */
+export async function revertCert(): Promise<void> {
+  const res = await fetch("/api/v1/tls/cert", { method: "DELETE" });
+  if (res.status === 401) throw new Unauthorized();
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((body as { error?: string }).error ?? `revert failed (${res.status})`);
+  }
+}
+
 /**
  * Send a firmware image. The device writes it to the inactive slot and
  * restarts; if the new image never comes up, the bootloader returns to this

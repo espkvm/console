@@ -329,6 +329,28 @@
   border-top: 1px solid var(--border);
 }
 
+/* Bring-your-own certificate: a monospace PEM box and its actions. */
+.cert-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 120px;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: var(--text-sm) / 1.4 var(--font-mono);
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.cert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 /* A file input styled as a button still has to look disabled while busy. */
 .btn-disabled {
   opacity: 0.45;

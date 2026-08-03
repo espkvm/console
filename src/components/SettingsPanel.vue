@@ -8,16 +8,20 @@
  * device's own reason, rather than hidden. Hiding it would leave the operator
  * wondering whether the feature exists at all.
  */
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 import {
   SECTION_ORDER,
   SECTION_TITLES,
   type Capability,
   type Setting,
+  type TlsStatus,
   type Values,
+  getTlsStatus,
+  installCert,
   resetSettings,
   restartDevice,
+  revertCert,
   saveSettings,
   settingBlockedReason,
 } from "../state/device";
@@ -128,6 +132,60 @@ async function doReset() {
     toast.error(err instanceof Error ? err.message : String(err));
   } finally {
     busy.value = false;
+  }
+}
+
+/*
+ * Bring-your-own TLS certificate. Not a setting: it is a PEM blob validated and
+ * stored on its own endpoint, and installing or removing it restarts the device.
+ * `tls` stays null on firmware without the endpoint, so the panel just shows the
+ * CA download in that case.
+ */
+const tls = ref<TlsStatus | null>(null);
+const certText = ref("");
+const tlsBusy = ref(false);
+
+onMounted(async () => {
+  try {
+    tls.value = await getTlsStatus();
+  } catch {
+    /* older firmware without /api/v1/tls: leave null, show the CA download only */
+  }
+});
+
+async function loadCertFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (file) certText.value = await file.text();
+}
+
+async function doInstallCert() {
+  if (!certText.value.trim()) return;
+  tlsBusy.value = true;
+  try {
+    await installCert(certText.value);
+    certText.value = "";
+    tls.value = { https: true, custom: true };
+    toast.info("Certificate installed - the device is restarting to apply it");
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    tlsBusy.value = false;
+  }
+}
+
+async function doRevertCert() {
+  if (!confirm("Remove your certificate and go back to the self-signed one? The device restarts.")) {
+    return;
+  }
+  tlsBusy.value = true;
+  try {
+    await revertCert();
+    tls.value = { https: true, custom: false };
+    toast.info("Reverting to the self-signed certificate - the device is restarting");
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    tlsBusy.value = false;
   }
 }
 </script>
@@ -246,13 +304,55 @@ async function doReset() {
 
     <div v-if="currentSection === 'security'" class="firmware">
       <h3>Device certificate</h3>
-      <p class="setting-note">
-        The device is its own certificate authority, so a browser warns until you trust it - and
-        refuses the WebSocket and the H.264 decoder until you do. Download the CA and add it to
-        your operating system or browser's trusted authorities (not "your certificates"), then
-        reach the device by its name. That clears the warning and enables H.264.
-      </p>
-      <a class="btn btn-sm" href="/cert.pem" download="espkvm-ca.pem">Download CA certificate</a>
+
+      <template v-if="tls?.custom">
+        <p class="setting-note">
+          The device is serving your own certificate. Whatever issued it is trusted elsewhere, so
+          there is no CA to import here. Remove it to go back to the self-signed certificate.
+        </p>
+        <button type="button" class="btn btn-sm" :disabled="tlsBusy" @click="doRevertCert">
+          {{ tlsBusy ? "Reverting..." : "Revert to the self-signed certificate" }}
+        </button>
+      </template>
+
+      <template v-else>
+        <p class="setting-note">
+          The device is its own certificate authority, so a browser warns until you trust it - and
+          refuses the WebSocket and the H.264 decoder until you do. Download the CA and add it to
+          your operating system or browser's trusted authorities (not "your certificates"), then
+          reach the device by its name. That clears the warning and enables H.264.
+        </p>
+        <a class="btn btn-sm" href="/cert.pem" download="espkvm-ca.pem">Download CA certificate</a>
+
+        <template v-if="tls">
+          <p class="setting-note" style="margin-top: 16px">
+            Or install your own certificate - from an internal CA, or a real one for a name that
+            resolves to the device - so the browser trusts it without importing anything. Paste the
+            certificate (chain, leaf first) followed by its private key, or pick a combined PEM
+            file. The device restarts to apply it.
+          </p>
+          <textarea
+            v-model="certText"
+            class="cert-input"
+            rows="6"
+            spellcheck="false"
+            autocapitalize="off"
+            autocomplete="off"
+            placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----&#10;-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+          ></textarea>
+          <div class="cert-actions">
+            <input type="file" accept=".pem,.crt,.cer,.key,.txt" @change="loadCertFile" />
+            <button
+              type="button"
+              class="btn btn-sm"
+              :disabled="tlsBusy || !certText.trim()"
+              @click="doInstallCert"
+            >
+              {{ tlsBusy ? "Installing..." : "Install certificate" }}
+            </button>
+          </div>
+        </template>
+      </template>
     </div>
 
     <div class="settings-footer">
