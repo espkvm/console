@@ -59,7 +59,7 @@ const PATHS = {
     "M6 7.5h12v6h-2v2h-3v2h-2v-2H8v-2H6z",
     "M8 9.5v2.5M10.7 9.5v2.5M13.3 9.5v2.5M16 9.5v2.5",
   ],
-  /* Shield with a check: the WireGuard / VPN tunnel. */
+  /* Shield with a check: the Tailscale / VPN membership. */
   vpn: [
     "M12 3l7 3v5.5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6z",
     "M9 12l2 2 4-4",
@@ -72,6 +72,11 @@ const PATHS = {
     "M15.6 10.4a3 3 0 0 1 0 3.2",
     "M12 12h.01",
   ],
+  /* Media transport for the stream Pause/Resume control. */
+  pause: ["M9 4v16", "M15 4v16"],
+  play: ["M7 4l13 8-13 8z"],
+  /* Mouse cursor: the "who has control" indicator. */
+  pointer: ["M4 3l7.1 17 2.5-7.4 7.4-2.5z"],
 } as const;
 
 defineProps<{ name: keyof typeof PATHS; size?: number }>();

@@ -277,6 +277,12 @@ export function useInput(opts: InputOptions) {
     if (!p) return;
     lastPos.x = p.x;
     lastPos.y = p.y;
+    /* In relative or touch mode there is no absolute anchor worth seeding:
+       sending one warps the cursor to that mapped point - and with a multi-
+       monitor target an absolute coordinate spans the whole desktop, so the
+       engaging tap jumps the pointer to the middle of all the screens. Just
+       take control; relative deltas move the cursor from wherever it sits. */
+    if (opts.pointerMode.value === "relative" || opts.touchActive?.value) return;
     control.mouseAbsolute(0, p.x, p.y);
   }
 

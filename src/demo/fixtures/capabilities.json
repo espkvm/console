@@ -73,8 +73,15 @@
   "wireguard": {
     "compiled": true,
     "available": true,
+    "enabled": false,
+    "active": false,
+    "setting": "wg_enable"
+  },
+  "tailscale": {
+    "compiled": true,
+    "available": true,
     "enabled": true,
     "active": true,
-    "setting": "wg_enable"
+    "setting": "ts_enable"
   }
 }

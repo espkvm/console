@@ -173,8 +173,14 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  height: var(--bar-height);
-  padding: 0 var(--space-3);
+  /* Wrap rather than push the page wider than the viewport: on a phone the
+     controls did not fit on one row and the overflow stretched the whole page,
+     which then scrolled under touch. A fixed height would clip a wrapped row, so
+     grow to fit instead. */
+  flex-wrap: wrap;
+  row-gap: var(--space-1);
+  min-height: var(--bar-height);
+  padding: var(--space-1) var(--space-3);
   background: var(--bg-raised);
   border-top: 1px solid var(--border);
   flex: none;
@@ -185,11 +191,21 @@
   align-items: center;
   gap: var(--space-3);
   font-size: var(--text-sm);
+  /* Allow the left group to shrink so it never forces horizontal overflow. */
+  min-width: 0;
 }
 
 .actionbar-right {
   display: flex;
   gap: var(--space-2);
+}
+
+/* The keyboard-LED indicators are the least essential thing in the bar; drop
+   them first on a narrow screen so the controls fit on one row. */
+@media (max-width: 640px) {
+  .leds {
+    display: none;
+  }
 }
 
 /* ---- screen ------------------------------------------------------------- */

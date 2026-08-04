@@ -33,6 +33,13 @@ const TAP_MS = 250; /* a touch shorter than this, with little movement, is a tap
 const TAP_MOVE_PX = 12; /* travel beyond this makes it a drag, not a tap */
 const LONG_PRESS_MS = 500; /* hold this long without moving to begin a drag */
 const SCROLL_PX_PER_CLICK = 36; /* two-finger travel per wheel click */
+/* Pointer acceleration: the faster the finger travels between two moves, the
+   more each pixel is worth. A small phone screen otherwise can't cross a large
+   desktop without endless swiping, while a slow drag must still stay precise.
+   ACCEL_PER_PX raises the gain with finger speed; ACCEL_MAX caps it so a flick
+   never launches the pointer across the screen. */
+const ACCEL_PER_PX = 0.06;
+const ACCEL_MAX = 3.5;
 
 export function useTouch(opts: TouchOptions) {
   let startT = 0;
@@ -44,6 +51,12 @@ export function useTouch(opts: TouchOptions) {
   let maxFingers = 0;
   let button = 0; /* left button currently held by a drag */
   let scrollAccum = 0;
+  /* Sub-pixel remainder carried between moves. Rounding each delta on its own
+     threw away everything below half a unit, so slow, careful drags produced no
+     motion at all - the pointer felt stuck and jumpy. Accumulating the fraction
+     makes every bit of finger travel count. */
+  let accX = 0;
+  let accY = 0;
   let longPress: ReturnType<typeof setTimeout> | null = null;
 
   function clearLongPress() {
@@ -65,6 +78,8 @@ export function useTouch(opts: TouchOptions) {
     moved = false;
     maxFingers = 0;
     scrollAccum = 0;
+    accX = 0;
+    accY = 0;
   }
 
   watchEffect((onCleanup) => {
@@ -126,9 +141,16 @@ export function useTouch(opts: TouchOptions) {
         moved = true;
         clearLongPress();
       }
-      const s = opts.sensitivity.value;
-      const dx = Math.round(rawDx * s);
-      const dy = Math.round(rawDy * s);
+      /* Gain = base sensitivity scaled up with finger speed (acceleration),
+         applied to the raw travel and accumulated so no fraction is lost. */
+      const speed = Math.hypot(rawDx, rawDy);
+      const gain = opts.sensitivity.value * Math.min(1 + speed * ACCEL_PER_PX, ACCEL_MAX);
+      accX += rawDx * gain;
+      accY += rawDy * gain;
+      const dx = Math.trunc(accX);
+      const dy = Math.trunc(accY);
+      accX -= dx;
+      accY -= dy;
       if (dx !== 0 || dy !== 0) {
         opts.control.mouseRelative(button, dx, dy);
       }

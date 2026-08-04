@@ -24,9 +24,15 @@
     "connected": true
   },
   "wg": {
-    "enabled": true,
-    "up": true,
+    "enabled": false,
+    "up": false,
     "address": "10.9.0.2",
     "publicKey": "HIgo9xNzJMWLKASShiTqIybxZ0U3wGLiUeJ1PKf8ykw="
+  },
+  "ts": {
+    "enabled": true,
+    "up": true,
+    "address": "100.80.235.37",
+    "peers": 7
   }
 }

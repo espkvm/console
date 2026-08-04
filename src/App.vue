@@ -60,6 +60,10 @@ const values = ref<Values>({});
 const caps = ref<Record<string, Capability>>({});
 const status = ref<VideoStatus | null>(null);
 const system = ref<SystemInfo | null>(null);
+/* Set once the running firmware version stops matching the one this page loaded
+   with - i.e. the device was updated (OTA) under an open tab or installed PWA.
+   The page then offers a reload so a stale console can never drive new firmware. */
+const firmwareChanged = ref(false);
 const usbProbe = ref<UsbProbe | null>(null);
 const storage = ref<StorageInfo | null>(null);
 
@@ -119,6 +123,9 @@ const panel = ref<PanelId>(null);
 const fit = ref<"fit" | "actual">("fit");
 const engaged = ref(false);
 const paused = ref(false);
+/* Which connection pill has its detail popover open (tap to toggle). Touch has
+   no hover, so the pill title is shown on tap instead. */
+const connDetail = ref<string | null>(null);
 const theme = ref<"dark" | "light">("dark");
 const surface = ref<HTMLElement | null>(null);
 
@@ -143,7 +150,12 @@ const uiRight = computed(() => enumName(schema.value, values.value, "ui_side") =
  * want either. The keyboard uses the target's own layout, like paste does.
  */
 const touchMode = ref(false);
-const touchSensitivity = ref(1.6);
+/* Touch trackpad speed, driven by the same "Relative sensitivity" slider as the
+   desktop relative pointer. A finger crosses a small phone screen but has to
+   move the cursor across a large target, so 100% maps to a healthy 4x base (the
+   old fixed 1.6 felt glued down); the slider's 10-400% then tunes it from
+   precise to very fast. Acceleration in useTouch adds more on quick flicks. */
+const touchSensitivity = computed(() => (Number(values.value.mouse_sens ?? 100) / 100) * 4);
 const layout = computed(() => enumName(schema.value, values.value, "kbd_layout") ?? DEFAULT_LAYOUT);
 
 const input = useInput({
@@ -224,14 +236,24 @@ const conns = computed<Conn[]>(() => {
       state: system.value?.net?.up ? "on" : "off",
     },
   ];
-  /* Shown only when the WireGuard tunnel is turned on - like MQTT, a persistent
-     grey icon would be noise for those who do not use it. */
+  /* One VPN pill, for whichever backend is active (they are mutually exclusive).
+     Shown only when a VPN is on - a persistent grey icon would be noise. */
   const w = system.value?.wg;
+  const t = system.value?.ts;
   if (w?.enabled) {
+    const where = w.address ? ` - ${w.address}` : "";
     list.push({
       id: "vpn",
-      title: w.up ? "WireGuard - tunnel up" : "WireGuard - connecting to the peer",
+      title: w.up ? `WireGuard${where}` : "WireGuard - connecting to the peer",
       state: w.up ? "on" : "idle",
+    });
+  } else if (t?.enabled) {
+    const where = t.address ? ` - ${t.address}` : "";
+    const peers = t.peers ? ` (${t.peers} peer${t.peers === 1 ? "" : "s"})` : "";
+    list.push({
+      id: "vpn",
+      title: t.up ? `Tailscale${where}${peers}` : "Tailscale - joining the tailnet",
+      state: t.up ? "on" : "idle",
     });
   }
   /* Shown only when MQTT is turned on - a persistent grey icon would be noise
@@ -250,7 +272,15 @@ const conns = computed<Conn[]>(() => {
 let pollId = 0;
 let systemPollId = 0;
 
+function reloadConsole() {
+  /* "/" is served no-cache with a version ETag and the service worker is
+     network-first for navigations, so a plain reload fetches the current
+     console. */
+  window.location.reload();
+}
+
 async function startConsole() {
+  let bootVersion: string | undefined;
   try {
     const [s, v, c, sys] = await Promise.all([
       loadSchema(),
@@ -262,6 +292,7 @@ async function startConsole() {
     values.value = v;
     caps.value = c;
     system.value = sys;
+    bootVersion = sys.version;
     ready.value = true;
   } catch (err) {
     loadError.value = err instanceof Error ? err.message : String(err);
@@ -316,6 +347,10 @@ async function startConsole() {
   systemPollId = window.setInterval(async () => {
     try {
       system.value = await loadSystemInfo();
+      /* Firmware updated under us? The embedded console is now out of date. */
+      if (bootVersion && system.value.version && system.value.version !== bootVersion) {
+        firmwareChanged.value = true;
+      }
       usbProbe.value = await loadUsbProbe();
       storage.value = await loadImages();
     } catch {
@@ -424,6 +459,10 @@ const LED_BITS: Array<[number, string]> = [
   />
 
   <div v-else class="console">
+    <div v-if="firmwareChanged" class="update-banner" role="alert">
+      <span>The device was updated. Reload to get the matching console.</span>
+      <button type="button" class="btn btn-sm" @click="reloadConsole()">Reload</button>
+    </div>
     <header class="statusbar">
       <svg
         class="brand"
@@ -781,14 +820,26 @@ const LED_BITS: Array<[number, string]> = [
     <footer class="actionbar">
       <div class="actionbar-left">
         <span class="conns" aria-label="Connections">
-          <span
+          <button
             v-for="c in conns"
             :key="c.id"
-            :class="['conn', 'conn-' + c.state]"
+            type="button"
+            :class="['conn', 'conn-' + c.state, { 'conn-open': connDetail === c.id }]"
             :title="c.title"
+            :aria-label="c.title"
+            @click="connDetail = connDetail === c.id ? null : c.id"
           >
             <Icon :name="c.id" :size="16" />
-          </span>
+          </button>
+
+          <!-- Tap detail popover: touch has no hover, so show the pill's
+               description on tap. Backdrop closes it. -->
+          <template v-if="connDetail">
+            <div class="conn-backdrop" @click="connDetail = null" />
+            <div class="conn-popup" role="tooltip">
+              {{ conns.find((c) => c.id === connDetail)?.title ?? "" }}
+            </div>
+          </template>
         </span>
 
 
@@ -801,8 +852,13 @@ const LED_BITS: Array<[number, string]> = [
             {{ name }}
           </span>
         </span>
-        <span class="muted">
-          {{ engaged ? "Controlling - Esc releases" : "Not controlling" }}
+        <span
+          class="ctrl-status"
+          :class="{ 'ctrl-status-on': engaged }"
+          :title="engaged ? 'Controlling - Esc releases' : 'Not controlling'"
+          :aria-label="engaged ? 'Controlling' : 'Not controlling'"
+        >
+          <Icon name="pointer" :size="15" />
         </span>
       </div>
       <div class="actionbar-right">
@@ -817,11 +873,12 @@ const LED_BITS: Array<[number, string]> = [
         </button>
         <button
           type="button"
-          class="btn btn-sm"
+          class="btn btn-sm btn-icon"
+          :aria-label="paused ? 'Resume the video stream' : 'Pause the video stream'"
           :title="paused ? 'Resume the video stream' : 'Disconnect the stream to save bandwidth'"
           @click="paused = !paused"
         >
-          {{ paused ? "Resume" : "Pause" }}
+          <Icon :name="paused ? 'play' : 'pause'" :size="15" />
         </button>
         <button
           type="button"

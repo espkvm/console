@@ -49,13 +49,16 @@
   "mqtt_base": "espkvm",
   "mqtt_disco": "homeassistant",
   "mqtt_interval": 30,
-  "wg_enable": true,
+  "wg_enable": false,
   "wg_address": "10.9.0.2",
   "wg_private_key": "",
   "wg_peer_key": "xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
   "wg_endpoint": "vpn.example.com:51820",
   "wg_keepalive": 25,
-  "wg_preshared": "",
   "wg_sntp": false,
-  "wg_sntp_srv": "pool.ntp.org"
+  "wg_sntp_srv": "pool.ntp.org",
+  "ts_enable": true,
+  "ts_auth_key": "",
+  "ts_hostname": "kvm-lab",
+  "ts_ctrl_tls": true
 }

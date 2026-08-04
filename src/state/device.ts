@@ -84,11 +84,17 @@ export interface SystemInfo {
    */
   mqtt?: { enabled: boolean; connected: boolean };
   /**
-   * WireGuard tunnel state, when the firmware reports it.
-   * `enabled` - turned on and started; `up` - a handshake with the peer has
-   * completed. `publicKey` is the device's own key, to add to the peer.
+   * Classic WireGuard tunnel state. `enabled` - on and started; `up` - a
+   * handshake with the peer completed. `publicKey` is the device's own key.
    */
   wg?: { enabled: boolean; up: boolean; address: string; publicKey: string };
+  /**
+   * Native Tailscale state, when the firmware reports it.
+   * `enabled` - turned on and started; `up` - registered with the control plane
+   * and ready. `address` is the device's tailnet IP (100.x); `peers` is how many
+   * tailnet peers are known.
+   */
+  ts?: { enabled: boolean; up: boolean; address: string; peers: number };
 }
 
 export type Values = Record<string, number | string | boolean>;
@@ -533,7 +539,7 @@ export const SECTION_TITLES: Record<string, string> = {
   storage: "Virtual media",
   power: "Power",
   network: "Network",
-  vpn: "WireGuard",
+  vpn: "VPN (WireGuard or Tailscale)",
   mqtt: "MQTT / Home Assistant",
   security: "Security",
   system: "System",

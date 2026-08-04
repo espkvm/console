@@ -367,7 +367,7 @@
     "key": "wg_enable",
     "section": "vpn",
     "title": "Enable WireGuard",
-    "help": "Bring up a WireGuard tunnel so the device is reachable over the VPN. Off by default. Split-tunnel: only this address goes through WireGuard, so the console stays reachable on the LAN too.",
+    "help": "Bring up a classic WireGuard tunnel to a hub so the device is reachable over the VPN. Off by default. Split-tunnel: only the tunnel subnet goes through WireGuard, so the console stays reachable on the LAN too. An alternative to Tailscale below, not a companion - enable one.",
     "type": "bool",
     "default": 0,
     "requires": "wireguard"
@@ -424,20 +424,10 @@
     "requires": "wireguard"
   },
   {
-    "key": "wg_preshared",
-    "section": "vpn",
-    "title": "Preshared key",
-    "help": "Optional base64 preshared key for an extra symmetric layer.",
-    "type": "string",
-    "maxLength": 47,
-    "default": "",
-    "requires": "wireguard"
-  },
-  {
     "key": "wg_sntp",
     "section": "vpn",
     "title": "Sync time over SNTP",
-    "help": "WireGuard handshakes carry a timestamp; without a real clock a reboot can make the peer reject them. Turn this on if the device can reach an NTP server. Off by default (isolated networks).",
+    "help": "WireGuard handshakes carry a timestamp; without a real clock a reboot can make the peer reject them. Turn this on if the device can reach an NTP server. Off by default.",
     "type": "bool",
     "default": 0,
     "requires": "wireguard"
@@ -451,6 +441,44 @@
     "maxLength": 47,
     "default": "pool.ntp.org",
     "requires": "wireguard"
+  },
+  {
+    "key": "ts_enable",
+    "section": "vpn",
+    "title": "Enable Tailscale",
+    "help": "Join a Tailscale network natively - the device gets a 100.x address reachable from anywhere on your tailnet, with NAT traversal handled for you and no separate gateway. Off by default. An alternative to a plain WireGuard tunnel, not a companion.",
+    "type": "bool",
+    "default": 0,
+    "requires": "tailscale"
+  },
+  {
+    "key": "ts_auth_key",
+    "section": "vpn",
+    "title": "Auth key",
+    "help": "A Tailscale auth key (tskey-auth-...) that authorises this device to join. Generate one in the Tailscale admin console; a reusable key survives re-registration across reboots.",
+    "type": "string",
+    "maxLength": 63,
+    "default": "",
+    "requires": "tailscale"
+  },
+  {
+    "key": "ts_hostname",
+    "section": "vpn",
+    "title": "Tailnet hostname",
+    "help": "The name this device takes on the tailnet. Empty uses the mDNS hostname from the Network section.",
+    "type": "string",
+    "maxLength": 63,
+    "default": "",
+    "requires": "tailscale"
+  },
+  {
+    "key": "ts_ctrl_tls",
+    "section": "vpn",
+    "title": "Control plane over TLS",
+    "help": "Reach the coordination server over HTTPS. Required for the hosted Tailscale service (the default). Turn off only for a self-hosted Headscale served over plain HTTP.",
+    "type": "bool",
+    "default": 1,
+    "requires": "tailscale"
   },
   {
     "key": "mqtt_enable",

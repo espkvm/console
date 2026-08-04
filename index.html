@@ -5,10 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="dark light" />
     <link rel="icon" href="./favicon.ico" sizes="any" />
+    <!-- Installable PWA: run full-screen and standalone from the home screen,
+         which also removes the mobile browser's toolbars that were shrinking the
+         usable area. The manifest, worker and icons are served by the device. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0e1116" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ESP-KVM" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>ESP-KVM</title>
   </head>
   <body>
     <div id="app"></div>
+    <script>
+      /* Register the service worker so the console is installable. Failures are
+         ignored - the app works fine without it, just not as an installed PWA. */
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/sw.js").catch(() => {});
+        });
+      }
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
