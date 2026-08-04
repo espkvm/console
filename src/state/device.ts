@@ -26,6 +26,8 @@ export interface Setting {
   requires?: string;
   /** Takes effect only after the device restarts. */
   reboot?: boolean;
+  /** Write-only secret (e.g. a VPN key): never read back, submitted only when set. */
+  secret?: boolean;
 }
 
 export interface Capability {

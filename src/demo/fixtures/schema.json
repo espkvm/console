@@ -390,7 +390,8 @@
     "type": "string",
     "maxLength": 47,
     "default": "",
-    "requires": "wireguard"
+    "requires": "wireguard",
+    "secret": true
   },
   {
     "key": "wg_peer_key",
@@ -459,7 +460,8 @@
     "type": "string",
     "maxLength": 63,
     "default": "",
-    "requires": "tailscale"
+    "requires": "tailscale",
+    "secret": true
   },
   {
     "key": "ts_hostname",
@@ -546,7 +548,8 @@
     "type": "string",
     "maxLength": 63,
     "default": "",
-    "requires": "video"
+    "requires": "video",
+    "secret": true
   },
   {
     "key": "mqtt_base",

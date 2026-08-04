@@ -71,6 +71,20 @@ async function write(key: string, value: number | string | boolean) {
   }
 }
 
+/*
+ * A secret (a VPN key) is write-only: the device never sends it back, so the
+ * field always shows empty. Submitting an empty field would clear the stored
+ * value, which is never what a blank means here - blank means "keep what's
+ * there". So only write when something was typed, and wipe the field afterwards
+ * so the secret does not linger in the DOM.
+ */
+async function writeSecret(key: string, el: HTMLInputElement) {
+  const value = el.value;
+  if (!value) return;
+  el.value = "";
+  await write(key, value);
+}
+
 
 /*
  * Changing the password.
@@ -251,6 +265,17 @@ async function doRevertCert() {
             :value="Number(values[s.key] ?? 0)"
             :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
             @change="write(s.key, Number(($event.target as HTMLInputElement).value))"
+          />
+
+          <input
+            v-else-if="s.secret"
+            :id="`set-${s.key}`"
+            type="password"
+            autocomplete="off"
+            :maxlength="s.maxLength"
+            placeholder="Leave blank to keep the current value"
+            :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
+            @change="writeSecret(s.key, $event.target as HTMLInputElement)"
           />
 
           <input
