@@ -47,6 +47,50 @@ const busy = ref(false);
 
 const rows = computed(() => props.schema.filter((s) => s.section === currentSection.value));
 
+/*
+ * The VPN section is special. WireGuard and Tailscale are mutually exclusive on
+ * the device, and showing every field of both at once means scrolling past the
+ * backend you are not using. So the two enable toggles collapse into one
+ * Off/WireGuard/Tailscale selector, and only the chosen backend's fields are
+ * shown (nothing when Off).
+ */
+const VPN_WG_KEYS = new Set([
+  "wg_address",
+  "wg_private_key",
+  "wg_peer_key",
+  "wg_endpoint",
+  "wg_keepalive",
+  "wg_sntp",
+  "wg_sntp_srv",
+]);
+const VPN_TS_KEYS = new Set(["ts_auth_key", "ts_hostname", "ts_ctrl_tls"]);
+
+type VpnMode = "off" | "wg" | "ts";
+const vpnMode = computed<VpnMode>(() =>
+  props.values.wg_enable ? "wg" : props.values.ts_enable ? "ts" : "off",
+);
+
+const displayRows = computed(() => {
+  if (currentSection.value !== "vpn") return rows.value;
+  const mode = vpnMode.value;
+  return rows.value.filter((r) => {
+    if (r.key === "wg_enable" || r.key === "ts_enable") return false;
+    if (mode === "wg") return VPN_WG_KEYS.has(r.key);
+    if (mode === "ts") return VPN_TS_KEYS.has(r.key);
+    return false;
+  });
+});
+
+async function setVpnMode(mode: VpnMode) {
+  if (mode === vpnMode.value) return;
+  /* Enabling one backend clears the other on the device, so we only ever write a
+     single flag; for Off we clear whichever is currently on. write() persists and
+     refreshes values, so the visible fields follow the selection. */
+  if (mode === "wg") await write("wg_enable", true);
+  else if (mode === "ts") await write("ts_enable", true);
+  else await write(props.values.wg_enable ? "wg_enable" : "ts_enable", false);
+}
+
 /* When one missing capability blocks the whole section, say so once at the top
    rather than repeating the same sentence under every control. */
 const sectionBlocked = computed(() => {
@@ -223,8 +267,29 @@ async function doRevertCert() {
     <p v-if="sectionBlocked" class="section-blocked">{{ sectionBlocked }}</p>
 
     <div class="settings-list">
+      <div v-if="currentSection === 'vpn'" class="setting">
+        <div class="setting-head">
+          <label class="setting-title" for="vpn-mode">VPN backend</label>
+        </div>
+        <div class="setting-control">
+          <select
+            id="vpn-mode"
+            :value="vpnMode"
+            :disabled="busy"
+            @change="setVpnMode(($event.target as HTMLSelectElement).value as VpnMode)"
+          >
+            <option value="off">Off</option>
+            <option value="wg">WireGuard</option>
+            <option value="ts">Tailscale</option>
+          </select>
+        </div>
+        <p class="setting-note">
+          Only one VPN runs at a time; choosing one shows just its settings.
+        </p>
+      </div>
+
       <div
-        v-for="s in rows"
+        v-for="s in displayRows"
         :key="s.key"
         :class="['setting', { 'setting-blocked': busy || sectionBlocked || blockedFor(s) }]"
       >

@@ -541,7 +541,7 @@ export const SECTION_TITLES: Record<string, string> = {
   storage: "Virtual media",
   power: "Power",
   network: "Network",
-  vpn: "VPN (WireGuard or Tailscale)",
+  vpn: "VPN",
   mqtt: "MQTT / Home Assistant",
   security: "Security",
   system: "System",

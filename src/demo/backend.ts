@@ -93,6 +93,11 @@ async function route(
   if (method === "PUT" && path === "/api/v1/settings") {
     const patch = await bodyJson(init, req);
     settings = { ...settings, ...patch };
+    /* Mirror the device: the two VPN backends are mutually exclusive, so enabling
+       one turns the other off (the VPN selector relies on this). */
+    const p = patch as Json;
+    if (p.wg_enable === true) settings = { ...settings, ts_enable: false };
+    else if (p.ts_enable === true) settings = { ...settings, wg_enable: false };
     return json(settings);
   }
   if (method === "PUT" && path === "/api/v1/tls/cert") {
