@@ -93,8 +93,7 @@
     "type": "enum",
     "choices": [
       "absolute",
-      "relative",
-      "auto"
+      "relative"
     ],
     "default": 0,
     "requires": "hid"
@@ -286,7 +285,7 @@
     "requires": "atx"
   },
   {
-    "key": "atx_led_active_high",
+    "key": "atx_led_ah",
     "section": "power",
     "title": "Power LED active-high",
     "help": "On if the LED sense reads high when the target is powered. Flip it if the reported power state is inverted.",

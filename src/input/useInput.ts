@@ -23,7 +23,7 @@ export interface InputOptions {
   /** From the device's ptr_engage setting. */
   engageMode: Ref<"click" | "hover">;
   /** From the device's mouse_mode setting. */
-  pointerMode: Ref<"absolute" | "relative" | "auto">;
+  pointerMode: Ref<"absolute" | "relative">;
   invertScroll: Ref<boolean>;
   /** Element showing the target's screen; pointer coordinates map onto it. */
   surface: Ref<HTMLElement | null>;

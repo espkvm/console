@@ -32,6 +32,8 @@ const props = defineProps<{
   schema: Setting[];
   values: Values;
   caps: Record<string, Capability>;
+  /** The device's own WireGuard public key (from system info), to add to the hub. */
+  wgPublicKey?: string;
 }>();
 
 const emit = defineEmits<{ values: [Values]; passwordChanged: [] }>();
@@ -80,6 +82,15 @@ const displayRows = computed(() => {
     return false;
   });
 });
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.info("Copied to clipboard");
+  } catch {
+    toast.error("Could not copy - select and copy it manually");
+  }
+}
 
 async function setVpnMode(mode: VpnMode) {
   if (mode === vpnMode.value) return;
@@ -356,6 +367,22 @@ async function doRevertCert() {
 
         <p v-if="blockedFor(s)" class="setting-note setting-note-blocked">{{ blockedFor(s) }}</p>
         <p v-else-if="s.help" class="setting-note">{{ s.help }}</p>
+      </div>
+
+      <div
+        v-if="currentSection === 'vpn' && vpnMode === 'wg' && wgPublicKey"
+        class="setting"
+      >
+        <div class="setting-head">
+          <label class="setting-title">Device public key</label>
+        </div>
+        <div class="setting-control pubkey-row">
+          <input class="pubkey-field mono" type="text" :value="wgPublicKey" readonly />
+          <button type="button" class="btn btn-sm" @click="copyText(wgPublicKey!)">Copy</button>
+        </div>
+        <p class="setting-note">
+          Add this to your WireGuard hub as this device's peer public key.
+        </p>
       </div>
     </div>
 

@@ -134,10 +134,8 @@ const engageMode = computed(
 );
 const pointerMode = computed(
   () =>
-    (enumName(schema.value, values.value, "mouse_mode") as
-      | "absolute"
-      | "relative"
-      | "auto") ?? "absolute",
+    (enumName(schema.value, values.value, "mouse_mode") as "absolute" | "relative") ??
+    "absolute",
 );
 const invertScroll = computed(() => Boolean(values.value.scroll_inv));
 /* Which side the rail and its panels sit on, from the ui_side setting. */
@@ -699,6 +697,7 @@ const LED_BITS: Array<[number, string]> = [
               :schema="schema"
               :values="values"
               :caps="caps"
+              :wg-public-key="system?.wg?.publicKey ?? ''"
               @values="values = $event"
               @password-changed="onPasswordChanged"
             />

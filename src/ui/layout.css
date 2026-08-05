@@ -12,8 +12,13 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  height: var(--bar-height);
-  padding: 0 var(--space-3);
+  /* Grow into the top safe area (notch / status bar) in a standalone PWA so the
+     bar's background reaches the screen edge and its content stays below the
+     notch. env() is 0 outside a safe-area context, so this is a no-op in a normal
+     browser tab. Horizontal insets cover a landscape notch. */
+  height: calc(var(--bar-height) + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) max(var(--space-3), env(safe-area-inset-right, 0px)) 0
+    max(var(--space-3), env(safe-area-inset-left, 0px));
   background: var(--bg-raised);
   border-bottom: 1px solid var(--border);
   flex: none;
@@ -180,7 +185,13 @@
   flex-wrap: wrap;
   row-gap: var(--space-1);
   min-height: var(--bar-height);
-  padding: var(--space-1) var(--space-3);
+  /* Extend past the bottom safe area (home indicator / gesture bar) in a
+     standalone PWA so the bar is not clipped and its content stays above the
+     indicator; horizontal insets cover a landscape notch. env() is 0 in a normal
+     browser tab. */
+  padding: var(--space-1) max(var(--space-3), env(safe-area-inset-right, 0px))
+    calc(var(--space-1) + env(safe-area-inset-bottom, 0px))
+    max(var(--space-3), env(safe-area-inset-left, 0px));
   background: var(--bg-raised);
   border-top: 1px solid var(--border);
   flex: none;

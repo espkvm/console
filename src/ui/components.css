@@ -576,3 +576,15 @@
   overflow-x: auto;
 }
 
+
+/* WireGuard device public key: a read-only field the operator copies into the
+   hub config, with a Copy button beside it. */
+.pubkey-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.pubkey-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
