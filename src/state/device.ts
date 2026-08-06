@@ -71,8 +71,20 @@ export interface SystemInfo {
   psramFree: number;
   /** 0 when the sensor is unavailable. */
   tempC: number;
-  /** Ethernet link state, when the firmware reports it. */
-  net?: { up: boolean; mbps: number };
+  /**
+   * Active network link, when the firmware reports it. `up`/`mbps` are the
+   * Ethernet link; `mode` is which link is in use, with the WiFi fields filled
+   * when it is "wifi" (station) or "ap" (the device's own hotspot).
+   */
+  net?: {
+    up: boolean;
+    mbps: number;
+    mode?: "ethernet" | "wifi" | "ap";
+    wifiUp?: boolean;
+    rssi?: number;
+    ssid?: string;
+    apClients?: number;
+  };
   /**
    * ATX power control state, when the firmware reports it.
    * `enabled` - wired and switched on; `known` - a power LED is sensed, so

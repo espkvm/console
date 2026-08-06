@@ -59,6 +59,19 @@ const PATHS = {
     "M6 7.5h12v6h-2v2h-3v2h-2v-2H8v-2H6z",
     "M8 9.5v2.5M10.7 9.5v2.5M13.3 9.5v2.5M16 9.5v2.5",
   ],
+  /* WiFi station: the signal fan opening upward, with the device as a dot. */
+  wifi: [
+    "M2.5 9.5a13 13 0 0 1 19 0",
+    "M6 13a8 8 0 0 1 12 0",
+    "M9.5 16.5a3.5 3.5 0 0 1 5 0",
+    "M12 19.6h.01",
+  ],
+  /* Access point: broadcasting from a centre dot, waves to both sides. */
+  ap: [
+    "M12 12.5h.01",
+    "M9.3 15.2a4 4 0 0 1 0-5.4M14.7 9.8a4 4 0 0 1 0 5.4",
+    "M6.8 17.6a8 8 0 0 1 0-11.2M17.2 6.4a8 8 0 0 1 0 11.2",
+  ],
   /* Shield with a check: the Tailscale / VPN membership. */
   vpn: [
     "M12 3l7 3v5.5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6z",

@@ -35,6 +35,8 @@ import {
   loadVideoStatus,
   loadImages,
   type StorageInfo,
+  saveSettings,
+  restartDevice,
   wakeTarget,
   powerClick,
   powerHold,
@@ -196,10 +198,67 @@ const online = computed(() => status.value !== null);
    lit, "idle" is present-but-inactive (HDMI cable up, no picture), "off" is
    nothing. */
 type Conn = {
-  id: "hdmi" | "usb" | "sd" | "ethernet" | "vpn" | "mqtt";
+  id: "hdmi" | "usb" | "sd" | "ethernet" | "wifi" | "ap" | "vpn" | "mqtt";
   title: string;
   state: "on" | "idle" | "off";
 };
+
+/* The network pill reflects the active link (Ethernet / WiFi station / hotspot),
+   so its icon and label follow system.net.mode. */
+function netPill(): Conn {
+  const net = system.value?.net;
+  const mode = net?.mode ?? "ethernet";
+  if (mode === "wifi") {
+    const rssi = net?.rssi ? ` (${net.rssi} dBm)` : "";
+    return {
+      id: "wifi",
+      title: net?.wifiUp
+        ? `WiFi - ${net?.ssid || "connected"}${rssi}`
+        : "WiFi - connecting",
+      state: net?.wifiUp ? "on" : "idle",
+    };
+  }
+  if (mode === "ap") {
+    const n = net?.apClients ?? 0;
+    return {
+      id: "ap",
+      title: `Hotspot ${net?.ssid ?? ""} - ${n} client${n === 1 ? "" : "s"}`,
+      state: "on",
+    };
+  }
+  return {
+    id: "ethernet",
+    title: net?.up
+      ? `Ethernet - link up${net?.mbps ? ` (${net.mbps} Mbps)` : ""}`
+      : "Ethernet - link down",
+    state: net?.up ? "on" : "off",
+  };
+}
+
+/* Switch the active link. net_mode is reboot-flagged, so this saves it and
+   restarts; the device may come back on a different address. */
+async function switchNet(mode: "ethernet" | "wifi" | "ap") {
+  connDetail.value = null;
+  if (mode === system.value?.net?.mode) return;
+  if (
+    !confirm(
+      `Switch the connection to ${mode === "ap" ? "hotspot" : mode}? The device restarts and may change address.`,
+    )
+  )
+    return;
+  try {
+    await saveSettings({ net_mode: { ethernet: 0, wifi: 1, ap: 2 }[mode] });
+    await restartDevice();
+    toast.info("Switching the network - the device is restarting");
+  } catch {
+    toast.error("Could not switch the network");
+  }
+}
+
+/* The network pill's popup is a mode switcher rather than a plain tooltip. */
+const isNetPill = computed(() =>
+  ["ethernet", "wifi", "ap"].includes(connDetail.value ?? ""),
+);
 
 const conns = computed<Conn[]>(() => {
   const list: Conn[] = [
@@ -226,13 +285,7 @@ const conns = computed<Conn[]>(() => {
       title: storage.value?.mounted ? "microSD card inserted" : "no microSD card",
       state: storage.value?.mounted ? "on" : "off",
     },
-    {
-      id: "ethernet",
-      title: system.value?.net?.up
-        ? `Ethernet - link up${system.value.net.mbps ? ` (${system.value.net.mbps} Mbps)` : ""}`
-        : "Ethernet - link down",
-      state: system.value?.net?.up ? "on" : "off",
-    },
+    netPill(),
   ];
   /* One VPN pill, for whichever backend is active (they are mutually exclusive).
      Shown only when a VPN is on - a persistent grey icon would be noise. */
@@ -835,8 +888,24 @@ const LED_BITS: Array<[number, string]> = [
                description on tap. Backdrop closes it. -->
           <template v-if="connDetail">
             <div class="conn-backdrop" @click="connDetail = null" />
-            <div class="conn-popup" role="tooltip">
-              {{ conns.find((c) => c.id === connDetail)?.title ?? "" }}
+            <div class="conn-popup" :role="isNetPill && caps.wifi?.available ? 'menu' : 'tooltip'">
+              <template v-if="isNetPill && caps.wifi?.available">
+                <span class="conn-switch-title">Connection</span>
+                <button
+                  v-for="m in (['ethernet', 'wifi', 'ap'] as const)"
+                  :key="m"
+                  type="button"
+                  class="conn-switch-btn"
+                  :class="{ 'conn-switch-active': (system?.net?.mode ?? 'ethernet') === m }"
+                  @click="switchNet(m)"
+                >
+                  <Icon :name="m" :size="15" />
+                  {{ m === "ethernet" ? "Ethernet" : m === "wifi" ? "WiFi" : "Hotspot" }}
+                </button>
+              </template>
+              <template v-else>
+                {{ conns.find((c) => c.id === connDetail)?.title ?? "" }}
+              </template>
             </div>
           </template>
         </span>
