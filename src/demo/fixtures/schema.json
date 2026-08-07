@@ -473,6 +473,27 @@
     "requires": "tailscale"
   },
   {
+    "key": "ts_control_url",
+    "section": "vpn",
+    "title": "Control server",
+    "help": "Coordination server for a self-hosted control plane (Headscale, Ionscale). Empty uses Tailscale's own (controlplane.tailscale.com). Host only, no scheme - e.g. headscale.example.com.",
+    "type": "string",
+    "maxLength": 63,
+    "default": "",
+    "requires": "tailscale"
+  },
+  {
+    "key": "ts_control_port",
+    "section": "vpn",
+    "title": "Control server port",
+    "help": "Port for the control server. 0 = default (443 with TLS, else 80). Set only if your Headscale listens on a non-standard port.",
+    "type": "int",
+    "min": 0,
+    "max": 65535,
+    "default": 0,
+    "requires": "tailscale"
+  },
+  {
     "key": "ts_ctrl_tls",
     "section": "vpn",
     "title": "Control plane over TLS",

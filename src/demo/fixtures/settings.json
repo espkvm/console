@@ -60,5 +60,7 @@
   "ts_enable": true,
   "ts_auth_key": "",
   "ts_hostname": "kvm-lab",
+  "ts_control_url": "",
+  "ts_control_port": 0,
   "ts_ctrl_tls": true
 }
