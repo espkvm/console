@@ -178,19 +178,19 @@
     "key": "msc_mode",
     "section": "storage",
     "title": "Media type",
-    "help": "CD-ROM for bootable ISO images, removable for writable disk images, or hand the whole microSD card to the target as a flash drive.",
+    "help": "How an image is presented to the target. \"auto\" serves a .iso as a CD-ROM (so it boots and mounts as an optical drive) and any other file as a removable disk - the right choice almost always. Force \"cdrom\" or \"disk\" only if a file is misnamed. Handing over the whole card is picked in the Media panel, not here. Switching the type re-attaches the USB drive.",
     "type": "enum",
     "choices": [
+      "auto",
       "cdrom",
-      "removable",
-      "whole_sd"
+      "disk"
     ],
     "default": 0,
     "requires": "msc"
   },
   {
     "key": "msc_image",
-    "section": "storage",
+    "section": "storage_hidden",
     "title": "Mounted image",
     "help": "File on the microSD card currently offered to the target.",
     "type": "string",

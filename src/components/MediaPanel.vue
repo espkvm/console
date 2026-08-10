@@ -9,29 +9,49 @@
  * it are shown disabled with the reason; the flash rescue slot, whose writes are
  * reliable, can be uploaded to from here.
  */
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 import {
   deleteImage,
   formatBytes,
+  formatDuration,
   loadImages,
   saveSettings,
   uploadImage,
   uploadRescue,
   RESCUE_MEDIUM,
+  WHOLE_SD_MEDIUM,
   type StorageInfo,
   type Values,
 } from "../state/device";
 import { toast } from "../state/toasts";
 
+const props = defineProps<{ values: Values }>();
 const emit = defineEmits<{ (e: "values", v: Values): void }>();
+
+/* Whether the drive is presented to the target at all. Selecting a medium below
+ * only chooses what the drive holds; without this on, the target sees no drive. */
+const exposed = computed(() => !!props.values.msc_enable);
+
+async function toggleExpose(e: Event) {
+  const on = (e.target as HTMLInputElement).checked;
+  try {
+    emit("values", await saveSettings({ msc_enable: on }));
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  }
+}
 
 const storage = ref<StorageInfo | null>(null);
 const loadingImages = ref(false);
 const uploadingImage = ref(false);
 const uploadPct = ref(0);
+const uploadRate = ref(0);
+const uploadEta = ref(Infinity);
 const uploadingRescue = ref(false);
 const rescuePct = ref(0);
+const rescueRate = ref(0);
+const rescueEta = ref(Infinity);
 
 async function refreshImages() {
   loadingImages.value = true;
@@ -54,8 +74,14 @@ async function onImageChosen(e: Event) {
   if (!file) return;
   uploadingImage.value = true;
   uploadPct.value = 0;
+  uploadRate.value = 0;
+  uploadEta.value = Infinity;
   try {
-    await uploadImage(file, (f) => (uploadPct.value = Math.round(f * 100)));
+    await uploadImage(file, (p) => {
+      uploadPct.value = Math.round(p.fraction * 100);
+      uploadRate.value = p.bytesPerSec;
+      uploadEta.value = p.secondsLeft;
+    });
     toast.info(`${file.name} uploaded`);
     await refreshImages();
   } catch (err) {
@@ -78,8 +104,14 @@ async function onRescueChosen(e: Event) {
   }
   uploadingRescue.value = true;
   rescuePct.value = 0;
+  rescueRate.value = 0;
+  rescueEta.value = Infinity;
   try {
-    storage.value = await uploadRescue(file, (f) => (rescuePct.value = Math.round(f * 100)));
+    storage.value = await uploadRescue(file, (p) => {
+      rescuePct.value = Math.round(p.fraction * 100);
+      rescueRate.value = p.bytesPerSec;
+      rescueEta.value = p.secondsLeft;
+    });
     toast.info(`Rescue image written (${file.name})`);
   } catch (err) {
     toast.error(err instanceof Error ? err.message : String(err));
@@ -119,9 +151,26 @@ async function removeImage(name: string) {
       boot images copied on (up to 4&nbsp;GB per file).
     </p>
     <template v-else-if="storage">
+      <label class="expose-toggle">
+        <input type="checkbox" :checked="exposed" @change="toggleExpose" />
+        <span>Expose virtual media to the target</span>
+      </label>
       <p class="setting-note">
-        The chosen medium is served to the target; turn on <em>Expose virtual media</em> under
-        Settings for it to appear.
+        <template v-if="exposed"
+          >The medium selected below is presented to the target as a USB drive it can boot
+          from.</template
+        >
+        <template v-else
+          >Off &mdash; the target sees no drive. Turn this on to present the selected
+          medium.</template
+        >
+        Adding or removing the drive re-plugs USB, so switching this takes effect after a restart.
+      </p>
+
+      <p v-if="storage.handedOver" class="setting-note setting-note-blocked">
+        The whole microSD card is handed to the target as a read-write drive. While it is,
+        uploading and the file list here are paused so the target owns the card alone &mdash;
+        select a different medium (or eject) to manage files from here again.
       </p>
 
       <ul class="image-list">
@@ -137,13 +186,15 @@ async function removeImage(name: string) {
               :disabled="!storage.rescue.hasImage"
               @change="selectImage(RESCUE_MEDIUM)"
             />
-            <span class="image-name">Rescue image</span>
-            <span class="muted">
-              {{
-                storage.rescue.hasImage
-                  ? "on flash"
-                  : `empty, up to ${formatBytes(storage.rescue.capacityBytes)}`
-              }}
+            <span class="image-text">
+              <span class="image-name">Rescue image</span>
+              <span class="muted image-sub">
+                {{
+                  storage.rescue.hasImage
+                    ? `on flash · ${formatBytes(storage.rescue.capacityBytes)} slot`
+                    : `empty · up to ${formatBytes(storage.rescue.capacityBytes)}`
+                }}
+              </span>
             </span>
           </label>
           <label :class="['btn', 'btn-sm', 'btn-quiet', { 'btn-disabled': uploadingRescue }]">
@@ -159,6 +210,26 @@ async function removeImage(name: string) {
         </li>
 
         <li
+          v-if="storage.mounted"
+          :class="['image-row', { 'image-active': storage.active === WHOLE_SD_MEDIUM }]"
+        >
+          <label class="image-pick">
+            <input
+              type="radio"
+              name="active-image"
+              :checked="storage.active === WHOLE_SD_MEDIUM"
+              @change="selectImage(WHOLE_SD_MEDIUM)"
+            />
+            <span class="image-text">
+              <span class="image-name">Whole microSD card</span>
+              <span class="muted image-sub">
+                every file on the card · {{ formatBytes(storage.totalBytes) }}
+              </span>
+            </span>
+          </label>
+        </li>
+
+        <li
           v-for="img in storage.images"
           :key="img.name"
           :class="['image-row', { 'image-active': img.name === storage.active }]"
@@ -170,8 +241,10 @@ async function removeImage(name: string) {
               :checked="img.name === storage.active"
               @change="selectImage(img.name)"
             />
-            <span class="mono image-name">{{ img.name }}</span>
-            <span class="muted">{{ formatBytes(img.size) }}</span>
+            <span class="image-text">
+              <span class="mono image-name">{{ img.name }}</span>
+              <span class="muted image-sub">{{ formatBytes(img.size) }}</span>
+            </span>
           </label>
           <button
             v-if="storage.writable"
@@ -182,7 +255,10 @@ async function removeImage(name: string) {
             Delete
           </button>
         </li>
-        <li v-if="storage.mounted && storage.images.length === 0" class="muted image-empty">
+        <li
+          v-if="storage.mounted && !storage.handedOver && storage.images.length === 0"
+          class="muted image-empty"
+        >
           No images on the card yet. Upload one below.
         </li>
       </ul>
@@ -197,6 +273,10 @@ async function removeImage(name: string) {
       >
         <div class="progress-fill" :style="{ width: rescuePct + '%' }"></div>
       </div>
+      <p v-if="uploadingRescue" class="setting-note upload-stats">
+        {{ rescueRate > 0 ? `${formatBytes(rescueRate)}/s` : "starting..." }}
+        <span v-if="rescueRate > 0"> · ~{{ formatDuration(rescueEta) }} left</span>
+      </p>
 
       <p v-if="storage.rescue?.supported" class="setting-note">
         Need a rescue image? A small one fits the flash slot -
@@ -215,7 +295,7 @@ async function removeImage(name: string) {
         <span>Eject - offer the target no medium</span>
       </label>
 
-      <template v-if="storage.mounted">
+      <template v-if="storage.mounted && !storage.handedOver">
         <p class="setting-note">
           {{ formatBytes(storage.freeBytes) }} free of {{ formatBytes(storage.totalBytes) }} on the
           card.
@@ -241,6 +321,10 @@ async function removeImage(name: string) {
         >
           <div class="progress-fill" :style="{ width: uploadPct + '%' }"></div>
         </div>
+        <p v-if="uploadingImage" class="setting-note upload-stats">
+          {{ uploadRate > 0 ? `${formatBytes(uploadRate)}/s` : "starting..." }}
+          <span v-if="uploadRate > 0"> · ~{{ formatDuration(uploadEta) }} left</span>
+        </p>
       </template>
     </template>
   </div>

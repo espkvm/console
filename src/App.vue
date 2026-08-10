@@ -811,7 +811,7 @@ const LED_BITS: Array<[number, string]> = [
               :detected-os="usbProbe?.os ?? 'unknown'"
               @values="values = $event"
             />
-            <MediaPanel v-else-if="panel === 'media'" @values="values = $event" />
+            <MediaPanel v-else-if="panel === 'media'" :values="values" @values="values = $event" />
             <div v-else-if="panel === 'power'" class="power-panel">
               <template v-if="caps.atx?.active">
                 <h3>ATX power</h3>

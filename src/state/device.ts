@@ -408,6 +408,9 @@ export interface RescueInfo {
 /** The reserved active-medium name that selects the on-flash rescue image. */
 export const RESCUE_MEDIUM = "@rescue";
 
+/** The reserved active-medium name that hands the whole microSD card to the target. */
+export const WHOLE_SD_MEDIUM = "@wholesd";
+
 export interface StorageInfo {
   mounted: boolean;
   totalBytes: number;
@@ -419,6 +422,8 @@ export interface StorageInfo {
   writable: boolean;
   /** Why writing is unavailable, when it is. */
   writeReason?: string;
+  /** The whole card is handed to the target read-write; the firmware is off the FS. */
+  handedOver?: boolean;
   /** The on-flash rescue image, present on devices whose table has it. */
   rescue?: RescueInfo;
 }
@@ -432,14 +437,12 @@ export async function loadImages(): Promise<StorageInfo> {
  * an image is measured in gigabytes and the operator needs to see it move.
  * fetch gives no upload progress; XHR does.
  */
-export function uploadImage(file: File, onProgress?: (fraction: number) => void): Promise<void> {
+export function uploadImage(file: File, onProgress?: (p: UploadProgress) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/v1/storage/upload?name=${encodeURIComponent(file.name)}`);
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
-    };
+    trackUpload(xhr, onProgress);
     xhr.onload = () => {
       if (xhr.status === 401) return reject(new Unauthorized());
       if (xhr.status >= 200 && xhr.status < 300) return resolve();
@@ -463,14 +466,12 @@ export function uploadImage(file: File, onProgress?: (fraction: number) => void)
  * directly - which works here where card writes do not. Returns the refreshed
  * storage state the endpoint echoes back.
  */
-export function uploadRescue(file: File, onProgress?: (fraction: number) => void): Promise<StorageInfo> {
+export function uploadRescue(file: File, onProgress?: (p: UploadProgress) => void): Promise<StorageInfo> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/v1/storage/rescue");
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
-    };
+    trackUpload(xhr, onProgress);
     xhr.onload = () => {
       if (xhr.status === 401) return reject(new Unauthorized());
       if (xhr.status >= 200 && xhr.status < 300) {
@@ -513,6 +514,60 @@ export function formatBytes(n: number): string {
   const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
   const value = n / Math.pow(1024, i);
   return `${i === 0 ? value : value.toFixed(1)} ${units[i]}`;
+}
+
+/** A rough duration as "1h 3m", "2m 40s" or "45s"; "--" when not yet known. */
+export function formatDuration(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return "--";
+  const s = Math.round(seconds);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+
+/** Live progress of an upload: fraction done, throughput and a time estimate. */
+export interface UploadProgress {
+  fraction: number; // 0..1
+  loaded: number;
+  total: number;
+  bytesPerSec: number; // smoothed, 0 until the first sample window closes
+  secondsLeft: number; // estimate; Infinity until a rate is known
+}
+
+/**
+ * Attach a progress handler to an upload that reports not just how far along it
+ * is but how fast it is going and how long is left - so a multi-GB card image,
+ * which is slow by nature, visibly moves instead of looking hung. The rate is an
+ * exponential moving average over ~0.25 s windows, which rides out the bursty
+ * way the browser drains its send buffer without lagging real speed changes.
+ */
+function trackUpload(xhr: XMLHttpRequest, onProgress?: (p: UploadProgress) => void): void {
+  if (!onProgress) return;
+  let lastT = 0;
+  let lastLoaded = 0;
+  let rate = 0;
+  xhr.upload.onprogress = (e) => {
+    if (!e.lengthComputable) return;
+    const now = performance.now();
+    if (!lastT) {
+      lastT = now;
+      lastLoaded = e.loaded;
+    } else if (now - lastT >= 250) {
+      const inst = ((e.loaded - lastLoaded) * 1000) / (now - lastT);
+      rate = rate ? rate * 0.6 + inst * 0.4 : inst;
+      lastT = now;
+      lastLoaded = e.loaded;
+    }
+    onProgress({
+      fraction: e.total ? e.loaded / e.total : 0,
+      loaded: e.loaded,
+      total: e.total,
+      bytesPerSec: rate,
+      secondsLeft: rate > 0 ? (e.total - e.loaded) / rate : Infinity,
+    });
+  };
 }
 
 /** Resolve an enum setting to its name, e.g. mouse_mode -> "absolute". */
