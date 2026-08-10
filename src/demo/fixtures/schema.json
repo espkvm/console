@@ -701,5 +701,26 @@
       "right"
     ],
     "default": 0
+  },
+  {
+    "key": "disp_enable",
+    "section": "display",
+    "title": "Status display",
+    "help": "Drive a small display that shows the IP, link, capture status and health. An I2C OLED (SSD1306/SH1106) shares the capture chip's I2C and is auto-detected with no extra pins; a round SPI LCD (GC9A01) uses the SPI pins set at build time. Off by default; does nothing when no panel is connected.",
+    "type": "bool",
+    "default": 0
+  },
+  {
+    "key": "disp_type",
+    "section": "display",
+    "title": "Display type",
+    "help": "Which panel is wired. SSD1306/SH1106 are 128x64 I2C OLEDs (pick SH1106 if the image is shifted by two pixels or wraps). GC9A01 is a 240x240 round colour SPI LCD, e.g. the Waveshare 1.28\" module.",
+    "type": "enum",
+    "choices": [
+      "ssd1306",
+      "sh1106",
+      "gc9a01"
+    ],
+    "default": 0
   }
 ]

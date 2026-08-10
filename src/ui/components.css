@@ -584,6 +584,50 @@
   margin-bottom: var(--space-1);
 }
 
+/* ---- GPIO pin map (Pins tab) --------------------------------------------- */
+.pin-comb {
+  list-style: none;
+  margin: var(--space-3) 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: var(--space-1);
+}
+.pin-cell {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  min-width: 0;
+}
+.pin-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 2.2em;
+}
+.pin-use {
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pin-reserved {
+  border-left-color: #e0685f;
+}
+.pin-assigned {
+  border-left-color: var(--accent);
+}
+.pin-free {
+  opacity: 0.5;
+}
+.pin-free .pin-use {
+  font-style: italic;
+}
+
 .image-text {
   display: flex;
   flex-direction: column;

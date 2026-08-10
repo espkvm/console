@@ -39,6 +39,8 @@
   "therm_stop": 85,
   "log_level": 2,
   "ui_side": 0,
+  "disp_enable": false,
+  "disp_type": 0,
   "mqtt_enable": true,
   "mqtt_host": "homeassistant.local",
   "mqtt_port": 1883,

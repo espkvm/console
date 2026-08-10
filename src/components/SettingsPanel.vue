@@ -14,11 +14,13 @@ import {
   SECTION_ORDER,
   SECTION_TITLES,
   type Capability,
+  type PinInfo,
   type Setting,
   type TlsStatus,
   type Values,
   getTlsStatus,
   installCert,
+  loadPins,
   resetSettings,
   restartDevice,
   revertCert,
@@ -40,7 +42,77 @@ const emit = defineEmits<{ values: [Values]; passwordChanged: [] }>();
 
 const sections = computed(() => {
   const present = new Set(props.schema.map((s) => s.section));
-  return SECTION_ORDER.filter((s) => present.has(s));
+  const list = SECTION_ORDER.filter((s) => present.has(s));
+  list.push("pins"); // always-present virtual tab: the GPIO map
+  return list;
+});
+
+/* ---- GPIO pin map --------------------------------------------------------
+ * The device reports which pins its fixed peripherals reserve; the rest of the
+ * map is computed here from the "pin"-flagged settings. This feeds both the
+ * per-setting pin pickers (free GPIOs only) and the Pins tab's comb view. */
+const pinInfo = ref<PinInfo | null>(null);
+onMounted(async () => {
+  try {
+    pinInfo.value = await loadPins();
+  } catch {
+    /* pins tab and pickers just stay empty if this fails */
+  }
+});
+
+const pinSettings = computed(() => props.schema.filter((s) => s.pin));
+
+const reservedPins = computed(() => {
+  const m = new Map<number, string>();
+  for (const r of pinInfo.value?.reserved ?? []) {
+    if (!m.has(r.pin)) m.set(r.pin, r.use);
+  }
+  return m;
+});
+
+const assignedPins = computed(() => {
+  const m = new Map<number, string>();
+  for (const s of pinSettings.value) {
+    const v = Number(props.values[s.key] ?? -1);
+    if (v >= 0 && !m.has(v)) m.set(v, s.title);
+  }
+  return m;
+});
+
+/* GPIOs a pin setting may take: the usable range minus everything already held,
+ * plus its own current value so the select shows it. */
+function freePinsFor(key: string): number[] {
+  const info = pinInfo.value;
+  if (!info) return [];
+  const cur = Number(props.values[key] ?? -1);
+  const used = new Set<number>(reservedPins.value.keys());
+  for (const s of pinSettings.value) {
+    if (s.key === key) continue;
+    const v = Number(props.values[s.key] ?? -1);
+    if (v >= 0) used.add(v);
+  }
+  const out: number[] = [];
+  for (let p = info.usableMin; p <= info.usableMax; p++) {
+    if (!used.has(p) || p === cur) out.push(p);
+  }
+  return out;
+}
+
+/* The whole map for the Pins tab, each GPIO tagged reserved / assigned / free. */
+const pinMap = computed(() => {
+  const info = pinInfo.value;
+  if (!info) return [] as { pin: number; use: string; kind: string }[];
+  const rows: { pin: number; use: string; kind: string }[] = [];
+  for (let p = info.usableMin; p <= info.usableMax; p++) {
+    if (reservedPins.value.has(p)) {
+      rows.push({ pin: p, use: reservedPins.value.get(p)!, kind: "reserved" });
+    } else if (assignedPins.value.has(p)) {
+      rows.push({ pin: p, use: assignedPins.value.get(p)!, kind: "assigned" });
+    } else {
+      rows.push({ pin: p, use: "free", kind: "free" });
+    }
+  }
+  return rows;
 });
 
 const active = ref("");
@@ -73,14 +145,38 @@ const vpnMode = computed<VpnMode>(() =>
 );
 
 const displayRows = computed(() => {
-  if (currentSection.value !== "vpn") return rows.value;
-  const mode = vpnMode.value;
-  return rows.value.filter((r) => {
-    if (r.key === "wg_enable" || r.key === "ts_enable") return false;
-    if (mode === "wg") return VPN_WG_KEYS.has(r.key);
-    if (mode === "ts") return VPN_TS_KEYS.has(r.key);
-    return false;
-  });
+  let list = rows.value;
+  if (currentSection.value === "vpn") {
+    const mode = vpnMode.value;
+    list = list.filter((r) => {
+      if (r.key === "wg_enable" || r.key === "ts_enable") return false;
+      if (mode === "wg") return VPN_WG_KEYS.has(r.key);
+      if (mode === "ts") return VPN_TS_KEYS.has(r.key);
+      return false;
+    });
+  }
+  /* Generic conditional visibility: a setting carrying showIf appears only while
+   * the setting it names holds the given value. The GC9A01's SPI pins use this to
+   * stay hidden unless the round LCD is the selected display type - an I2C OLED
+   * has no pins to configure, so showing them would only mislead. */
+  return list.filter((r) => !r.showIf || Number(props.values[r.showIf.key]) === r.showIf.eq);
+});
+
+/* The I2C OLEDs (SSD1306/SH1106) ride the capture chip's I2C bus rather than pins
+ * of their own - so there is nothing to configure, but the operator still needs to
+ * know where to wire. Pull the real SDA/SCL out of the reserved-pin map, so the
+ * note stays right even when a board overlay moves the capture bus. GC9A01 (index
+ * 2) is SPI and has its own pin pickers, so it is excluded. */
+const oledI2cNote = computed<{ sda: number; scl: number } | null>(() => {
+  if (currentSection.value !== "display" || !props.values.disp_enable) return null;
+  if (Number(props.values.disp_type ?? 0) === 2) return null;
+  let sda: number | null = null;
+  let scl: number | null = null;
+  for (const [pin, use] of reservedPins.value) {
+    if (/I2C SDA/i.test(use)) sda = pin;
+    else if (/I2C SCL/i.test(use)) scl = pin;
+  }
+  return sda !== null && scl !== null ? { sda, scl } : null;
 });
 
 async function copyText(text: string) {
@@ -124,6 +220,15 @@ async function write(key: string, value: number | string | boolean) {
   } finally {
     busy.value = false;
   }
+}
+
+/* A focused native <select> or number <input> changes its value on mouse-wheel,
+ * so idly scrolling the settings page while the cursor passes over one silently
+ * flips a setting - e.g. the display type, which then leaves the panel driving the
+ * wrong controller. Drop focus on wheel so the wheel scrolls the page instead of
+ * editing the control (which is what almost everyone actually meant). */
+function guardWheel(e: WheelEvent) {
+  (e.target as HTMLElement).blur();
 }
 
 /*
@@ -288,6 +393,7 @@ async function doRevertCert() {
             :value="vpnMode"
             :disabled="busy"
             @change="setVpnMode(($event.target as HTMLSelectElement).value as VpnMode)"
+            @wheel="guardWheel"
           >
             <option value="off">Off</option>
             <option value="wg">WireGuard</option>
@@ -327,8 +433,22 @@ async function doRevertCert() {
             :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
             :value="String(Number(values[s.key] ?? 0))"
             @change="write(s.key, Number(($event.target as HTMLSelectElement).value))"
+            @wheel="guardWheel"
           >
             <option v-for="(c, i) in s.choices ?? []" :key="c" :value="String(i)">{{ c }}</option>
+          </select>
+
+          <select
+            v-else-if="s.pin"
+            :id="`set-${s.key}`"
+            class="num-input"
+            :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
+            :value="String(Number(values[s.key] ?? -1))"
+            @change="write(s.key, Number(($event.target as HTMLSelectElement).value))"
+            @wheel="guardWheel"
+          >
+            <option value="-1">None</option>
+            <option v-for="p in freePinsFor(s.key)" :key="p" :value="String(p)">GPIO {{ p }}</option>
           </select>
 
           <input
@@ -341,6 +461,7 @@ async function doRevertCert() {
             :value="Number(values[s.key] ?? 0)"
             :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
             @change="write(s.key, Number(($event.target as HTMLInputElement).value))"
+            @wheel="guardWheel"
           />
 
           <input
@@ -367,6 +488,28 @@ async function doRevertCert() {
 
         <p v-if="blockedFor(s)" class="setting-note setting-note-blocked">{{ blockedFor(s) }}</p>
         <p v-else-if="s.help" class="setting-note">{{ s.help }}</p>
+      </div>
+
+      <p v-if="oledI2cNote" class="setting-note">
+        This I²C OLED shares the capture chip's I²C bus — wire it to
+        <b>SDA {{ oledI2cNote.sda }}</b> · <b>SCL {{ oledI2cNote.scl }}</b> (plus 3V3 and GND).
+        Those are the board's capture pins, so there's nothing to set here; the panel is
+        auto-detected at 0x3C/0x3D.
+      </p>
+
+      <div v-if="currentSection === 'pins'" class="pinmap">
+        <p class="setting-note">
+          Every usable GPIO and what holds it. <b>Reserved</b> pins are the board's fixed
+          peripherals; <b>assigned</b> are set by the pin pickers on the other tabs; <b>free</b>
+          pins are what those pickers offer. Change a pin on its own tab.
+        </p>
+        <ul class="pin-comb">
+          <li v-for="p in pinMap" :key="p.pin" :class="['pin-cell', `pin-${p.kind}`]">
+            <span class="pin-num">{{ p.pin }}</span>
+            <span class="pin-use">{{ p.use }}</span>
+          </li>
+        </ul>
+        <p v-if="pinMap.length === 0" class="setting-note">Reading the pin map...</p>
       </div>
 
       <div

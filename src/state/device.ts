@@ -28,6 +28,22 @@ export interface Setting {
   reboot?: boolean;
   /** Write-only secret (e.g. a VPN key): never read back, submitted only when set. */
   secret?: boolean;
+  /** An INT that is a GPIO number: render a pin picker (free GPIOs + None). */
+  pin?: boolean;
+  /** Show this setting only while another setting equals a given value, e.g. the
+   *  GC9A01's SPI pins appear only when the round LCD is the chosen display type. */
+  showIf?: { key: string; eq: number };
+}
+
+/** The GPIO map: the usable range and which pins the board's fixed peripherals hold. */
+export interface PinInfo {
+  usableMin: number;
+  usableMax: number;
+  reserved: { pin: number; use: string }[];
+}
+
+export async function loadPins(): Promise<PinInfo> {
+  return getJson<PinInfo>("/api/v1/pins");
 }
 
 export interface Capability {
@@ -611,7 +627,9 @@ export const SECTION_TITLES: Record<string, string> = {
   vpn: "VPN",
   mqtt: "MQTT / Home Assistant",
   security: "Security",
+  display: "Display",
   system: "System",
+  pins: "Pins",
 };
 
 export const SECTION_ORDER = [
@@ -623,5 +641,6 @@ export const SECTION_ORDER = [
   "vpn",
   "mqtt",
   "security",
+  "display",
   "system",
 ];
