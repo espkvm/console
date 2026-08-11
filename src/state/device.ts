@@ -294,24 +294,51 @@ export async function revertCert(): Promise<void> {
   }
 }
 
+/** How an upload ended, once every byte of the image was on the wire. */
+export interface UpdateOutcome {
+  /**
+   * The device answered "written" - the image is in the spare slot and the
+   * reboot is armed. When false the socket died after the last byte went out
+   * without a reply, which is ambiguous: the write may well have succeeded and
+   * the restart simply beaten the response out of the door. The caller decides
+   * by watching for the device to come back.
+   */
+  confirmed: boolean;
+}
+
 /**
  * Send a firmware image. The device writes it to the inactive slot and
  * restarts; if the new image never comes up, the bootloader returns to this
  * one, so the failure mode is a reboot rather than a dead device.
+ *
+ * @param onProgress fraction of the image handed to the socket, 0..1.
+ * @param onSent     the last byte is out; from here the device is writing and
+ *                   verifying on its own and there is no progress to report,
+ *                   only waiting.
  */
-export function uploadFirmware(file: Blob, onProgress?: (fraction: number) => void): Promise<void> {
+export function uploadFirmware(
+  file: Blob,
+  onProgress?: (fraction: number) => void,
+  onSent?: () => void,
+): Promise<UpdateOutcome> {
   /* XMLHttpRequest, not fetch, for the upload progress: writing a firmware image
      takes seconds and the operator needs to see it move, not wonder if it hung. */
   return new Promise((resolve, reject) => {
+    let sent = false;
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/v1/system/update");
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
     };
+    xhr.upload.onload = () => {
+      sent = true;
+      onProgress?.(1);
+      onSent?.();
+    };
     xhr.onload = () => {
       if (xhr.status === 401) return reject(new Unauthorized());
-      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      if (xhr.status >= 200 && xhr.status < 300) return resolve({ confirmed: true });
       let message = `update failed (${xhr.status})`;
       try {
         const body = JSON.parse(xhr.responseText) as { error?: string };
@@ -321,9 +348,42 @@ export function uploadFirmware(file: Blob, onProgress?: (fraction: number) => vo
       }
       reject(new Error(message));
     };
-    xhr.onerror = () => reject(new Error("update failed: the connection dropped"));
+    xhr.onerror = () => {
+      /* A drop before the image was fully sent is a plain failure; one after it
+         is the device restarting on top of its own reply, so report it as an
+         unconfirmed success rather than an error the operator cannot act on. */
+      if (sent) return resolve({ confirmed: false });
+      reject(new Error("update failed: the connection dropped"));
+    };
     xhr.send(file);
   });
+}
+
+/**
+ * Wait for the device to answer again after a restart.
+ *
+ * Any HTTP reply counts as back, 401 included: the reboot wiped the sessions
+ * that live in RAM, so a refusal is still proof that a server is listening.
+ * The first poll is held back a moment - the old firmware answers for about a
+ * second after it promises to restart, and taking that for the new one would
+ * declare victory before the reboot even started.
+ *
+ * @returns true if it came back within @p timeoutMs.
+ */
+export async function waitForDevice(timeoutMs = 90_000, graceMs = 4000): Promise<boolean> {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  await sleep(graceMs);
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      const res = await fetch("/api/v1/system/info", { cache: "no-store" });
+      if (res.ok || res.status === 401) return true;
+    } catch {
+      /* still down - that is the expected answer for most of this loop */
+    }
+    if (Date.now() >= deadline) return false;
+    await sleep(1000);
+  }
 }
 
 /**
@@ -387,11 +447,34 @@ export function compareVersions(a: string, b: string): number | null {
   return 0;
 }
 
-/** Fetch the image itself, so it can be handed to the device. */
-export async function downloadFirmware(release: FirmwareRelease): Promise<Blob> {
+/**
+ * Fetch the image itself, so it can be handed to the device.
+ *
+ * Read as a stream rather than a blob so the download has a progress of its
+ * own: it is the first of the three waits in an install and, on a slow link,
+ * easily the longest. If the server sends no length to measure against, fall
+ * back to the plain read and leave the caller with no fraction to show.
+ */
+export async function downloadFirmware(
+  release: FirmwareRelease,
+  onProgress?: (fraction: number) => void,
+): Promise<Blob> {
   const res = await fetch(release.url, { cache: "no-store" });
   if (!res.ok) throw new Error(`downloading ${release.version} returned ${res.status}`);
-  return await res.blob();
+  const total = Number(res.headers.get("content-length")) || release.size || 0;
+  if (!onProgress || !total || !res.body) return await res.blob();
+
+  const reader = res.body.getReader();
+  const parts: BlobPart[] = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value as BlobPart);
+    got += value.length;
+    onProgress(Math.min(1, got / total));
+  }
+  return new Blob(parts);
 }
 
 /* ---- virtual media -------------------------------------------------------
