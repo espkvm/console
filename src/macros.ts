@@ -20,7 +20,7 @@
  * Linux magic-SysRq commands have to be delivered.
  */
 
-import { HID_MOD_LALT, HID_MOD_LCTRL, HID_MOD_LGUI, HID_MOD_LSHIFT } from "./layouts.js";
+import { HID_MOD_LALT, HID_MOD_LCTRL, HID_MOD_LGUI, HID_MOD_LSHIFT } from "./layouts";
 
 const KEY_TAB = 0x2b;
 const KEY_ESC = 0x29;
@@ -38,7 +38,7 @@ const KEY_L = 0x0f;
  * SysRq is Alt held together with the PrintScreen key. */
 export const SYSRQ_MOD = HID_MOD_LALT;
 export const SYSRQ_KEY = KEY_PRINTSCREEN;
-export const SYSRQ_LETTERS = {
+export const SYSRQ_LETTERS: Record<string, number> = {
   r: 0x15, // unraw - take the keyboard back from X
   e: 0x08, // terminate all processes (SIGTERM)
   i: 0x0c, // kill all processes (SIGKILL)
@@ -48,7 +48,27 @@ export const SYSRQ_LETTERS = {
   o: 0x12, // power off
 };
 
-export const MACROS = [
+/**
+ * A built-in key-combination button.
+ *
+ * A macro is either a chord (`modifier` + `key`, sent as one HID report) or,
+ * when `sysrq` is set, a timed Alt+SysRq letter sequence. `os` limits it to a
+ * target OS; `labelByOs` swaps the caption per OS; `destructive` makes the UI
+ * confirm first; `hint` is the tooltip.
+ */
+export interface Macro {
+  id: string;
+  label: string;
+  labelByOs?: Record<string, string>;
+  os?: string;
+  modifier?: number; // bitmask to hold; absent on sysrq sequences
+  key?: number; // HID key position to tap; absent for a modifier-only chord
+  sysrq?: string;
+  destructive?: boolean;
+  hint?: string;
+}
+
+export const MACROS: Macro[] = [
   {
     id: "ctrl_alt_del",
     label: "Ctrl+Alt+Del",
@@ -148,12 +168,12 @@ export const MACROS = [
     hint: "Switch to virtual terminal 6." },
 ];
 
-export function findMacro(id) {
+export function findMacro(id: string): Macro | null {
   return MACROS.find((m) => m.id === id) || null;
 }
 
 /** The label to show for a macro on a given target OS, e.g. Win -> Cmd on macOS. */
-export function macroLabel(m, os) {
+export function macroLabel(m: Macro, os: string): string {
   return (m.labelByOs && m.labelByOs[os]) || m.label;
 }
 
@@ -162,6 +182,6 @@ export function macroLabel(m, os) {
  * one shows only when it matches. When the OS is unknown nothing is hidden, so
  * a failed guess never costs the operator a button they needed.
  */
-export function macrosForOs(os) {
+export function macrosForOs(os: string): Macro[] {
   return MACROS.filter((m) => !m.os || os === "unknown" || m.os === os);
 }

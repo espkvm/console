@@ -15,6 +15,21 @@ export const HID_MOD_LSHIFT = 0x02;
 export const HID_MOD_LALT = 0x04;
 export const HID_MOD_LGUI = 0x08;
 
+/** One key press: the modifier bitmask to hold and the HID key position to tap. */
+export interface KeyStroke {
+  mod: number;
+  hid: number;
+}
+
+/** Character -> key press for one layout. */
+export type CharMap = Record<string, KeyStroke>;
+
+/** A selectable keyboard layout: a display label and its character table. */
+export interface Layout {
+  label: string;
+  map: CharMap;
+}
+
 /* US key positions, named for what they produce on a US layout. */
 const K = {
   a: 0x04, b: 0x05, c: 0x06, d: 0x07, e: 0x08, f: 0x09, g: 0x0a, h: 0x0b,
@@ -26,12 +41,12 @@ const K = {
   enter: 0x28, esc: 0x29, backspace: 0x2a, tab: 0x2b, space: 0x2c,
   minus: 0x2d, equal: 0x2e, lbracket: 0x2f, rbracket: 0x30, backslash: 0x31,
   semicolon: 0x33, quote: 0x34, grave: 0x35, comma: 0x36, period: 0x37, slash: 0x38,
-};
+} as const;
 
 const SH = HID_MOD_LSHIFT;
 
 /** Keys every layout shares: whitespace and the digit row without shift. */
-function addCommon(map) {
+function addCommon(map: CharMap): CharMap {
   map[" "] = { mod: 0, hid: K.space };
   map["\n"] = { mod: 0, hid: K.enter };
   map["\r"] = { mod: 0, hid: K.enter };
@@ -44,7 +59,7 @@ function addCommon(map) {
   return map;
 }
 
-function buildUs() {
+function buildUs(): CharMap {
   const m = addCommon({});
   for (let i = 0; i < 26; i++) {
     const lower = String.fromCharCode(97 + i);
@@ -57,7 +72,7 @@ function buildUs() {
   for (let i = 0; i < shiftedDigits.length; i++) {
     m[shiftedDigits[i]] = { mod: SH, hid: digitKeys[i] };
   }
-  const pairs = [
+  const pairs: [string, string, number][] = [
     ["-", "_", K.minus], ["=", "+", K.equal], ["[", "{", K.lbracket],
     ["]", "}", K.rbracket], ["\\", "|", K.backslash], [";", ":", K.semicolon],
     ["'", '"', K.quote], ["`", "~", K.grave], [",", "<", K.comma],
@@ -75,10 +90,10 @@ function buildUs() {
  * layout named "ru". Latin letters are deliberately absent: with a Russian
  * layout active on the target there is no key position that produces them.
  */
-function buildRu() {
+function buildRu(): CharMap {
   const m = addCommon({});
 
-  const letters = [
+  const letters: [string, number][] = [
     ["й", K.q], ["ц", K.w], ["у", K.e], ["к", K.r], ["е", K.t], ["н", K.y],
     ["г", K.u], ["ш", K.i], ["щ", K.o], ["з", K.p], ["х", K.lbracket], ["ъ", K.rbracket],
     ["ф", K.a], ["ы", K.s], ["в", K.d], ["а", K.f], ["п", K.g], ["р", K.h],
@@ -103,7 +118,7 @@ function buildRu() {
   m["+"] = { mod: SH, hid: K.equal };
   m["!"] = { mod: SH, hid: K.d1 };
   m['"'] = { mod: SH, hid: K.d2 };
-  m["\u2116"] = { mod: SH, hid: K.d3 };
+  m["№"] = { mod: SH, hid: K.d3 };
   m[";"] = { mod: SH, hid: K.d4 };
   m["%"] = { mod: SH, hid: K.d5 };
   m[":"] = { mod: SH, hid: K.d6 };
@@ -114,22 +129,22 @@ function buildRu() {
   return m;
 }
 
-export const LAYOUTS = {
+export const LAYOUTS: Record<string, Layout> = {
   en_us: { label: "English (US)", map: buildUs() },
   ru_ru: { label: "Русская", map: buildRu() },
 };
 
 export const DEFAULT_LAYOUT = "en_us";
 
-/** @return {{mod:number,hid:number}|null} null when the layout cannot type it. */
-export function charToHid(layoutId, ch) {
+/** The key press for a character on a layout, or null when it cannot type it. */
+export function charToHid(layoutId: string, ch: string): KeyStroke | null {
   const layout = LAYOUTS[layoutId] || LAYOUTS[DEFAULT_LAYOUT];
   return layout.map[ch] || null;
 }
 
 /** Characters in @p text that the layout cannot produce, for warning the user. */
-export function untypeableChars(layoutId, text) {
-  const missing = new Set();
+export function untypeableChars(layoutId: string, text: string): string[] {
+  const missing = new Set<string>();
   for (const ch of text) {
     if (ch === "\r") continue;
     if (!charToHid(layoutId, ch)) missing.add(ch);

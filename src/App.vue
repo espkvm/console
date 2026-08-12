@@ -19,7 +19,7 @@ import TouchControls from "./components/TouchControls.vue";
 import UpdateWidget from "./components/UpdateWidget.vue";
 import { useInput } from "./input/useInput";
 import { useTouch } from "./input/useTouch";
-import { DEFAULT_LAYOUT } from "./layouts.js";
+import { DEFAULT_LAYOUT } from "./layouts";
 import {
   type Capability,
   type Setting,
@@ -451,6 +451,11 @@ onUnmounted(() => {
 
 function onGlobalKey(e: KeyboardEvent) {
   if (engaged.value) return;
+  // Don't hijack the key while the user is typing in a field (e.g. the login
+  // password) or when a modifier is held - Cmd/Ctrl+F belongs to the browser.
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target as HTMLElement | null;
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
   if (e.key === "f" || e.key === "F") void toggleFullscreen();
 }
 

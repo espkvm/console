@@ -10,8 +10,8 @@
  */
 import { computed, ref } from "vue";
 
-import { macrosForOs, macroLabel, SYSRQ_MOD, SYSRQ_KEY, SYSRQ_LETTERS } from "../macros.js";
-import { charToHid, untypeableChars, DEFAULT_LAYOUT } from "../layouts.js";
+import { macrosForOs, macroLabel, SYSRQ_MOD, SYSRQ_KEY, SYSRQ_LETTERS, type Macro } from "../macros";
+import { charToHid, untypeableChars, DEFAULT_LAYOUT } from "../layouts";
 import {
   runMacroScript,
   parseMacroScript,
@@ -46,19 +46,7 @@ const effectiveOs = computed(() => {
   return choice === "auto" ? props.detectedOs || "unknown" : choice;
 });
 
-interface Macro {
-  id: string;
-  label: string;
-  labelByOs?: Record<string, string>;
-  os?: string;
-  modifier: number;
-  key: number;
-  sysrq?: string;
-  destructive?: boolean;
-  hint?: string;
-}
-
-const macros = computed(() => macrosForOs(effectiveOs.value) as Macro[]);
+const macros = computed(() => macrosForOs(effectiveOs.value));
 const labelFor = (m: Macro) => macroLabel(m, effectiveOs.value);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -96,7 +84,7 @@ function sendMacro(m: Macro) {
     void sendSysrq(m.sysrq);
     return;
   }
-  props.control.keyboard(m.modifier, m.key ? [m.key] : []);
+  props.control.keyboard(m.modifier ?? 0, m.key ? [m.key] : []);
   setTimeout(() => props.control.keyboard(0, []), 40);
 }
 

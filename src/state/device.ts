@@ -148,6 +148,32 @@ export class Unauthorized extends Error {
   }
 }
 
+/**
+ * The message to raise from a failed fetch. The device answers errors with a
+ * JSON `{ error }` body; when it does not (a bare status, an empty or unreadable
+ * body) fall back to @p fallback. Reads the body once - callers must not have
+ * consumed it.
+ */
+async function errorFromResponse(res: Response, fallback: string): Promise<string> {
+  const body = await res.json().catch(() => ({}));
+  return (body as { error?: string }).error ?? fallback;
+}
+
+/**
+ * Build an Error from a finished XMLHttpRequest whose status was not 2xx: the
+ * device's JSON `{ error }` message when the response parses and carries one,
+ * otherwise @p fallback.
+ */
+function rejectFromXhr(xhr: XMLHttpRequest, fallback: string): Error {
+  try {
+    const body = JSON.parse(xhr.responseText) as { error?: string };
+    if (body.error) return new Error(body.error);
+  } catch {
+    /* keep the fallback message */
+  }
+  return new Error(fallback);
+}
+
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { cache: "no-store" });
   if (res.status === 401) throw new Unauthorized();
@@ -221,10 +247,7 @@ export async function resetSettings(): Promise<Values> {
 export async function wakeTarget(): Promise<void> {
   const res = await fetch("/api/v1/power/wake", { method: "POST" });
   if (res.status === 401) throw new Unauthorized();
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error((body as { error?: string }).error ?? `wake failed (${res.status})`);
-  }
+  if (!res.ok) throw new Error(await errorFromResponse(res, `wake failed (${res.status})`));
 }
 
 /**
@@ -236,10 +259,7 @@ export async function wakeTarget(): Promise<void> {
 async function powerAction(action: "click" | "hold" | "reset"): Promise<void> {
   const res = await fetch(`/api/v1/power/${action}`, { method: "POST" });
   if (res.status === 401) throw new Unauthorized();
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error((body as { error?: string }).error ?? `power ${action} failed (${res.status})`);
-  }
+  if (!res.ok) throw new Error(await errorFromResponse(res, `power ${action} failed (${res.status})`));
 }
 
 export const powerClick = () => powerAction("click");
@@ -278,20 +298,14 @@ export async function installCert(pem: string): Promise<void> {
     body: pem,
   });
   if (res.status === 401) throw new Unauthorized();
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error((body as { error?: string }).error ?? `certificate rejected (${res.status})`);
-  }
+  if (!res.ok) throw new Error(await errorFromResponse(res, `certificate rejected (${res.status})`));
 }
 
 /** Remove the operator certificate and revert to the self-signed one; restarts. */
 export async function revertCert(): Promise<void> {
   const res = await fetch("/api/v1/tls/cert", { method: "DELETE" });
   if (res.status === 401) throw new Unauthorized();
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error((body as { error?: string }).error ?? `revert failed (${res.status})`);
-  }
+  if (!res.ok) throw new Error(await errorFromResponse(res, `revert failed (${res.status})`));
 }
 
 /** How an upload ended, once every byte of the image was on the wire. */
@@ -339,14 +353,7 @@ export function uploadFirmware(
     xhr.onload = () => {
       if (xhr.status === 401) return reject(new Unauthorized());
       if (xhr.status >= 200 && xhr.status < 300) return resolve({ confirmed: true });
-      let message = `update failed (${xhr.status})`;
-      try {
-        const body = JSON.parse(xhr.responseText) as { error?: string };
-        if (body.error) message = body.error;
-      } catch {
-        /* keep the status-code message */
-      }
-      reject(new Error(message));
+      reject(rejectFromXhr(xhr, `update failed (${xhr.status})`));
     };
     xhr.onerror = () => {
       /* A drop before the image was fully sent is a plain failure; one after it
@@ -545,14 +552,7 @@ export function uploadImage(file: File, onProgress?: (p: UploadProgress) => void
     xhr.onload = () => {
       if (xhr.status === 401) return reject(new Unauthorized());
       if (xhr.status >= 200 && xhr.status < 300) return resolve();
-      let message = `upload failed (${xhr.status})`;
-      try {
-        const body = JSON.parse(xhr.responseText) as { error?: string };
-        if (body.error) message = body.error;
-      } catch {
-        /* keep the status-code message */
-      }
-      reject(new Error(message));
+      reject(rejectFromXhr(xhr, `upload failed (${xhr.status})`));
     };
     xhr.onerror = () => reject(new Error("upload failed: the connection dropped"));
     xhr.send(file);
@@ -580,14 +580,7 @@ export function uploadRescue(file: File, onProgress?: (p: UploadProgress) => voi
           return reject(new Error("upload succeeded but the reply was unreadable"));
         }
       }
-      let message = `upload failed (${xhr.status})`;
-      try {
-        const body = JSON.parse(xhr.responseText) as { error?: string };
-        if (body.error) message = body.error;
-      } catch {
-        /* keep the status-code message */
-      }
-      reject(new Error(message));
+      reject(rejectFromXhr(xhr, `upload failed (${xhr.status})`));
     };
     xhr.onerror = () => reject(new Error("upload failed: the connection dropped"));
     xhr.send(file);
@@ -606,7 +599,6 @@ export async function deleteImage(name: string): Promise<StorageInfo> {
   return body as StorageInfo;
 }
 
-/** A byte count as a short human string, e.g. 3.2 GB. */
 export function formatBytes(n: number): string {
   if (n <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];

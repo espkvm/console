@@ -13,7 +13,7 @@
  * Macros are stored on the device (the macros_json setting), so they follow the
  * device rather than the browser.
  */
-import { charToHid, HID_MOD_LCTRL, HID_MOD_LSHIFT, HID_MOD_LALT, HID_MOD_LGUI } from "./layouts.js";
+import { charToHid, HID_MOD_LCTRL, HID_MOD_LSHIFT, HID_MOD_LALT, HID_MOD_LGUI } from "./layouts";
 import type { Control } from "./input/control";
 
 export interface Macro {

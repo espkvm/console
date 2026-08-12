@@ -6,12 +6,12 @@
  * The keyboard is a hidden text field. Tapping "Keyboard" focuses it, which is
  * what makes the phone's own keyboard appear; each character it produces is
  * translated to a key position through the same layout table the paste feature
- * uses (see layouts.js), so what the target types matches its own layout. The
+ * uses (see layouts.ts), so what the target types matches its own layout. The
  * field never keeps its text - every input is intercepted and re-sent as HID.
  */
 import { ref } from "vue";
 
-import { charToHid } from "../layouts.js";
+import { charToHid } from "../layouts";
 import type { Control } from "../input/control";
 
 const props = defineProps<{ control: Control; layout: string }>();
