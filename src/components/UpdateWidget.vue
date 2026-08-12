@@ -21,9 +21,11 @@ import {
   compareVersions,
   downloadFirmware,
   fetchRelease,
+  switchBootSlot,
   uploadFirmware,
   waitForDevice,
   type FirmwareRelease,
+  type OtaSlot,
   type SystemInfo,
   type Values,
 } from "../state/device";
@@ -64,6 +66,72 @@ const installError = ref<string | null>(null);
 const uploading = computed(() => phase.value !== "idle" && phase.value !== "lost");
 /** Phases with a real fraction to show; the others get an indeterminate bar. */
 const measured = computed(() => phase.value === "downloading" || phase.value === "uploading");
+
+/* OTA slots (version + image state per app slot); absent on older firmware. */
+const slots = computed<OtaSlot[]>(() => props.system?.ota ?? []);
+/* The running image is a fresh, not-yet-confirmed OTA: a reset would roll it back. */
+const runningPending = computed(() => slots.value.some((s) => s.running && s.state === "pending"));
+const otherLabel = computed(() => slots.value.find((s) => !s.running)?.label ?? "the other slot");
+
+/** The slot being switched to, or null. Disables the buttons while it reboots. */
+const switching = ref<string | null>(null);
+/** The device never answered after a switch; say so rather than spin forever. */
+const switchLost = ref(false);
+
+/* Bootable = holds an image the bootloader has not marked bad. An empty version
+   means no app was found in that slot. */
+function canBoot(slot: OtaSlot): boolean {
+  return !slot.running && slot.version !== "" && slot.state !== "invalid" && slot.state !== "aborted";
+}
+
+/** The state badge's short word. */
+function stateLabel(slot: OtaSlot): string {
+  if (slot.version === "") return "empty";
+  switch (slot.state) {
+    case "pending":
+      return slot.running ? "unconfirmed" : "pending";
+    case "invalid":
+    case "aborted":
+      return "failed";
+    case "new":
+      return "new";
+    default:
+      return slot.running ? "confirmed" : "standby";
+  }
+}
+
+function badgeClass(slot: OtaSlot): string {
+  if (slot.version === "") return "uw-tag-warn";
+  if (slot.state === "invalid" || slot.state === "aborted") return "uw-tag-bad";
+  if (slot.state === "pending" && slot.running) return "uw-tag-warn";
+  return "";
+}
+
+/* Point the bootloader at another slot and ride the same restart -> reload path an
+   install uses. The device refuses a slot without a valid image, so the worst a
+   misclick costs is the confirm dialog. */
+async function switchSlot(slot: OtaSlot) {
+  if (slot.running || switching.value) return;
+  const ver = slot.version || "unknown version";
+  if (!confirm(`Boot from ${slot.label} (${ver}) and restart the device now?`)) return;
+  switchLost.value = false;
+  switching.value = slot.label;
+  try {
+    await switchBootSlot(slot.label);
+  } catch (err) {
+    switching.value = null;
+    toast.error(err instanceof Error ? err.message : String(err));
+    return;
+  }
+  if (await waitForDevice()) {
+    toast.info(`Booted ${slot.label} - reloading the console`);
+    /* The reboot cleared the session; the reload lands on the sign-in page. */
+    setTimeout(() => location.reload(), 1500);
+    return;
+  }
+  switching.value = null;
+  switchLost.value = true;
+}
 
 /** The badge is narrow, so the phase gets one short word next to the ring. */
 const badgeText = computed(() => {
@@ -274,8 +342,44 @@ const ringStyle = computed(() => {
         <dl class="facts">
           <div class="fact"><dt>Version</dt><dd class="mono">{{ system.version }}</dd></div>
           <div class="fact"><dt>Built</dt><dd class="mono">{{ system.built }}</dd></div>
-          <div class="fact"><dt>Running from</dt><dd class="mono">{{ system.partition }}</dd></div>
+          <div v-if="!slots.length" class="fact">
+            <dt>Running from</dt>
+            <dd class="mono">{{ system.partition }}</dd>
+          </div>
         </dl>
+
+        <div v-if="slots.length" class="uw-slots">
+          <div class="uw-slots-head">Slots</div>
+          <div v-for="slot in slots" :key="slot.label" class="uw-slot">
+            <span class="mono uw-slot-name">{{ slot.label }}</span>
+            <span class="mono uw-slot-ver">{{ slot.version || "empty" }}</span>
+            <span class="uw-slot-badges">
+              <span v-if="slot.running" class="uw-tag uw-tag-active">active</span>
+              <span v-else-if="slot.boot" class="uw-tag">boots next</span>
+              <span :class="['uw-tag', badgeClass(slot)]">{{ stateLabel(slot) }}</span>
+            </span>
+            <button
+              v-if="!slot.running"
+              type="button"
+              class="btn btn-sm btn-quiet"
+              :disabled="!canBoot(slot) || switching !== null"
+              :title="canBoot(slot) ? `Boot from ${slot.label} and restart` : 'No bootable image in this slot'"
+              @click="switchSlot(slot)"
+            >
+              {{ switching === slot.label ? "Switching..." : "Boot this" }}
+            </button>
+          </div>
+          <p v-if="runningPending" class="setting-note setting-note-blocked">
+            The running image is not confirmed yet - a reset now would roll back to
+            {{ otherLabel }}.
+          </p>
+          <p v-if="switching" class="setting-note">
+            Switching to {{ switching }} - the device is restarting and the console will reload...
+          </p>
+          <p v-if="switchLost" class="setting-note setting-note-blocked">
+            The device did not answer after the switch. Reload the page to see which slot it is on.
+          </p>
+        </div>
 
         <p v-if="!system.updatable" class="section-blocked">
           This firmware has a single app slot, so it cannot update itself.
@@ -451,6 +555,66 @@ const ringStyle = computed(() => {
   50% {
     opacity: 0.45;
   }
+}
+
+/* The OTA slot list: one row per app slot, its version and state, and the button
+   that boots the other one. */
+.uw-slots {
+  margin-top: var(--space-2, 8px);
+}
+
+.uw-slots-head {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  margin-bottom: var(--space-1, 4px);
+}
+
+.uw-slot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-1, 4px) 0;
+}
+
+.uw-slot-name {
+  min-width: 3.5em;
+}
+
+.uw-slot-ver {
+  color: var(--muted);
+}
+
+.uw-slot-badges {
+  display: inline-flex;
+  gap: var(--space-1, 4px);
+  margin-left: auto;
+}
+
+/* Small state chip next to a slot. Distinct from .uw-badge, which is the
+   status-bar button. */
+.uw-tag {
+  padding: 1px 6px;
+  border-radius: var(--radius);
+  background: var(--border);
+  color: var(--text);
+  font-size: var(--text-xs, 0.75rem);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.uw-tag-active {
+  background: var(--accent);
+  color: var(--bg, #fff);
+}
+
+.uw-tag-warn {
+  background: var(--warn, #b8860b);
+  color: #fff;
+}
+
+.uw-tag-bad {
+  background: var(--danger, #b00020);
+  color: #fff;
 }
 
 /* An indeterminate bar for the same phases: a band travelling across the track

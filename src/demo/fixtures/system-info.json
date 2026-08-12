@@ -1,10 +1,14 @@
 {
   "project": "espkvm",
-  "version": "v.0.14.0",
-  "built": "Jul 26 2026 08:36:19",
-  "idf": "v6.0.1",
+  "version": "v.0.22.0",
+  "built": "Aug 12 2026 20:37:27",
+  "idf": "v6.0.2",
   "partition": "ota_0",
   "updatable": true,
+  "ota": [
+    { "label": "ota_0", "version": "v.0.22.0", "state": "valid", "running": true, "boot": true },
+    { "label": "ota_1", "version": "v.0.21.2", "state": "valid", "running": false, "boot": false }
+  ],
   "uptimeSeconds": 32,
   "heapFree": 14122200,
   "psramFree": 13706160,

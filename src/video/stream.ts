@@ -27,6 +27,18 @@ const TYPE_H264 = 2;
 /** How long to wait for the first frame before deciding the channel is dead. */
 const FIRST_FRAME_TIMEOUT_MS = 2500;
 
+/*
+ * A WebCodecs decoder can stall silently - stop producing frames without ever
+ * firing its error callback (long uptime, a throttled/backgrounded tab, a GPU or
+ * hardware-decoder hiccup). Frames keep arriving, so nothing else notices. If no
+ * decoded frame has come out for this long while input is still flowing, treat
+ * the decoder as wedged and rebuild it. The device sends a keyframe every ~2 s,
+ * so this must comfortably exceed that or a slow decode would trip it.
+ */
+const DECODER_STALL_MS = 3000;
+/** Consecutive rebuilds that fail to revive it before we give up on the channel. */
+const MAX_STALL_REBUILDS = 3;
+
 /** Anything a canvas can draw and that must be released afterwards. */
 export type Drawable = (ImageBitmap | VideoFrame) & { close(): void };
 
@@ -95,6 +107,11 @@ export class VideoStream {
   #decoderCodec: string | null = null;
   /** Nothing before the first keyframe can be decoded. */
   #hadKeyframe = false;
+  /** performance.now() of the last decoded frame the decoder handed back; the
+      stall watchdog's clock. 0 means "no decoder to watch yet". */
+  #lastOutputAt = 0;
+  /** Rebuilds since the last frame actually came out; caps runaway stalls. */
+  #stallRebuilds = 0;
   #lastMeta = { width: 0, height: 0, sequence: 0, pts: 0 };
 
   constructor(handlers: Handlers) {
@@ -146,6 +163,7 @@ export class VideoStream {
       this.#decoder = null;
     }
     this.#decoderCodec = null;
+    this.#lastOutputAt = 0; /* nothing to watch until a new decoder is configured */
   }
 
   async #onMessage(ev: MessageEvent) {
@@ -209,6 +227,27 @@ export class VideoStream {
     }
 
     const { keyframe, sps } = inspectAnnexB(payload);
+
+    /* Stall watchdog: input is flowing (we are here) but the decoder has produced
+       nothing for too long, so it is wedged. Tear it down here - before the SPS
+       block below, so a keyframe in this very packet reconfigures a fresh decoder
+       and resyncs at once; a delta waits for the next keyframe (<=2 s). If rebuilds
+       keep failing, drop the channel so the app reconnects (or falls back to MJPEG)
+       rather than sit on a frozen picture. */
+    if (
+      this.#hadKeyframe &&
+      this.#lastOutputAt > 0 &&
+      performance.now() - this.#lastOutputAt > DECODER_STALL_MS
+    ) {
+      this.#resetDecoder();
+      this.#hadKeyframe = false;
+      if (++this.#stallRebuilds >= MAX_STALL_REBUILDS) {
+        this.#stallRebuilds = 0;
+        this.#handlers.onUnavailable("the video decoder stalled and could not be revived");
+        return;
+      }
+    }
+
     if (sps) {
       const codec = codecFromSps(sps);
       /* A resolution change produces a new SPS and usually a new level, which
@@ -252,6 +291,10 @@ export class VideoStream {
     try {
       decoder = new VideoDecoder({
         output: (frame) => {
+          /* A frame came out: the decoder is alive, so refresh the watchdog clock
+             and clear the rebuild count. */
+          this.#lastOutputAt = performance.now();
+          this.#stallRebuilds = 0;
           const meta = this.#lastMeta;
           this.#handlers.onFrame({
             image: frame,
@@ -277,5 +320,8 @@ export class VideoStream {
     this.#decoder = decoder;
     this.#decoderCodec = codec;
     this.#hadKeyframe = false;
+    /* Start the stall watchdog's clock now, so a decoder that never produces its
+       first frame is caught too, not only one that stops partway. */
+    this.#lastOutputAt = performance.now();
   }
 }

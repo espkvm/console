@@ -74,6 +74,21 @@ export interface VideoStatus {
   codec: string;
 }
 
+/**
+ * One OTA app slot. `state` is the bootloader's verdict on its image:
+ * `valid`/`undefined` boot normally, `pending` is a fresh image awaiting its
+ * self-confirmation (a reset now would roll it back), `invalid`/`aborted` failed.
+ */
+export interface OtaSlot {
+  label: string;
+  version: string;
+  state: "new" | "pending" | "valid" | "invalid" | "aborted" | "undefined";
+  /** The slot running right now. */
+  running: boolean;
+  /** The slot the bootloader boots next; differs from `running` after a switch. */
+  boot: boolean;
+}
+
 export interface SystemInfo {
   project: string;
   version: string;
@@ -82,6 +97,8 @@ export interface SystemInfo {
   partition: string;
   /** A second app slot exists, so an update could be installed. */
   updatable: boolean;
+  /** The OTA app slots: version + image state per slot. Absent on older firmware. */
+  ota?: OtaSlot[];
   uptimeSeconds: number;
   heapFree: number;
   psramFree: number;
@@ -271,6 +288,21 @@ export async function restartDevice(): Promise<void> {
   const res = await fetch("/api/v1/system/restart", { method: "POST" });
   if (res.status === 401) throw new Unauthorized();
   if (!res.ok) throw new Error(`restart failed (${res.status})`);
+}
+
+/**
+ * Point the bootloader at the given OTA slot and restart onto it. The device
+ * refuses a slot without a valid image, so this cannot brick it; the caller then
+ * waits for it to come back the same way an update does.
+ */
+export async function switchBootSlot(label: string): Promise<void> {
+  const res = await fetch("/api/v1/system/boot-slot", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label }),
+  });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(await errorFromResponse(res, `switch to ${label} failed (${res.status})`));
 }
 
 /** Which TLS certificate the device is serving. `custom` is the operator's own. */
