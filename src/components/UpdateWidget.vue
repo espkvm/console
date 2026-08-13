@@ -72,6 +72,9 @@ const slots = computed<OtaSlot[]>(() => props.system?.ota ?? []);
 /* The running image is a fresh, not-yet-confirmed OTA: a reset would roll it back. */
 const runningPending = computed(() => slots.value.some((s) => s.running && s.state === "pending"));
 const otherLabel = computed(() => slots.value.find((s) => !s.running)?.label ?? "the other slot");
+/* An update always lands on the inactive slot; the running one is left untouched
+   until the new image verifies. Null on older firmware that doesn't report slots. */
+const updateTarget = computed(() => slots.value.find((s) => !s.running)?.label ?? null);
 
 /** The slot being switched to, or null. Disables the buttons while it reboots. */
 const switching = ref<string | null>(null);
@@ -385,9 +388,14 @@ const ringStyle = computed(() => {
           This firmware has a single app slot, so it cannot update itself.
         </p>
         <template v-else>
+          <!-- Idle controls: hidden while an install runs, so the block shows just
+               the progress bar and one line - not three copies of the percentage. -->
+          <template v-if="!uploading">
           <p class="setting-note">
-            The image is written to the spare slot. If it fails to start, the device returns to
-            this one on its own.
+            The update installs to
+            <span class="mono">{{ updateTarget ?? "the spare slot" }}</span> - the inactive one;
+            the running slot is left untouched until the new image verifies, so a bad update
+            falls back on its own.
           </p>
 
           <div v-if="updateEnabled">
@@ -419,7 +427,7 @@ const ringStyle = computed(() => {
                 :disabled="uploading"
                 @click="installRelease"
               >
-                {{ uploading ? statusText : `Install ${release.version}` }}
+                Install {{ release.version }}
               </button>
             </template>
             <button
@@ -442,16 +450,11 @@ const ringStyle = computed(() => {
             >
             and pick it below.
           </p>
-          <label :class="['btn', 'btn-sm', { 'btn-disabled': uploading }]">
-            {{ uploading ? statusText : "Install firmware..." }}
-            <input
-              type="file"
-              accept=".bin"
-              class="sr-only"
-              :disabled="uploading"
-              @change="onFirmwareChosen"
-            />
+          <label class="btn btn-sm">
+            Install firmware...
+            <input type="file" accept=".bin" class="sr-only" @change="onFirmwareChosen" />
           </label>
+          </template>
 
           <!-- The install, phase by phase: a real bar while bytes move, a
                travelling one while the device works with nothing to report,
