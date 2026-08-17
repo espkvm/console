@@ -255,10 +255,76 @@ async function switchNet(mode: "ethernet" | "wifi" | "ap") {
   }
 }
 
-/* The network pill's popup is a mode switcher rather than a plain tooltip. */
+/* The network pill's popup is the whole network panel rather than a plain
+   tooltip: how the device is connected, and every address it can be reached on. */
 const isNetPill = computed(() =>
   ["ethernet", "wifi", "ap"].includes(connDetail.value ?? ""),
 );
+
+/*
+ * Every address worth knowing, in the order someone reaches for them: the name
+ * first, because it is the one thing that survives a new lease; then IPv4; then
+ * the IPv6 addresses the router handed out, most routable first.
+ *
+ * Each row says what the address is good for, because that decides whether it is
+ * worth writing down. A global IPv6 address reaches the device from anywhere but
+ * changes when the ISP rotates the prefix; a unique-local one only works inside
+ * the site but survives that; a link-local one needs an interface suffix no
+ * browser will supply, so it is shown and nothing more. The MAC is last: nobody
+ * connects to it, but it is what a DHCP reservation is keyed on.
+ */
+type Addr = { label: string; value: string; note: string; url: string | null };
+
+/* Built from the page's own scheme and port, so a link lands on the port that is
+   actually answering rather than an assumed 443. */
+function addrUrl(host: string): string {
+  return `${location.protocol}//${host}${location.port ? `:${location.port}` : ""}/`;
+}
+
+const netAddrs = computed<Addr[]>(() => {
+  const net = system.value?.net;
+  const rows: Addr[] = [];
+  if (net?.hostname) {
+    rows.push({
+      label: "Name",
+      value: `${net.hostname}.local`,
+      note: "on this network",
+      url: addrUrl(`${net.hostname}.local`),
+    });
+  }
+  if (net?.ip4) {
+    rows.push({ label: "IPv4", value: net.ip4, note: "", url: addrUrl(net.ip4) });
+  }
+  for (const addr of net?.ipv6 ?? []) {
+    const a = addr.toLowerCase();
+    const linkLocal = a.startsWith("fe80:");
+    /* fc00::/7 - the two prefixes that carry unique-local addresses. */
+    const uniqueLocal = a.startsWith("fc") || a.startsWith("fd");
+    rows.push({
+      label: "IPv6",
+      value: addr,
+      note: linkLocal ? "link-local" : uniqueLocal ? "this site only" : "global",
+      url: linkLocal ? null : addrUrl(`[${addr}]`),
+    });
+  }
+  if (net?.mac) {
+    rows.push({ label: "MAC", value: net.mac, note: "for a DHCP reservation", url: null });
+  }
+  return rows;
+});
+
+/* An IPv6 address is too long to retype and too long to read back over a phone
+   call, so copying it is the only realistic way to use one. */
+async function copyAddr(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.info("Copied");
+  } catch {
+    /* The clipboard API is only available in a secure context, so this is what
+       an operator on plain HTTP meets. */
+    toast.error("Could not copy - select and copy it manually");
+  }
+}
 
 const conns = computed<Conn[]>(() => {
   const list: Conn[] = [
@@ -893,23 +959,52 @@ const LED_BITS: Array<[number, string]> = [
                description on tap. Backdrop closes it. -->
           <template v-if="connDetail">
             <div class="conn-backdrop" @click="connDetail = null" />
-            <div class="conn-popup" :role="isNetPill && caps.wifi?.available ? 'menu' : 'tooltip'">
-              <template v-if="isNetPill && caps.wifi?.available">
-                <span class="conn-switch-title">Connection</span>
-                <button
-                  v-for="m in (['ethernet', 'wifi', 'ap'] as const)"
-                  :key="m"
-                  type="button"
-                  class="conn-switch-btn"
-                  :class="{ 'conn-switch-active': (system?.net?.mode ?? 'ethernet') === m }"
-                  @click="switchNet(m)"
-                >
-                  <Icon :name="m" :size="15" />
-                  {{ m === "ethernet" ? "Ethernet" : m === "wifi" ? "WiFi" : "Hotspot" }}
-                </button>
-              </template>
-              <template v-else>
+            <div
+              class="conn-popup"
+              :class="{ 'conn-popup-net': isNetPill }"
+              :role="isNetPill ? 'menu' : 'tooltip'"
+            >
+              <!-- Every pill leads with its own state line; the network one then
+                   opens out into the full panel. -->
+              <span :class="isNetPill ? 'conn-popup-head' : ''">
                 {{ conns.find((c) => c.id === connDetail)?.title ?? "" }}
+              </span>
+
+              <template v-if="isNetPill">
+                <template v-if="netAddrs.length">
+                  <span class="conn-switch-title">Reachable at</span>
+                  <div v-for="a in netAddrs" :key="a.label + a.value" class="conn-addr">
+                    <span class="conn-addr-label">
+                      {{ a.label }}<template v-if="a.note"> &middot; {{ a.note }}</template>
+                    </span>
+                    <a v-if="a.url" class="mono conn-addr-value" :href="a.url">{{ a.value }}</a>
+                    <span v-else class="mono conn-addr-value">{{ a.value }}</span>
+                    <button
+                      type="button"
+                      class="btn btn-sm conn-addr-copy"
+                      :title="`Copy ${a.value}`"
+                      :aria-label="`Copy ${a.value}`"
+                      @click="copyAddr(a.value)"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </template>
+
+                <template v-if="caps.wifi?.available">
+                  <span class="conn-switch-title">Connection</span>
+                  <button
+                    v-for="m in (['ethernet', 'wifi', 'ap'] as const)"
+                    :key="m"
+                    type="button"
+                    class="conn-switch-btn"
+                    :class="{ 'conn-switch-active': (system?.net?.mode ?? 'ethernet') === m }"
+                    @click="switchNet(m)"
+                  >
+                    <Icon :name="m" :size="15" />
+                    {{ m === "ethernet" ? "Ethernet" : m === "wifi" ? "WiFi" : "Hotspot" }}
+                  </button>
+                </template>
               </template>
             </div>
           </template>

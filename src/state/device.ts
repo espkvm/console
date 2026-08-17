@@ -117,6 +117,19 @@ export interface SystemInfo {
     rssi?: number;
     ssid?: string;
     apClients?: number;
+    /** The name the device answers to; `<hostname>.local` over mDNS. */
+    hostname?: string;
+    /** The active link's IPv4 address, "" on a network without one. */
+    ip4?: string;
+    /** The active link's MAC - what a DHCP reservation is keyed on. */
+    mac?: string;
+    /**
+     * The IPv6 addresses the active link holds, most routable first. Nobody
+     * chose them - they are autoconfigured - so the console is where an operator
+     * finds out what they are. Absent on older firmware, empty on a network
+     * without IPv6.
+     */
+    ipv6?: string[];
   };
   /**
    * ATX power control state, when the firmware reports it.

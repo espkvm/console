@@ -363,6 +363,15 @@
     "reboot": true
   },
   {
+    "key": "net_ipv6",
+    "section": "network",
+    "title": "IPv6",
+    "help": "Also answer on an IPv6 address, alongside IPv4. There is nothing to configure: the address comes from the router's advertisements. Turn it off to keep the device off IPv6 entirely.",
+    "type": "bool",
+    "default": 1,
+    "reboot": true
+  },
+  {
     "key": "wg_enable",
     "section": "vpn",
     "title": "Enable WireGuard",

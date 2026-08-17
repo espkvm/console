@@ -65,6 +65,8 @@ const SCHEMA = [
     default: "espkvm", reboot: true },
   { key: "net_dhcp", section: "network", title: "Obtain address automatically", type: "bool",
     default: 1, reboot: true },
+  { key: "net_ipv6", section: "network", title: "IPv6", type: "bool", default: 1, reboot: true,
+    help: "Also answer on an IPv6 address, alongside IPv4. There is nothing to configure: the address comes from the router's advertisements." },
 
   { key: "sec_https", section: "security", title: "Serve over HTTPS", type: "bool", default: 1,
     requires: "https", reboot: true },
@@ -189,6 +191,21 @@ export function mockDevice() {
             psramFree: 13_500_000,
             tempC: state.tempC,
             thermal: state.thermal,
+            /* Enough for the network panel behind the footer's link pill: a name,
+               an IPv4 address, and one of each kind of IPv6 address. */
+            net: {
+              up: true,
+              mbps: 100,
+              mode: "ethernet",
+              hostname: "espkvm",
+              ip4: "192.168.1.42",
+              mac: "30:AE:A4:1B:9C:07",
+              ipv6: [
+                "2001:db8:1f0d:4a00:32ae:a4ff:fe1b:9c07",
+                "fd7c:2b1e:6a44::32ae:a4ff:fe1b:9c07",
+                "fe80::32ae:a4ff:fe1b:9c07",
+              ],
+            },
           });
         }
         if (url === "/api/v1/system/restart" && req.method === "POST") {

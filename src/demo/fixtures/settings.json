@@ -29,6 +29,7 @@
   "net_mask": "255.255.255.0",
   "net_gw": "10.42.0.1",
   "net_dns": "10.42.0.1",
+  "net_ipv6": true,
   "sec_https": true,
   "sec_auth": true,
   "sec_user": "admin",

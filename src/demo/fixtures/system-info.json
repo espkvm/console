@@ -16,7 +16,15 @@
   "thermal": "normal",
   "net": {
     "up": true,
-    "mbps": 100
+    "mbps": 100,
+    "hostname": "espkvm",
+    "ip4": "192.168.1.42",
+    "mac": "30:AE:A4:1B:9C:07",
+    "ipv6": [
+      "2001:db8:1f0d:4a00:32ae:a4ff:fe1b:9c07",
+      "fd7c:2b1e:6a44::32ae:a4ff:fe1b:9c07",
+      "fe80::32ae:a4ff:fe1b:9c07"
+    ]
   },
   "atx": {
     "enabled": true,
