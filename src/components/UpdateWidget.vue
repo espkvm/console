@@ -33,6 +33,18 @@ import { toast } from "../state/toasts";
 
 const props = defineProps<{ system: SystemInfo | null; values: Values }>();
 
+/*
+ * Ask for the video stream to be dropped while the image is going over.
+ *
+ * The device serves the console, the stream and this upload from one small
+ * pool of TLS sessions, and it writes flash with the encoder running on the
+ * other core. Reported as an update that fails and then works on the second or
+ * third try (issue #19) - the flakiness of something being squeezed, not of
+ * something broken. The picture is the one thing on screen nobody is looking at
+ * while they watch an update bar, so it is what gives way.
+ */
+const emit = defineEmits<{ (e: "hold-stream", hold: boolean): void }>();
+
 const open = ref(false);
 const release = ref<FirmwareRelease | null>(null);
 const checking = ref(false);
@@ -66,6 +78,13 @@ const installError = ref<string | null>(null);
 const uploading = computed(() => phase.value !== "idle" && phase.value !== "lost");
 /** Phases with a real fraction to show; the others get an indeterminate bar. */
 const measured = computed(() => phase.value === "downloading" || phase.value === "uploading");
+
+/* Not "downloading": that one runs between the browser and the release server,
+   and costs the device nothing. */
+watch(
+  () => phase.value === "uploading" || phase.value === "writing" || phase.value === "restarting",
+  (busy) => emit("hold-stream", busy),
+);
 
 /* OTA slots (version + image state per app slot); absent on older firmware. */
 const slots = computed<OtaSlot[]>(() => props.system?.ota ?? []);

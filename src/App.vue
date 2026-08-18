@@ -125,6 +125,10 @@ const panel = ref<PanelId>(null);
 const fit = ref<"fit" | "actual">("fit");
 const engaged = ref(false);
 const paused = ref(false);
+/* Set while a firmware image is being handed to the device: the stream gives up
+   its socket and the device's attention until the update is done. Kept apart
+   from `paused` so it neither flips the pause button nor survives the update. */
+const updateHoldsStream = ref(false);
 /* Which connection pill has its detail popover open (tap to toggle). Touch has
    no hover, so the pill title is shown on tap instead. */
 const connDetail = ref<string | null>(null);
@@ -708,7 +712,7 @@ const LED_BITS: Array<[number, string]> = [
 
       <span class="statusbar-spacer" />
 
-      <UpdateWidget :system="system" :values="values" />
+      <UpdateWidget :system="system" :values="values" @hold-stream="updateHoldsStream = $event" />
 
       <button
         type="button"
@@ -781,7 +785,12 @@ const LED_BITS: Array<[number, string]> = [
           :engaged="engaged"
           :engage-mode="engageMode"
           :fit="fit"
-          :paused="paused"
+          :paused="paused || updateHoldsStream"
+          :pause-note="
+            updateHoldsStream
+              ? 'The picture is back the moment the update is done - it gives up its connection so the image gets the device to itself.'
+              : ''
+          "
           @surface="surface = $event"
         />
 
@@ -1043,7 +1052,14 @@ const LED_BITS: Array<[number, string]> = [
           type="button"
           class="btn btn-sm btn-icon"
           :aria-label="paused ? 'Resume the video stream' : 'Pause the video stream'"
-          :title="paused ? 'Resume the video stream' : 'Disconnect the stream to save bandwidth'"
+          :title="
+            updateHoldsStream
+              ? 'Paused until the firmware update finishes'
+              : paused
+                ? 'Resume the video stream'
+                : 'Disconnect the stream to save bandwidth'
+          "
+          :disabled="updateHoldsStream"
           @click="paused = !paused"
         >
           <Icon :name="paused ? 'play' : 'pause'" :size="15" />

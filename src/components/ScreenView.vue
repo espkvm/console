@@ -25,6 +25,9 @@ const props = defineProps<{
   fit: "fit" | "actual";
   /** Paused: nothing is read, so the device stops encoding entirely. */
   paused: boolean;
+  /** Shown instead of the usual pause text when something other than the
+      operator stopped the stream - currently a firmware upload. */
+  pauseNote?: string;
 }>();
 
 const emit = defineEmits<{ surface: [HTMLElement | null] }>();
@@ -252,9 +255,21 @@ watch(failed, (isFailed) => {
     return;
   }
   if (useWebsocket.value) return;
-  /* Except when the device is encoding H.264, which that endpoint cannot
-     carry: retrying it forever would be a loop with a known answer. */
-  if (props.status?.codec === "h264") {
+  /*
+   * Except when the device is not KNOWN to be producing MJPEG, which is not the
+   * same as knowing it produces H.264. The multipart endpoint carries images
+   * only; anything else - H.264, or a codec we have not learned yet because the
+   * status has not loaded - means the WebSocket is the only transport that can
+   * work, and retrying /stream is a loop with a known answer (the device
+   * replies 409 and says so).
+   *
+   * The difference is not academic. The channel is refused before sign-in, so a
+   * page that opens on the login screen falls back to the multipart stream, and
+   * with the status not yet loaded the old test could not undo it: the picture
+   * then never appeared until the page happened to be reloaded in the right
+   * order. Which is exactly how it was reported.
+   */
+  if (props.status?.codec !== "mjpeg") {
     useWebsocket.value = true;
     failed.value = false;
     return;
@@ -321,13 +336,16 @@ const showOverlay = computed(
         <span class="screen-message-icon">
           <Icon :name="noSignal || failed || codecError ? 'warning' : 'screen'" :size="26" />
         </span>
-        <h2 v-if="paused">Video paused</h2>
+        <h2 v-if="paused">{{ pauseNote ? "Video paused for the update" : "Video paused" }}</h2>
         <h2 v-else-if="noSignal">No signal</h2>
         <h2 v-else-if="codecError">Cannot play this stream</h2>
         <h2 v-else-if="failed">Stream interrupted</h2>
         <h2 v-else>Waiting for the first frame...</h2>
         <p v-if="paused" class="muted">
-          The stream is disconnected and the device has stopped encoding. Input still works.
+          {{
+            pauseNote ||
+            "The stream is disconnected and the device has stopped encoding. Input still works."
+          }}
         </p>
         <p v-else-if="noSignal" class="muted">
           The target is not sending video. It may be powered off, asleep, or its cable unplugged.
