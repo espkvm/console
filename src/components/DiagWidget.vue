@@ -71,6 +71,21 @@ const uptimeLabel = computed(() => {
           </div>
           <div class="fact"><dt>ESP-IDF</dt><dd class="mono">{{ system.idf }}</dd></div>
         </dl>
+        <!--
+          The device keeps its own log in memory that survives a restart, which
+          is the only way to see what a boot that failed had to say. Offered as
+          a file because where it is going is a bug report.
+        -->
+        <p class="dw-log">
+          <a href="/api/v1/system/log" download="espkvm-log.txt" class="btn btn-sm">
+            Download the log
+          </a>
+          <span class="muted">
+            The last few hundred lines, including the run before the current one.
+            No passwords or keys &mdash; but it does name your network, addresses
+            and MAC, so give it a look before posting it in public.
+          </span>
+        </p>
       </div>
     </template>
   </div>
@@ -89,6 +104,19 @@ const uptimeLabel = computed(() => {
   height: auto;
   padding: 4px 0;
   text-align: center;
+}
+
+.dw-log {
+  margin: 14px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.dw-log .muted {
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .dw-temp {
