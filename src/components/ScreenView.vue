@@ -14,7 +14,7 @@
  */
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
-import type { VideoStatus } from "../state/device";
+import type { ScreenText, VideoStatus } from "../state/device";
 import { VideoStream } from "../video/stream";
 import Icon from "./Icon.vue";
 
@@ -28,6 +28,9 @@ const props = defineProps<{
   /** Shown instead of the usual pause text when something other than the
       operator stopped the stream - currently a firmware upload. */
   pauseNote?: string;
+  /** The screen read as characters, when the operator has asked to select it.
+      Null means no layer: the picture behaves as usual. */
+  textLayer?: ScreenText | null;
 }>();
 
 const emit = defineEmits<{ surface: [HTMLElement | null] }>();
@@ -292,6 +295,104 @@ onUnmounted(() => {
   demoCleanup?.();
 });
 
+/*
+ * The selectable text layer.
+ *
+ * A text-mode screen is a grid, and the characters we read came out of that
+ * grid, so the layer only has to be put back where they were: transparent text
+ * over the picture, one row per row, each character over the cell it was read
+ * from. The browser then does selection and copying for us - the same thing a
+ * PDF viewer does over a scanned page.
+ *
+ * Two things have to line up. The rectangle the video occupies inside the
+ * element, because "fit" letterboxes it - the same calculation the pointer
+ * mapping makes, for the same reason. And the character advance: a monospace
+ * font at a given size has an advance of its own choosing, which will not be
+ * the cell width, so it is measured once and the difference is handed to
+ * letter-spacing. Without that the row drifts right and the last characters sit
+ * a cell or two from where they were read.
+ */
+const LAYER_FONT = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
+
+const box = ref({ left: 0, top: 0, width: 0, height: 0 });
+
+function measureAdvance(fontPx: number): number {
+  const c = document.createElement("canvas").getContext("2d");
+  if (!c) return fontPx * 0.6;
+  c.font = `${fontPx}px ${LAYER_FONT}`;
+  return c.measureText("0").width || fontPx * 0.6;
+}
+
+function updateBox() {
+  const el = (useWebsocket.value ? canvas.value : img.value) as HTMLElement | null;
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  const host = el.parentElement?.getBoundingClientRect();
+  const iw = (el as HTMLCanvasElement).width || (el as HTMLImageElement).naturalWidth || r.width;
+  const ih = (el as HTMLCanvasElement).height || (el as HTMLImageElement).naturalHeight || r.height;
+  if (!host || iw <= 0 || ih <= 0 || r.width <= 0) return;
+  const scale = Math.min(r.width / iw, r.height / ih);
+  box.value = {
+    left: r.left - host.left + (r.width - iw * scale) / 2,
+    top: r.top - host.top + (r.height - ih * scale) / 2,
+    width: iw * scale,
+    height: ih * scale,
+  };
+}
+
+let boxObserver: ResizeObserver | null = null;
+onMounted(() => {
+  updateBox();
+  boxObserver = new ResizeObserver(updateBox);
+  const stage = canvas.value?.parentElement;
+  if (stage) boxObserver.observe(stage);
+});
+onUnmounted(() => boxObserver?.disconnect());
+watch(() => props.textLayer, updateBox);
+watch(() => props.fit, updateBox);
+/* A resolution change moves the letterbox without resizing anything the
+   observer can see: the canvas keeps its CSS box and swaps its intrinsic size.
+   The status poll is what notices. */
+watch(() => [props.status?.width, props.status?.height], updateBox);
+
+const layerRows = computed(() => {
+  const t = props.textLayer;
+  if (!t) return [];
+  const lines = t.text.split("\n");
+  while (lines.length < t.rows) lines.push("");
+  /* A blank row still has to occupy its row: an empty element collapses to no
+     height at all, and every row below it would then sit above the characters
+     it was read from. A single space is the cheapest way to keep the box, and
+     it is what a blank line copies as anyway. */
+  return lines.slice(0, t.rows).map((l) => (l.length ? l : " "));
+});
+
+const layerStyle = computed(() => {
+  const t = props.textLayer;
+  if (!t || box.value.width <= 0) return {};
+  /*
+   * The grid is not always the whole frame: a UEFI console centres 40 rows of
+   * 19 in a 768-tall picture and leaves 4 pixels above and below. So scale the
+   * frame the reading came from onto the video rectangle, and place the grid
+   * inside it at the origin it was read at.
+   */
+  const scaleX = t.width > 0 ? box.value.width / t.width : box.value.width / (t.cols * t.cellWidth);
+  const scaleY =
+    t.height > 0 ? box.value.height / t.height : box.value.height / (t.rows * t.cellHeight);
+  const cellW = t.cellWidth * scaleX;
+  const cellH = t.cellHeight * scaleY;
+  /* Size by the cell height, then pull the advance onto the cell width. */
+  const fontPx = cellH * 0.82;
+  return {
+    left: `${box.value.left + t.originX * scaleX}px`,
+    top: `${box.value.top + t.originY * scaleY}px`,
+    width: `${t.cols * cellW}px`,
+    height: `${t.rows * cellH}px`,
+    font: `${fontPx}px/${cellH}px ${LAYER_FONT}`,
+    letterSpacing: `${cellW - measureAdvance(fontPx)}px`,
+  };
+});
+
 const noSignal = computed(() => props.status !== null && !props.status.signal);
 const showOverlay = computed(
   () => props.paused || failed.value || noSignal.value || codecError.value !== null || !loaded.value,
@@ -330,6 +431,15 @@ const showOverlay = computed(
         failed = true;
       "
     />
+
+    <div
+      v-if="textLayer"
+      class="screen-text"
+      :style="layerStyle"
+      aria-label="Screen text, selectable"
+    >
+      <div v-for="(line, i) in layerRows" :key="i" class="screen-text-line">{{ line }}</div>
+    </div>
 
     <div v-if="!DEMO && showOverlay" class="screen-overlay">
       <div class="screen-message">

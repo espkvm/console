@@ -9,6 +9,7 @@
  * (see main.ts), so it is tree-shaken out of the firmware bundle entirely.
  */
 import capabilities from "./fixtures/capabilities.json";
+import pins from "./fixtures/pins.json";
 import schema from "./fixtures/schema.json";
 import settingsFixture from "./fixtures/settings.json";
 import systemInfo from "./fixtures/system-info.json";
@@ -39,6 +40,9 @@ const DEMO_STATUS = {
   wsClients: 1,
   imgClients: 0,
   codec: "mjpeg",
+  /* A picture, not a character grid - which is why /api/v1/screen/text answers
+     204 below, and why Select and Copy stay greyed out in the demo. */
+  textMode: false,
 };
 
 function json(body: unknown, status = 200): Response {
@@ -70,6 +74,8 @@ async function route(
     switch (path) {
       case "/api/capabilities":
         return json(capabilities);
+      case "/api/v1/pins":
+        return json(pins);
       case "/api/v1/settings":
         return json(settings);
       case "/api/v1/settings/schema":
@@ -86,6 +92,10 @@ async function route(
         return json(authSession);
       case "/api/v1/tls":
         return json({ https: true, custom: tlsCustom });
+      case "/api/v1/screen/text":
+        /* The demo screen is a picture, not a character grid - the same answer
+           the device gives once a target has booted. */
+        return new Response(null, { status: 204 });
     }
     return null;
   }

@@ -255,6 +255,41 @@ export function mockDevice() {
           });
         }
 
+        /* A text-mode screen the console can read, so the Select/Copy buttons
+           can be exercised without a target sitting in its BIOS. Answers 204
+           unless the mocked resolution is a text mode, exactly as the device
+           does once the target has booted. */
+        if (url === "/api/v1/screen/text") {
+          const rows = state.height / 16;
+          if ((state.width !== 640 && state.width !== 720) || !Number.isInteger(rows)) {
+            res.statusCode = 204;
+            return res.end();
+          }
+          const lines = [
+            "Aptio Setup Utility - Copyright (C) 2026 American Megatrends, Inc.",
+            "",
+            "  Main   Advanced   Boot   Security   Save & Exit",
+            "",
+            "  System Date            [Thu 08/20/2026]",
+            "  System Time            [20:11:43]",
+            "",
+            "  Serial Number          5CG9382KJ7",
+            "  BIOS Version           F.42 Rev.A",
+            "",
+            "  Boot Option #1         [UEFI: Samsung SSD 990 PRO 2TB]",
+            "  Boot Option #2         [UEFI: ESP-KVM Virtual CD]",
+          ];
+          return json(res, {
+            cols: 80,
+            rows,
+            cellWidth: state.width / 80,
+            cellHeight: 16,
+            confidence: 100,
+            ageMs: 120,
+            text: lines.join("\n"),
+          });
+        }
+
         if (url === "/stream") {
           res.setHeader("Content-Type", "multipart/x-mixed-replace; boundary=frame");
           res.setHeader("Cache-Control", "no-store");

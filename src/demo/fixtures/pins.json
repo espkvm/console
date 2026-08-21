@@ -1,0 +1,228 @@
+{
+  "usableMin": 0,
+  "usableMax": 54,
+  "reserved": [
+    {
+      "pin": 7,
+      "use": "Capture I2C SDA"
+    },
+    {
+      "pin": 8,
+      "use": "Capture I2C SCL"
+    },
+    {
+      "pin": 23,
+      "use": "Capture reset"
+    },
+    {
+      "pin": 43,
+      "use": "microSD CLK"
+    },
+    {
+      "pin": 44,
+      "use": "microSD CMD"
+    },
+    {
+      "pin": 39,
+      "use": "microSD D0"
+    },
+    {
+      "pin": 40,
+      "use": "microSD D1"
+    },
+    {
+      "pin": 41,
+      "use": "microSD D2"
+    },
+    {
+      "pin": 42,
+      "use": "microSD D3"
+    },
+    {
+      "pin": 45,
+      "use": "microSD power"
+    },
+    {
+      "pin": 50,
+      "use": "Ethernet REFCLK"
+    },
+    {
+      "pin": 49,
+      "use": "Ethernet TX_EN"
+    },
+    {
+      "pin": 34,
+      "use": "Ethernet TXD0"
+    },
+    {
+      "pin": 35,
+      "use": "Ethernet TXD1"
+    },
+    {
+      "pin": 28,
+      "use": "Ethernet CRS_DV"
+    },
+    {
+      "pin": 29,
+      "use": "Ethernet RXD0"
+    },
+    {
+      "pin": 30,
+      "use": "Ethernet RXD1"
+    },
+    {
+      "pin": 31,
+      "use": "Ethernet MDC"
+    },
+    {
+      "pin": 52,
+      "use": "Ethernet MDIO"
+    },
+    {
+      "pin": 51,
+      "use": "Ethernet PHY reset"
+    },
+    {
+      "pin": 37,
+      "use": "Console UART TX"
+    },
+    {
+      "pin": 38,
+      "use": "Console UART RX"
+    }
+  ],
+  "board": "Waveshare ESP32-P4-ETH",
+  "headerVerified": false,
+  "headers": [
+    {
+      "name": "",
+      "numbered": false,
+      "left": [
+        {
+          "gpio": 54
+        },
+        {
+          "gpio": 19
+        },
+        {
+          "label": "GND"
+        },
+        {
+          "gpio": 18
+        },
+        {
+          "gpio": 17
+        },
+        {
+          "gpio": 16
+        },
+        {
+          "gpio": 15
+        },
+        {
+          "label": "GND"
+        },
+        {
+          "gpio": 14
+        },
+        {
+          "gpio": 6
+        },
+        {
+          "gpio": 5
+        },
+        {
+          "gpio": 4
+        },
+        {
+          "label": "GND"
+        },
+        {
+          "gpio": 3
+        },
+        {
+          "gpio": 2
+        },
+        {
+          "gpio": 8
+        },
+        {
+          "gpio": 7
+        },
+        {
+          "label": "GND"
+        },
+        {
+          "gpio": 24,
+          "note": "USB DM"
+        },
+        {
+          "gpio": 25,
+          "note": "USB DP"
+        }
+      ],
+      "right": [
+        {
+          "label": "VBUS"
+        },
+        {
+          "label": "VSYS"
+        },
+        {
+          "label": "GND"
+        },
+        {
+          "label": "EN"
+        },
+        {
+          "label": "3V3"
+        },
+        {
+          "gpio": 20
+        },
+        {
+          "gpio": 21
+        },
+        {
+          "label": "GND"
+        },
+        {
+          "gpio": 22
+        },
+        {
+          "gpio": 23
+        },
+        {
+          "label": "RUN"
+        },
+        {
+          "gpio": 26
+        },
+        {
+          "label": "GND"
+        },
+        {
+          "gpio": 27
+        },
+        {
+          "gpio": 32
+        },
+        {
+          "gpio": 33
+        },
+        {
+          "gpio": 46
+        },
+        {
+          "label": "GND"
+        },
+        {
+          "gpio": 47
+        },
+        {
+          "gpio": 48
+        }
+      ]
+    }
+  ]
+}

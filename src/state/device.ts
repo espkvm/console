@@ -36,10 +36,40 @@ export interface Setting {
 }
 
 /** The GPIO map: the usable range and which pins the board's fixed peripherals hold. */
+/**
+ * One pin of an expansion header: either a GPIO, or something that is not one -
+ * power, ground, a co-processor's pin, nothing at all.
+ */
+export interface HeaderPin {
+  gpio?: number;
+  label?: string;
+  /** What to know before putting a wire here, when there is anything. */
+  note?: string;
+}
+
+/**
+ * A header as it is printed on the board, two columns read top to bottom.
+ * When `numbered`, the pins carry printed numbers in the usual arrangement -
+ * left column odd, right column even.
+ */
+export interface Header {
+  name: string;
+  numbered: boolean;
+  left: HeaderPin[];
+  right?: HeaderPin[];
+}
+
 export interface PinInfo {
   usableMin: number;
   usableMax: number;
   reserved: { pin: number; use: string }[];
+  /** What the board is called. */
+  board?: string;
+  /** Absent when this board has no pinout in the firmware. */
+  headers?: Header[];
+  /** Whether that pinout was checked against real hardware, or only read off
+   *  the vendor's diagram. */
+  headerVerified?: boolean;
 }
 
 export async function loadPins(): Promise<PinInfo> {
@@ -72,6 +102,15 @@ export interface VideoStatus {
   viewers: number;
   /** Codec currently running: "mjpeg", "h264", or "none" before the first frame. */
   codec: string;
+  /**
+   * The device could read this mode as a character grid, so offering Select and
+   * Copy makes sense. Whether there is text on file right now is a separate
+   * question, and `/api/v1/screen/text` is the one that answers it.
+   *
+   * Absent on firmware older than this field, which is why the console treats
+   * only an explicit `true` as a yes.
+   */
+  textMode?: boolean;
 }
 
 /**
@@ -243,6 +282,40 @@ export async function loadUsbProbe(): Promise<UsbProbe> {
 
 export async function loadVideoStatus(): Promise<VideoStatus> {
   return getJson<VideoStatus>(VIDEO_URL);
+}
+
+/**
+ * The screen read as characters, when the target is in a text mode - a BIOS, a
+ * boot loader, a console. `text` is the whole screen with the rows joined by
+ * newlines; `cols`/`rows` describe the grid, so it can be laid over the video
+ * cell for cell.
+ */
+export interface ScreenText {
+  cols: number;
+  rows: number;
+  cellWidth: number;
+  cellHeight: number;
+  /** Where the grid starts in the frame - a UEFI console centres its text. */
+  originX: number;
+  originY: number;
+  /** The frame it was read from, so the grid can be scaled onto any size. */
+  width: number;
+  height: number;
+  confidence: number;
+  ageMs: number;
+  text: string;
+}
+
+/**
+ * Null is the ordinary answer, not a failure: a machine that has finished
+ * booting is showing a picture, and there is nothing to read.
+ */
+export async function loadScreenText(): Promise<ScreenText | null> {
+  const res = await fetch("/api/v1/screen/text", { cache: "no-store" });
+  if (res.status === 401) throw new Unauthorized();
+  if (res.status === 204) return null;
+  if (!res.ok) throw new Error(`/api/v1/screen/text returned ${res.status}`);
+  return (await res.json()) as ScreenText;
 }
 
 /**

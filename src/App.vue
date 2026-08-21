@@ -26,6 +26,7 @@ import {
   type Values,
   type SystemInfo,
   type VideoStatus,
+  type ScreenText,
   enumName,
   loadCapabilities,
   loadSchema,
@@ -33,6 +34,7 @@ import {
   loadUsbProbe,
   loadValues,
   loadVideoStatus,
+  loadScreenText,
   loadImages,
   type StorageInfo,
   saveSettings,
@@ -124,6 +126,111 @@ const mustChange = computed(() => Boolean(session.value?.mustChange));
 const panel = ref<PanelId>(null);
 const fit = ref<"fit" | "actual">("fit");
 const engaged = ref(false);
+
+/*
+ * Reading the screen as text.
+ *
+ * The device can only do this while the target is in a character mode - a BIOS,
+ * a boot loader, a console - so the buttons key off the resolution the video
+ * status already reports, and no extra polling is needed to know whether to
+ * offer them. The text itself is fetched when it is wanted.
+ *
+ * Selecting and controlling are mutually exclusive on purpose: the same drag
+ * cannot both move the target's pointer and sweep a selection, and silently
+ * stealing the mouse from the target would be the worse surprise of the two.
+ */
+const screenText = ref<ScreenText | null>(null);
+const selectingText = ref(false);
+let screenTextPollId = 0;
+
+/*
+ * The device decides, because the device is the one that can read the screen.
+ *
+ * This used to work out the answer here, from the resolution, and it went stale
+ * the moment the scanner grew: it recognised 80 columns of 8x16 and nothing
+ * else, so a 1024x768 UEFI console - 128 columns of 8x19, which the device reads
+ * at 99% - arrived with Select and Copy greyed out. Firmware without the field
+ * says nothing, and nothing means no.
+ */
+const textModeLikely = computed(() => status.value?.textMode === true);
+
+async function refreshScreenText(): Promise<ScreenText | null> {
+  try {
+    screenText.value = await loadScreenText();
+  } catch {
+    screenText.value = null;
+  }
+  return screenText.value;
+}
+
+async function copyScreenText() {
+  const t = await refreshScreenText();
+  if (!t) {
+    toast.info("Nothing to copy: this screen is not made of text");
+    return;
+  }
+  if (await copyToClipboard(t.text)) {
+    toast.info(`Copied ${t.rows} lines from the screen`);
+  } else {
+    toast.error("The browser would not give this page the clipboard");
+  }
+}
+
+/*
+ * The clipboard, with the old way kept as the fallback.
+ *
+ * navigator.clipboard does not exist outside a secure context, and the console
+ * is served over plain HTTP in hotspot mode - which is exactly the situation
+ * where someone is reading a serial number off a BIOS screen and wants to paste
+ * it somewhere. The textarea trick still works there.
+ */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (window.isSecureContext && navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through and try the old way */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+async function toggleSelectText() {
+  if (selectingText.value) {
+    selectingText.value = false;
+    window.clearInterval(screenTextPollId);
+    screenTextPollId = 0;
+    return;
+  }
+  if (!(await refreshScreenText())) {
+    toast.info("Nothing to select: this screen is not made of text");
+    return;
+  }
+  /* Control goes back to the operator's mouse for as long as this lasts. */
+  engaged.value = false;
+  selectingText.value = true;
+  screenTextPollId = window.setInterval(() => void refreshScreenText(), 2000);
+}
+
+/* The target left text behind - booted, or changed mode. The layer would then
+   be characters from a screen that is gone, laid over a picture. */
+watch(textModeLikely, (still) => {
+  if (!still && selectingText.value) void toggleSelectText();
+});
 const paused = ref(false);
 /* Set while a firmware image is being handed to the device: the stream gives up
    its socket and the device's attention until the update is done. Kept apart
@@ -786,6 +893,7 @@ const LED_BITS: Array<[number, string]> = [
           :engage-mode="engageMode"
           :fit="fit"
           :paused="paused || updateHoldsStream"
+          :text-layer="selectingText ? screenText : null"
           :pause-note="
             updateHoldsStream
               ? 'The picture is back the moment the update is done - it gives up its connection so the image gets the device to itself.'
@@ -795,7 +903,7 @@ const LED_BITS: Array<[number, string]> = [
         />
 
         <button
-          v-if="!engaged && !paused && !touchMode && !heldByOther"
+          v-if="!engaged && !paused && !touchMode && !heldByOther && !selectingText"
           type="button"
           class="screen-engage"
           @pointerdown="onEngage($event)"
@@ -1063,6 +1171,33 @@ const LED_BITS: Array<[number, string]> = [
           @click="paused = !paused"
         >
           <Icon :name="paused ? 'play' : 'pause'" :size="15" />
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm"
+          :class="{ 'btn-on': selectingText }"
+          :disabled="!textModeLikely"
+          :title="
+            textModeLikely
+              ? 'Select text on the screen with the mouse, as on a page'
+              : 'The target is not showing a text screen'
+          "
+          @click="toggleSelectText()"
+        >
+          Select
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm"
+          :disabled="!textModeLikely"
+          :title="
+            textModeLikely
+              ? 'Copy everything on the screen as text'
+              : 'The target is not showing a text screen'
+          "
+          @click="copyScreenText()"
+        >
+          Copy
         </button>
         <button
           type="button"

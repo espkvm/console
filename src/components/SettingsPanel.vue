@@ -21,6 +21,7 @@ import {
   getTlsStatus,
   installCert,
   loadPins,
+  type HeaderPin,
   resetSettings,
   restartDevice,
   revertCert,
@@ -97,6 +98,49 @@ function freePinsFor(key: string): number[] {
   }
   return out;
 }
+
+/*
+ * Which of the two Pins views is showing.
+ *
+ * The header is the one an operator wants when there is a wire in their hand:
+ * it is the connector as it is printed on the board, and it leaves out the
+ * GPIOs that never reach a pin. The comb of every usable GPIO answers the other
+ * question - what is still free - so both are kept.
+ */
+const pinView = ref<"header" | "gpio">("header");
+
+/** What a pin is doing, for one entry of a header column. */
+function describePin(p: HeaderPin, index: number, odd: boolean, numbered: boolean) {
+  const n = numbered ? index * 2 + (odd ? 1 : 2) : null;
+  if (p.gpio === undefined) {
+    const label = p.label ?? "";
+    const kind = label === "GND" ? "ground" : label === "NC" || label === "" ? "nc" : "power";
+    return { n, gpio: null, label, use: "", kind, note: p.note };
+  }
+  const g = p.gpio;
+  const use = reservedPins.value.get(g) ?? assignedPins.value.get(g) ?? "free";
+  const kind = reservedPins.value.has(g)
+    ? "reserved"
+    : assignedPins.value.has(g)
+      ? "assigned"
+      : "free";
+  return { n, gpio: g, label: `GPIO ${g}`, use, kind, note: p.note };
+}
+
+/* Each header as rows of two, so the markup can put them side by side the way
+   they sit on the board. */
+const headerRows = computed(() => {
+  return (pinInfo.value?.headers ?? []).map((h) => ({
+    name: h.name,
+    numbered: h.numbered,
+    rows: h.left.map((l, i) => ({
+      left: describePin(l, i, true, h.numbered),
+      right: h.right?.[i] ? describePin(h.right[i], i, false, h.numbered) : null,
+    })),
+  }));
+});
+
+const hasHeaders = computed(() => (pinInfo.value?.headers?.length ?? 0) > 0);
 
 /* The whole map for the Pins tab, each GPIO tagged reserved / assigned / free. */
 const pinMap = computed(() => {
@@ -498,17 +542,73 @@ async function doRevertCert() {
       </p>
 
       <div v-if="currentSection === 'pins'" class="pinmap">
-        <p class="setting-note">
-          Every usable GPIO and what holds it. <b>Reserved</b> pins are the board's fixed
-          peripherals; <b>assigned</b> are set by the pin pickers on the other tabs; <b>free</b>
-          pins are what those pickers offer. Change a pin on its own tab.
-        </p>
-        <ul class="pin-comb">
-          <li v-for="p in pinMap" :key="p.pin" :class="['pin-cell', `pin-${p.kind}`]">
-            <span class="pin-num">{{ p.pin }}</span>
-            <span class="pin-use">{{ p.use }}</span>
-          </li>
-        </ul>
+        <div v-if="hasHeaders" class="pin-views">
+          <button
+            type="button"
+            :class="['pin-view-btn', { on: pinView === 'header' }]"
+            @click="pinView = 'header'"
+          >
+            Header
+          </button>
+          <button
+            type="button"
+            :class="['pin-view-btn', { on: pinView === 'gpio' }]"
+            @click="pinView = 'gpio'"
+          >
+            All GPIO
+          </button>
+        </div>
+
+        <template v-if="hasHeaders && pinView === 'header'">
+          <p class="setting-note">
+            The expansion header of the {{ pinInfo?.board }}, laid out as it is on the board -
+            so a pin here is a place to put a wire. <b>Reserved</b> pins are the board's fixed
+            peripherals; <b>assigned</b> are set by the pin pickers on the other tabs;
+            <b>free</b> pins are what those pickers offer.
+          </p>
+          <p v-if="pinInfo?.headerVerified === false" class="setting-note pin-caveat">
+            This pinout comes from the vendor's diagram and has not been checked against a
+            board in hand. Confirm against the silkscreen before you wire anything.
+          </p>
+          <div v-for="h in headerRows" :key="h.name" class="pin-header">
+            <h4 v-if="h.name" class="pin-header-name">{{ h.name }}</h4>
+            <ul class="pin-rows">
+              <li v-for="(row, i) in h.rows" :key="i" :class="['pin-row', { numbered: h.numbered }]">
+                <span :class="['pin-side', 'pin-left', `pin-${row.left.kind}`]" :title="row.left.note">
+                  <span class="pin-name">{{ row.left.label }}</span>
+                  <span v-if="row.left.kind !== 'free'" class="pin-use">{{ row.left.use }}</span>
+                </span>
+                <span v-if="h.numbered" class="pin-n">{{ row.left.n }}</span>
+                <span v-if="h.numbered" class="pin-n">{{ row.right?.n }}</span>
+                <span
+                  v-if="row.right"
+                  :class="['pin-side', 'pin-right', `pin-${row.right.kind}`]"
+                  :title="row.right.note"
+                >
+                  <span class="pin-name">{{ row.right.label }}</span>
+                  <span v-if="row.right.kind !== 'free'" class="pin-use">{{ row.right.use }}</span>
+                </span>
+              </li>
+            </ul>
+          </div>
+        </template>
+
+        <template v-else>
+          <p class="setting-note">
+            Every usable GPIO and what holds it. <b>Reserved</b> pins are the board's fixed
+            peripherals; <b>assigned</b> are set by the pin pickers on the other tabs; <b>free</b>
+            pins are what those pickers offer. Change a pin on its own tab.
+          </p>
+          <p v-if="!hasHeaders && pinInfo?.board" class="setting-note">
+            No pinout is known for the {{ pinInfo.board }}, so there is no header to draw.
+          </p>
+          <ul class="pin-comb">
+            <li v-for="p in pinMap" :key="p.pin" :class="['pin-cell', `pin-${p.kind}`]">
+              <span class="pin-num">{{ p.pin }}</span>
+              <span class="pin-use">{{ p.use }}</span>
+            </li>
+          </ul>
+        </template>
         <p v-if="pinMap.length === 0" class="setting-note">Reading the pin map...</p>
       </div>
 

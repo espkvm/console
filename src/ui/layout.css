@@ -253,6 +253,25 @@
   outline-offset: -2px;
 }
 
+/* The selectable text layer over a text-mode screen. The characters are
+   invisible - the picture underneath is the thing being read - but they are
+   real text, so the browser gives selection and copy for free. Highlighting on
+   selection is the only visible part. */
+.screen-text {
+  position: absolute;
+  white-space: pre;
+  color: transparent;
+  cursor: text;
+  user-select: text;
+  overflow: hidden;
+}
+
+.screen-text ::selection,
+.screen-text::selection {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: transparent;
+}
+
 .screen-overlay {
   position: absolute;
   inset: 0;
