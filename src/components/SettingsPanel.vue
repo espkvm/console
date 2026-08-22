@@ -29,6 +29,7 @@ import {
   settingBlockedReason,
 } from "../state/device";
 import { changePassword } from "../state/auth";
+import { runRestart } from "../state/restart";
 import { toast } from "../state/toasts";
 
 const props = defineProps<{
@@ -333,8 +334,9 @@ async function doRestart() {
     return;
   }
   try {
-    await restartDevice();
-    toast.info("Restarting - the console will reconnect on its own");
+    if (await runRestart("Restarting the device", restartDevice, { kind: "manual" })) {
+      location.reload();
+    }
   } catch (err) {
     toast.error(err instanceof Error ? err.message : String(err));
   }

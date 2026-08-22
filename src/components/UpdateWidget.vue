@@ -23,12 +23,21 @@ import {
   fetchRelease,
   switchBootSlot,
   uploadFirmware,
-  waitForDevice,
   type FirmwareRelease,
   type OtaSlot,
   type SystemInfo,
   type Values,
 } from "../state/device";
+import {
+  EXPECTED_WRITE_MS,
+  beginWatch,
+  restartWatch,
+  endWatch,
+  rememberRestart,
+  watchBack,
+  watchPct,
+  watchStep,
+} from "../state/restart";
 import { toast } from "../state/toasts";
 
 const props = defineProps<{ system: SystemInfo | null; values: Values }>();
@@ -145,8 +154,11 @@ async function switchSlot(slot: OtaSlot) {
     toast.error(err instanceof Error ? err.message : String(err));
     return;
   }
-  if (await waitForDevice()) {
-    toast.info(`Booted ${slot.label} - reloading the console`);
+  beginWatch(`Booting ${slot.label}`);
+
+  rememberRestart({ kind: "slot", from: props.system?.version, to: ver });
+  if (await watchBack()) {
+    watchStep("restart", "The device is back. Reloading the console...");
     /* The reboot cleared the session; the reload lands on the sign-in page. */
     setTimeout(() => location.reload(), 1500);
     return;
@@ -267,28 +279,54 @@ async function notAFirmwareImage(image: Blob): Promise<string | null> {
  * image and reboot, and the console has to find it again afterwards. So this
  * walks the phases and ends on a concrete answer: back on its feet, or not.
  */
-async function sendImage(image: Blob, label: string) {
+async function sendImage(image: Blob, label: string, version?: string) {
   phase.value = "uploading";
   firmwarePct.value = 0;
   unconfirmed.value = false;
   const wrong = await notAFirmwareImage(image);
   if (wrong) return fail(wrong);
+
+  /* The install owns the screen from here: it ends in a restart, so there is
+     nothing else to do in the console until it is over. */
+  /* Installing a published build starts the watch earlier, at the download, and
+     keeps its own longer list of steps. */
+  if (!restartWatch.active) {
+    beginWatch(`Installing ${label}`, [
+      { key: "send", label: "Sending the image to the device" },
+      { key: "write", label: "Writing and verifying it" },
+      { key: "restart", label: "Restarting onto the new image" },
+    ]);
+  }
+  watchStep("send", "Sending the image to the device...", { pct: 0 });
   let outcome;
   try {
     outcome = await uploadFirmware(
       image,
-      (f) => (firmwarePct.value = Math.round(f * 100)),
-      () => (phase.value = "writing"),
+      (f) => {
+        firmwarePct.value = Math.round(f * 100);
+        watchPct(firmwarePct.value);
+      },
+      () => {
+        phase.value = "writing";
+        watchStep("write", "Writing and verifying it on the device...", {
+          pct: null,
+          expectedMs: EXPECTED_WRITE_MS,
+        });
+      },
     );
   } catch (err) {
+    endWatch();
     return fail(err instanceof Error ? err.message : String(err));
   }
 
   unconfirmed.value = !outcome.confirmed;
   phase.value = "restarting";
-  if (await waitForDevice()) {
+  /* Written down before the wait, not after: the answer is read on the far side
+     of a reload that throws away everything this function knows. */
+  rememberRestart({ kind: "update", from: props.system?.version, to: version });
+  if (await watchBack()) {
     phase.value = "back";
-    toast.info(`${label} installed - reloading the console`);
+    watchStep("restart", "The device is back. Reloading the console...");
     /* The reboot cleared the session, so the reload lands on the sign-in page
        of the new firmware. A beat first, so the message is readable. */
     setTimeout(() => location.reload(), 1500);
@@ -304,13 +342,24 @@ async function installRelease() {
   installError.value = null;
   phase.value = "downloading";
   firmwarePct.value = 0;
+  beginWatch(`Installing ${target.version}`, [
+    { key: "download", label: "Fetching the image from the release" },
+    { key: "send", label: "Sending the image to the device" },
+    { key: "write", label: "Writing and verifying it" },
+    { key: "restart", label: "Restarting onto the new image" },
+  ]);
+  watchStep("download", "Fetching the image...", { pct: 0 });
   let image: Blob;
   try {
-    image = await downloadFirmware(target, (f) => (firmwarePct.value = Math.round(f * 100)));
+    image = await downloadFirmware(target, (f) => {
+      firmwarePct.value = Math.round(f * 100);
+      watchPct(firmwarePct.value);
+    });
   } catch (err) {
+    endWatch();
     return fail(err instanceof Error ? err.message : String(err));
   }
-  await sendImage(image, target.version);
+  await sendImage(image, target.version, target.version);
 }
 
 async function onFirmwareChosen(e: Event) {

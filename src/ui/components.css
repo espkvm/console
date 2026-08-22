@@ -866,3 +866,123 @@
   flex: 1 1 auto;
   min-width: 0;
 }
+
+/*
+ * The install/restart veil.
+ *
+ * Translucent rather than opaque: the console underneath is not gone, it is
+ * only unusable for the moment, and hiding it entirely makes a thirty-second
+ * wait feel like a crash.
+ */
+.restart-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3);
+  background: rgb(0 0 0 / 55%);
+  backdrop-filter: blur(3px);
+}
+
+.restart-card {
+  width: min(26rem, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-overlay);
+  box-shadow: var(--shadow-panel);
+}
+
+.restart-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.restart-detail {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.restart-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.restart-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.update-banner-bad {
+  background: var(--danger);
+}
+
+.rays {
+  display: block;
+  margin-bottom: calc(-1 * var(--space-2));
+}
+
+.restart-measure {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * What the whole job is, not only the part happening now. Steps already done
+ * stay on the list rather than disappearing: on a wait this long, seeing what
+ * has been got through is half of knowing it is going normally.
+ */
+.restart-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  text-align: left;
+}
+
+.restart-steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.restart-step-mark {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  flex: none;
+}
+
+.restart-step-done {
+  color: var(--text-muted);
+}
+
+.restart-step-done .restart-step-mark {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.restart-step-now .restart-step-mark {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(76 154 255 / 25%);
+}
+
+.restart-step-todo {
+  color: var(--text-muted);
+  opacity: 0.6;
+}

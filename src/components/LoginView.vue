@@ -11,6 +11,7 @@
 import { computed, ref } from "vue";
 
 import { changePassword, login } from "../state/auth";
+import { peekRestart } from "../state/restart";
 import Icon from "./Icon.vue";
 
 const props = defineProps<{ user: string; mustChange: boolean }>();
@@ -22,6 +23,28 @@ const nextPassword = ref("");
 const confirmPassword = ref("");
 const busy = ref(false);
 const error = ref<string | null>(null);
+
+/*
+ * Why the sign-in page is showing at all.
+ *
+ * A restart ends the session, so an operator who asked for one lands here with
+ * no idea whether it worked. The version cannot be read before signing in, so
+ * this only says what was asked for; the answer comes as a banner once inside.
+ */
+const restartNote = peekRestart();
+const restartLine = computed(() => {
+  if (!restartNote) return null;
+  switch (restartNote.kind) {
+    case "update":
+      return "The device restarted after an update. Sign in to see which version came back.";
+    case "slot":
+      return "The device restarted onto the other slot. Sign in to see which version came back.";
+    case "network":
+      return "The network was switched, which restarts the device. Sign in to carry on.";
+    default:
+      return "The device restarted, so the session ended. Sign in to carry on.";
+  }
+});
 
 const mismatch = computed(
   () => confirmPassword.value.length > 0 && nextPassword.value !== confirmPassword.value,
@@ -150,6 +173,7 @@ async function submitChange() {
 
       <template v-if="!mustChange">
         <h1>Sign in</h1>
+        <p v-if="restartLine" class="login-hint">{{ restartLine }}</p>
         <label class="field">
           <span>Username</span>
           <input v-model="username" type="text" autocomplete="username" autocapitalize="off" />

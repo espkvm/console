@@ -9,6 +9,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import Icon from "./components/Icon.vue";
 import InputPanel from "./components/InputPanel.vue";
 import LoginView from "./components/LoginView.vue";
+import RestartOverlay from "./components/RestartOverlay.vue";
+import { runRestart, takeRestart } from "./state/restart";
 import ScreenView from "./components/ScreenView.vue";
 import DiagWidget from "./components/DiagWidget.vue";
 import OsWidget from "./components/OsWidget.vue";
@@ -359,8 +361,10 @@ async function switchNet(mode: "ethernet" | "wifi" | "ap") {
     return;
   try {
     await saveSettings({ net_mode: { ethernet: 0, wifi: 1, ap: 2 }[mode] });
-    await restartDevice();
-    toast.info("Switching the network - the device is restarting");
+    const label = mode === "ap" ? "Switching to the hotspot" : `Switching to ${mode}`;
+    if (await runRestart(label, restartDevice, { kind: "network" })) {
+      location.reload();
+    }
   } catch {
     toast.error("Could not switch the network");
   }
@@ -500,6 +504,33 @@ const conns = computed<Conn[]>(() => {
 let pollId = 0;
 let systemPollId = 0;
 
+/*
+ * What became of the restart the console asked for before it reloaded.
+ *
+ * The reboot ends the session, so this runs on the far side of the sign-in
+ * page and the note is the only thing that survived. It matters most when it
+ * went wrong: an update that rolled back leaves the device running perfectly,
+ * on the old firmware, and looks exactly like one that worked (issue #22).
+ */
+const restartOutcome = ref<{ bad: boolean; text: string } | null>(null);
+
+function reportRestart(version: string) {
+  const note = takeRestart();
+  if (!note) return;
+  if (note.kind === "update" || note.kind === "slot") {
+    if (note.to && version && note.to !== version) {
+      restartOutcome.value = {
+        bad: true,
+        text: `The device came back on ${version}, not ${note.to}. The new image did not start, so it went back to the one that works.`,
+      };
+      return;
+    }
+    restartOutcome.value = { bad: false, text: `The device is running ${version}.` };
+    return;
+  }
+  restartOutcome.value = { bad: false, text: "The device restarted and is back." };
+}
+
 function reloadConsole() {
   /* "/" is served no-cache with a version ETag and the service worker is
      network-first for navigations, so a plain reload fetches the current
@@ -521,6 +552,7 @@ async function startConsole() {
     caps.value = c;
     system.value = sys;
     bootVersion = sys.version;
+    reportRestart(sys.version);
     ready.value = true;
   } catch (err) {
     loadError.value = err instanceof Error ? err.message : String(err);
@@ -695,6 +727,15 @@ const LED_BITS: Array<[number, string]> = [
     <div v-if="firmwareChanged" class="update-banner" role="alert">
       <span>The device was updated. Reload to get the matching console.</span>
       <button type="button" class="btn btn-sm" @click="reloadConsole()">Reload</button>
+    </div>
+    <div
+      v-if="restartOutcome"
+      class="update-banner"
+      :class="{ 'update-banner-bad': restartOutcome.bad }"
+      role="status"
+    >
+      <span>{{ restartOutcome.text }}</span>
+      <button type="button" class="btn btn-sm" @click="restartOutcome = null">Dismiss</button>
     </div>
     <header class="statusbar">
       <svg
@@ -1219,4 +1260,6 @@ const LED_BITS: Array<[number, string]> = [
 
     <ToastHost />
   </div>
+
+  <RestartOverlay />
 </template>

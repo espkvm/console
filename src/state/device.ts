@@ -495,19 +495,48 @@ export function uploadFirmware(
  *
  * @returns true if it came back within @p timeoutMs.
  */
-export async function waitForDevice(timeoutMs = 90_000, graceMs = 4000): Promise<boolean> {
+/** How long one attempt may sit on a silent socket before it is abandoned. */
+const ATTEMPT_MS = 3000;
+
+export async function waitForDevice(
+  timeoutMs = 90_000,
+  graceMs = 4000,
+  onTick?: (elapsedMs: number) => void,
+): Promise<boolean> {
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-  await sleep(graceMs);
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    try {
-      const res = await fetch("/api/v1/system/info", { cache: "no-store" });
-      if (res.ok || res.status === 401) return true;
-    } catch {
-      /* still down - that is the expected answer for most of this loop */
+  const started = Date.now();
+  const deadline = started + graceMs + timeoutMs;
+
+  /*
+   * The clock runs on its own timer, not on the polling loop.
+   *
+   * A device that is down does not refuse the connection - it says nothing, and
+   * the fetch sits there until the browser gives up on it, which can be most of
+   * a minute. Counting inside that loop meant the number on screen froze the
+   * moment the first request went out, which looks exactly like the console
+   * having crashed. Each attempt gets its own deadline for the same reason:
+   * one silent socket must not eat the whole wait.
+   */
+  const tick = onTick ? window.setInterval(() => onTick(Date.now() - started), 250) : 0;
+  onTick?.(0);
+  try {
+    await sleep(graceMs);
+    for (;;) {
+      const ctrl = new AbortController();
+      const giveUp = window.setTimeout(() => ctrl.abort(), ATTEMPT_MS);
+      try {
+        const res = await fetch("/api/v1/system/info", { cache: "no-store", signal: ctrl.signal });
+        if (res.ok || res.status === 401) return true;
+      } catch {
+        /* still down - that is the expected answer for most of this loop */
+      } finally {
+        window.clearTimeout(giveUp);
+      }
+      if (Date.now() >= deadline) return false;
+      await sleep(1000);
     }
-    if (Date.now() >= deadline) return false;
-    await sleep(1000);
+  } finally {
+    if (tick) window.clearInterval(tick);
   }
 }
 
