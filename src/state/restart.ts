@@ -107,6 +107,34 @@ export const restartWatch = reactive({
   lost: false,
 });
 
+/*
+ * The clock every step runs on.
+ *
+ * A step with a percentage moves by itself, but the one in the middle - the
+ * device writing and verifying the image on its own - has no bytes to report and
+ * only the clock to go by. Without something ticking it, that step sat at zero
+ * for its whole length and the console looked frozen (#23).
+ */
+let clock: ReturnType<typeof setInterval> | undefined;
+let stepStarted = 0;
+
+function startClock() {
+  stepStarted = Date.now();
+  restartWatch.elapsedMs = 0;
+  restartWatch.slow = false;
+  if (clock) return;
+  clock = setInterval(() => {
+    const ms = Date.now() - stepStarted;
+    restartWatch.elapsedMs = ms;
+    restartWatch.slow = ms > restartWatch.expectedMs;
+  }, 200);
+}
+
+function stopClock() {
+  if (clock) clearInterval(clock);
+  clock = undefined;
+}
+
 /**
  * How far along the current step is, 0..1.
  *
@@ -127,11 +155,10 @@ export function beginWatch(label: string, steps: WatchStep[] = []) {
   restartWatch.steps = steps;
   restartWatch.stepIndex = -1;
   restartWatch.pct = null;
-  restartWatch.elapsedMs = 0;
   restartWatch.expectedMs = EXPECTED_RESTART_MS;
-  restartWatch.slow = false;
   restartWatch.lost = false;
   restartWatch.active = true;
+  startClock();
 }
 
 /** Move to a step. Pass a percentage where there is one, an expected duration
@@ -147,8 +174,7 @@ export function watchStep(
   restartWatch.pct = opts.pct ?? null;
   if (opts.expectedMs !== undefined) {
     restartWatch.expectedMs = opts.expectedMs;
-    restartWatch.elapsedMs = 0;
-    restartWatch.slow = false;
+    startClock(); /* a new step, so the clock starts again */
   }
 }
 
@@ -157,11 +183,13 @@ export function watchPct(pct: number) {
 }
 
 export function endWatch() {
+  stopClock();
   restartWatch.active = false;
   restartWatch.lost = false;
 }
 
 export function watchLost() {
+  stopClock(); /* leave the clock where it gave up */
   restartWatch.lost = true;
 }
 
@@ -178,10 +206,7 @@ export async function watchBack(): Promise<boolean> {
   watchStep("restart", "Waiting for the device to come back...", {
     expectedMs: EXPECTED_RESTART_MS,
   });
-  const back = await waitForDevice(90_000, 4000, (ms) => {
-    restartWatch.elapsedMs = ms;
-    restartWatch.slow = ms > restartWatch.expectedMs;
-  });
+  const back = await waitForDevice(90_000, 4000);
   if (!back) watchLost();
   return back;
 }
