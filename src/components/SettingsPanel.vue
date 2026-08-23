@@ -29,6 +29,14 @@ import {
   settingBlockedReason,
 } from "../state/device";
 import { changePassword } from "../state/auth";
+import {
+  buildFile,
+  describePlan,
+  fileName,
+  planImport,
+  readFile,
+  type ImportPlan,
+} from "../state/settingsFile";
 import { runRestart } from "../state/restart";
 import { toast } from "../state/toasts";
 
@@ -38,6 +46,8 @@ const props = defineProps<{
   caps: Record<string, Capability>;
   /** The device's own WireGuard public key (from system info), to add to the hub. */
   wgPublicKey?: string;
+  /** Firmware version, written into an exported file so it can be read later. */
+  firmware?: string;
 }>();
 
 const emit = defineEmits<{ values: [Values]; passwordChanged: [] }>();
@@ -339,6 +349,68 @@ async function doRestart() {
     }
   } catch (err) {
     toast.error(err instanceof Error ? err.message : String(err));
+  }
+}
+
+/*
+ * Settings to a file and back.
+ *
+ * The device already decides what may leave it - secrets are write-only and
+ * never served - so this is the console's job entirely: what is on screen, plus
+ * a header saying which firmware and which board wrote it.
+ */
+const importReport = ref<string[]>([]);
+const fileInput = ref<HTMLInputElement | null>(null);
+
+function doExport() {
+  const file = buildFile(props.values, props.schema, {
+    firmware: props.firmware,
+    board: pinInfo.value?.board,
+  });
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }),
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName(pinInfo.value?.board);
+  a.click();
+  URL.revokeObjectURL(url);
+  toast.info("Settings saved to a file");
+}
+
+/* Read, plan, show what it would do, and only then write. The confirm is the
+   point: an import that silently skipped half a file would be worse than none. */
+async function onSettingsFile(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const chosen = input.files?.[0];
+  input.value = ""; /* so the same file can be picked again after a fix */
+  if (!chosen) return;
+  let plan: ImportPlan;
+  try {
+    plan = planImport(readFile(await chosen.text()), props.schema, props.values, {
+      board: pinInfo.value?.board,
+    });
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+    return;
+  }
+  importReport.value = [];
+  if (!Object.keys(plan.apply).length) {
+    importReport.value = describePlan(plan, false);
+    toast.info("Nothing in that file to change");
+    return;
+  }
+  if (!confirm(`Apply this file?\n\n${describePlan(plan, false).join("\n\n")}`)) return;
+  busy.value = true;
+  try {
+    emit("values", await saveSettings(plan.apply));
+    importReport.value = describePlan(plan, true);
+    toast.info("Settings loaded from the file");
+  } catch (err) {
+    importReport.value = [];
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    busy.value = false;
   }
 }
 
@@ -717,7 +789,22 @@ async function doRevertCert() {
       </template>
     </div>
 
+    <p v-for="(line, i) in importReport" :key="i" class="setting-note">{{ line }}</p>
+
     <div class="settings-footer">
+      <button type="button" class="btn btn-sm" :disabled="busy" @click="doExport">
+        Save settings to a file
+      </button>
+      <button type="button" class="btn btn-sm" :disabled="busy" @click="fileInput?.click()">
+        Load from a file
+      </button>
+      <input
+        ref="fileInput"
+        type="file"
+        accept=".json,application/json"
+        hidden
+        @change="onSettingsFile"
+      />
       <button type="button" class="btn btn-sm" @click="doRestart">Restart device</button>
       <button type="button" class="btn btn-sm btn-danger" :disabled="busy" @click="doReset">
         Restore defaults

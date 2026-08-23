@@ -984,6 +984,7 @@ const LED_BITS: Array<[number, string]> = [
               :values="values"
               :caps="caps"
               :wg-public-key="system?.wg?.publicKey ?? ''"
+              :firmware="system?.version"
               @values="values = $event"
               @password-changed="onPasswordChanged"
             />
