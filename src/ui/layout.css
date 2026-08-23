@@ -111,6 +111,12 @@
   position: relative;
   flex: 1;
   min-width: 0;
+  /* A flex item will not shrink below its content unless told to, and on a
+     phone the rail sits above this in a column - so the picture's own height
+     could push the stage taller than the screen. The panel is measured against
+     the stage, so it grew too, its list never needed to scroll, and the drag
+     went to the browser instead. */
+  min-height: 0;
   background: var(--bg-sunken);
 }
 
@@ -125,6 +131,9 @@
    resizes whenever a panel opens forces the operator to re-find everything. */
 .panel {
   position: absolute;
+  /* Above the touch controls, which carry a z-index of their own and would
+     otherwise paint over the panel whatever the DOM order says. */
+  z-index: 10;
   top: 0;
   left: 0;
   bottom: 0;
@@ -168,6 +177,10 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Keep the drag here even at the ends of the list, or the browser takes it
+     over and turns it into a page pull. */
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   padding: var(--space-3);
 }
 

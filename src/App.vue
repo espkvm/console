@@ -10,6 +10,8 @@ import Icon from "./components/Icon.vue";
 import InputPanel from "./components/InputPanel.vue";
 import LoginView from "./components/LoginView.vue";
 import RestartOverlay from "./components/RestartOverlay.vue";
+import { installNoPagePull } from "./input/noPagePull";
+import { installPagePin } from "./input/keepPagePinned";
 import { runRestart, takeRestart } from "./state/restart";
 import ScreenView from "./components/ScreenView.vue";
 import DiagWidget from "./components/DiagWidget.vue";
@@ -625,6 +627,8 @@ async function startConsole() {
 }
 
 onMounted(async () => {
+  installNoPagePull();
+  installPagePin();
   document.documentElement.dataset.theme = theme.value;
   /* Start in touch mode on a device whose primary pointer is a finger. */
   if (window.matchMedia?.("(pointer: coarse)").matches) touchMode.value = true;

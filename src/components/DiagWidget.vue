@@ -171,4 +171,24 @@ const uptimeLabel = computed(() => {
 .dw-head h3 {
   margin: 0;
 }
+
+/* On a phone the rail is a row across the top, so "beside the button" points at
+   the edge of the screen: the popup opened up and to the right, off the glass on
+   both sides. Anchoring to a button that small buys nothing here - centre it. */
+@media (max-width: 640px) {
+  .dw-popup,
+  .dw[data-side="left"] .dw-popup,
+  .dw[data-side="right"] .dw-popup {
+    position: fixed;
+    left: var(--space-3);
+    right: var(--space-3);
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
+    width: auto;
+    max-width: none;
+    max-height: 80dvh;
+    overflow-y: auto;
+  }
+}
 </style>
