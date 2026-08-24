@@ -18,10 +18,14 @@ import storageImages from "./fixtures/storage-images.json";
 import usbprobe from "./fixtures/usbprobe.json";
 import authSession from "./fixtures/auth-session.json";
 import {
+  demoCrash,
   demoKeys,
+  demoLauncher,
   demoMachine,
   demoMountMedia,
   demoPower,
+  demoScene,
+  demoSceneMs,
   demoScreenText,
 } from "./machine";
 
@@ -223,7 +227,13 @@ async function route(
     else if (p.ts_enable === true) settings = { ...settings, wg_enable: false };
     /* Picking an image in Media is what mounts it - the same setting the device
        uses - and that decides whether the next boot finds anything. */
-    demoMountMedia(Boolean(settings.msc_image));
+    /* The target only sees a drive when virtual media is switched on - the same
+       gate the firmware applies. */
+    demoMountMedia(String(settings.msc_image ?? ""), Boolean(settings.msc_enable));
+    /* The media panel reads the active medium from the card listing, not from
+       the setting, so the two have to stay in step - otherwise the choice looks
+       like it fell back to "ejected" the next time the list is fetched. */
+    images = { ...images, active: String(settings.msc_image ?? "") };
     return json(settings);
   }
   if (method === "POST" && path === "/api/v1/storage/delete") {
@@ -235,7 +245,7 @@ async function route(
     };
     if (settings.msc_image === name) {
       settings = { ...settings, msc_image: "" };
-      demoMountMedia(false);
+      demoMountMedia("", Boolean(settings.msc_enable));
     }
     return json(images);
   }
@@ -426,8 +436,22 @@ export function installDemoBackend(): void {
 
   /* The screen goes on the window: ScreenView reads it from there, so no part of
      the real console imports this module. */
-  (window as unknown as { __espkvmDemoScreen?: unknown }).__espkvmDemoScreen =
-    demoScreenText;
+  const w = window as unknown as {
+    __espkvmDemoScreen?: unknown;
+    __espkvmDemoScene?: unknown;
+    __espkvmDemoSceneMs?: unknown;
+    __espkvmDemoCrash?: unknown;
+    __espkvmDemoPower?: unknown;
+    __espkvmDemoLauncher?: unknown;
+  };
+  w.__espkvmDemoScreen = demoScreenText;
+  w.__espkvmDemoScene = demoScene;
+  w.__espkvmDemoSceneMs = demoSceneMs;
+  /* The drawing knows where the sheep and the dock are, so it is the drawing that
+     decides a click landed on one - it only has to say so. */
+  w.__espkvmDemoCrash = demoCrash;
+  w.__espkvmDemoPower = demoPower;
+  w.__espkvmDemoLauncher = demoLauncher;
 
   window.XMLHttpRequest = DemoXhr as unknown as typeof XMLHttpRequest;
 

@@ -12,16 +12,20 @@
   },
   "images": [
     {
-      "name": "nixos-graphical-25.05-x86_64-linux.iso",
+      "name": "halfos-life-3.iso",
       "size": 1181116006
+    },
+    {
+      "name": "sheeps-xp-professional-sp3.iso",
+      "size": 617611264
+    },
+    {
+      "name": "pear-os-15-sequoia.iso",
+      "size": 15032385536
     },
     {
       "name": "memtest86plus-7.20.iso",
       "size": 20971520
-    },
-    {
-      "name": "systemrescue-11.03-amd64.iso",
-      "size": 891289600
     }
   ]
 }

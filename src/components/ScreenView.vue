@@ -66,18 +66,575 @@ interface DemoGrid {
   originX: number;
   originY: number;
   text: string;
+  /** A blue screen has to be blue, so the demo says what to paint behind it. */
+  bg?: string;
 }
 const demoGrid = () =>
   (window as unknown as { __espkvmDemoScreen?: () => DemoGrid | null })
     .__espkvmDemoScreen?.() ?? null;
+const demoScene = () =>
+  (window as unknown as { __espkvmDemoScene?: () => string }).__espkvmDemoScene?.() ?? "particles";
+/* How long the machine has been in this stage. The scene's own clock has to come
+   from the machine: a picture that follows a text screen would otherwise inherit
+   whatever the drawing loop last remembered. */
+const demoSceneMs = () =>
+  (window as unknown as { __espkvmDemoSceneMs?: () => number }).__espkvmDemoSceneMs?.() ?? 0;
+
+/* A flake of six lambdas - the letter the guest is named after. It sits under
+   the animation rather than on it: a wallpaper, not a badge. */
+function drawLambdaFlake(c: CanvasRenderingContext2D, cx: number, cy: number, R: number) {
+  /* Six lambdas around a small hexagonal hole. Each arm is a bar out of the hole
+     that forks near its end, and every end is cut square - a sharp outward point
+     turns the six into a six-pointed star instead, which is not the idea. */
+  const HOLE = 0.2;
+  const REACH = 1.0;
+  const FORK_AT = 0.46;
+  const FORK_LEN = 0.66;
+  const FORK = Math.PI / 3;
+  c.save();
+  c.globalAlpha = 0.2;
+  c.lineWidth = R * 0.2;
+  c.lineJoin = "miter";
+  c.lineCap = "butt";
+  for (let i = 0; i < 6; i++) {
+    c.save();
+    c.translate(cx, cy);
+    c.rotate((i * Math.PI) / 3);
+    c.strokeStyle = i % 2 ? "#7EBAE4" : "#5277C3";
+    c.beginPath();
+    c.moveTo(R * HOLE, 0);
+    c.lineTo(R * REACH, 0);
+    c.stroke();
+    c.beginPath();
+    c.moveTo(R * FORK_AT, 0);
+    c.lineTo(R * FORK_AT + Math.cos(FORK) * R * FORK_LEN, Math.sin(FORK) * R * FORK_LEN);
+    c.stroke();
+    c.restore();
+  }
+  c.restore();
+}
+
+/* Windows, as remembered rather than as it was: flat hills, and sheep on them.
+   One curve does both jobs - the ground is drawn from it, and the sheep walk on
+   it, so their feet land where the grass is. */
+const hillY = (x: number, W: number, H: number, base: number, amp: number, phase: number) =>
+  H * base - Math.sin((x / W) * Math.PI + phase) * H * amp;
+
+function fillHill(c: CanvasRenderingContext2D, W: number, H: number, base: number, amp: number, phase: number, colour: string) {
+  c.fillStyle = colour;
+  c.beginPath();
+  c.moveTo(0, H);
+  for (let x = 0; x <= W; x += 8) c.lineTo(x, hillY(x, W, H, base, amp, phase));
+  c.lineTo(W, H);
+  c.closePath();
+  c.fill();
+}
+
+/* The flock. They graze the whole meadow, not the ridge line: `deep` is how far
+   down the grass one stands, 0 at the crest and 1 at the bottom of the frame,
+   and that is also its size - the near ones are bigger. One is black, and it is
+   the one that ends the world. */
+const SHEEP = Array.from({ length: 9 }, (_, i) => ({
+  x: (i * 181) % 1280,
+  y: 0,
+  deep: 0.1 + ((i * 37) % 80) / 100,
+  drift: (i % 2 ? 1 : -1) * (0.02 + ((i * 13) % 7) / 200),
+  speed: 13 + ((i * 7) % 12),
+  size: 1,
+  dir: i % 3 === 0 ? -1 : 1,
+  black: i === 4,
+}));
+/** Where the black one was last drawn, so a click can be tested against it. */
+const blackSheepAt = { x: -1, y: -1, r: 34 };
+
+function drawSheep(
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  k: number,
+  phase: number,
+  dir: number,
+  black = false,
+) {
+  c.save();
+  c.translate(x, y);
+  c.scale(dir * k, k);
+  /* legs first, so the body covers where they meet it */
+  c.strokeStyle = "#3b3b46";
+  c.lineWidth = 3;
+  c.lineCap = "round";
+  for (const [i, at] of [-9, -3, 4, 10].entries()) {
+    const swing = Math.sin(phase + i * 1.6) * 3;
+    c.beginPath();
+    c.moveTo(at, -6);
+    c.lineTo(at + swing, 6);
+    c.stroke();
+  }
+  c.fillStyle = black ? "#2f2f36" : "#f6f4ef";
+  c.beginPath();
+  c.ellipse(0, -12, 15, 10, 0, 0, Math.PI * 2);
+  c.fill();
+  /* a few bumps, so it reads as wool and not a pebble */
+  for (const [bx, by, r] of [[-9, -18, 5], [-2, -21, 6], [6, -19, 5], [12, -15, 4]]) {
+    c.beginPath();
+    c.arc(bx, by, r, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.fillStyle = black ? "#15151a" : "#3b3b46";
+  c.beginPath();
+  c.ellipse(16, -16, 6, 4.5, 0.2, 0, Math.PI * 2);
+  c.fill();
+  c.beginPath();
+  c.ellipse(13, -20, 2.6, 3.4, -0.4, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+}
+
+/* The other guest, in three acts: the machine that smiles at you, the fruit with
+   a progress bar, and a desktop. No trademarks are drawn - the joke is a pear. */
+function drawBar(c: CanvasRenderingContext2D, cx: number, y: number, w: number, frac: number, back: string, fill: string) {
+  const h = 10;
+  c.fillStyle = back;
+  c.beginPath();
+  c.roundRect(cx - w / 2, y, w, h, h / 2);
+  c.fill();
+  c.fillStyle = fill;
+  c.beginPath();
+  c.roundRect(cx - w / 2, y, Math.max(h, w * frac), h, h / 2);
+  c.fill();
+}
+
+function drawHappyMac(c: CanvasRenderingContext2D, W: number, H: number, k: number) {
+  c.fillStyle = "#b9b9b9";
+  c.fillRect(0, 0, W, H);
+  const bw = 210;
+  const bh = 250;
+  const x = W / 2 - bw / 2;
+  const y = H / 2 - bh / 2 - 30;
+  c.fillStyle = "#ded3c0";
+  c.beginPath();
+  c.roundRect(x, y, bw, bh, 16);
+  c.fill();
+  /* its screen, and the face on it */
+  c.fillStyle = "#e9e9e4";
+  c.beginPath();
+  c.roundRect(x + 26, y + 26, bw - 52, 130, 8);
+  c.fill();
+  c.strokeStyle = "#2c2c30";
+  c.lineWidth = 6;
+  c.lineCap = "round";
+  for (const ex of [-30, 30]) {
+    c.beginPath();
+    c.moveTo(W / 2 + ex, y + 68);
+    c.lineTo(W / 2 + ex, y + 84);
+    c.stroke();
+  }
+  c.beginPath();
+  c.arc(W / 2, y + 92, 26, 0.25 * Math.PI, 0.75 * Math.PI);
+  c.stroke();
+  /* the drive slot, because that is what it booted from */
+  c.fillStyle = "#c3b8a5";
+  c.fillRect(x + 40, y + 186, bw - 80, 10);
+  c.fillStyle = "#2c2c30";
+  c.font = "22px ui-serif, Georgia, serif";
+  /* Alignment is context state that outlives the call: the text screens leave
+     the baseline at the top, and a line drawn after one of those sits lower than
+     it was placed. Say it here rather than inherit it. */
+  c.textAlign = "center";
+  c.textBaseline = "alphabetic";
+  c.fillText("Welcome to Peartosh", W / 2, y + bh + 44);
+  drawBar(c, W / 2, y + bh + 66, 240, k, "#a5a5a5", "#4a4a4f");
+  c.textAlign = "left";
+}
+
+function drawPearBoot(c: CanvasRenderingContext2D, W: number, H: number, k: number) {
+  c.fillStyle = "#0b0b0d";
+  c.fillRect(0, 0, W, H);
+  const cx = W / 2;
+  const cy = H / 2 - 40;
+  c.fillStyle = "#e8e8ea";
+  /* a pear: two circles for the body, a waist between them, a stem and a leaf */
+  c.beginPath();
+  c.moveTo(cx, cy - 46);
+  c.bezierCurveTo(cx + 34, cy - 40, cx + 26, cy + 4, cx + 40, cy + 32);
+  c.bezierCurveTo(cx + 52, cy + 66, cx + 26, cy + 88, cx, cy + 88);
+  c.bezierCurveTo(cx - 26, cy + 88, cx - 52, cy + 66, cx - 40, cy + 32);
+  c.bezierCurveTo(cx - 26, cy + 4, cx - 34, cy - 40, cx, cy - 46);
+  c.fill();
+  /* A bite, and from the left - the other fruit is bitten on the right. */
+  c.fillStyle = "#0b0b0d";
+  c.beginPath();
+  c.arc(cx - 40, cy + 28, 25, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = "#e8e8ea";
+  c.strokeStyle = "#e8e8ea";
+  c.lineWidth = 6;
+  c.beginPath();
+  c.moveTo(cx, cy - 44);
+  c.lineTo(cx + 4, cy - 76);
+  c.stroke();
+  c.beginPath();
+  c.ellipse(cx + 26, cy - 76, 20, 9, -0.5, 0, Math.PI * 2);
+  c.fill();
+  drawBar(c, cx, cy + 132, 300, k, "#26262b", "#e8e8ea");
+}
+
+/* The dock, in one place: drawn from these numbers and hit-tested against them,
+   so a tile that looks pressable is the one that answers. */
+const DOCK = { w: 420, pad: 18, step: 66, tile: 46, high: 40, up: 14 };
+function dockTile(W: number, H: number, i: number) {
+  return {
+    x: W / 2 - DOCK.w / 2 + DOCK.pad + i * DOCK.step,
+    y: H - 64,
+    w: DOCK.tile,
+    h: DOCK.high,
+  };
+}
+function dockHit(W: number, H: number, x: number, y: number): number {
+  for (let i = 0; i < 6; i++) {
+    const t = dockTile(W, H, i);
+    if (x > t.x && x < t.x + t.w && y > t.y - DOCK.up && y < t.y + t.h) return i;
+  }
+  return -1;
+}
+
+function drawPearDesktop(
+  c: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  hover: { x: number; y: number } | null,
+) {
+  c.fillStyle = "#2f4f7a";
+  c.fillRect(0, 0, W, H);
+  c.fillStyle = "#3c628f";
+  c.beginPath();
+  c.moveTo(0, H * 0.62);
+  c.bezierCurveTo(W * 0.3, H * 0.5, W * 0.7, H * 0.78, W, H * 0.6);
+  c.lineTo(W, H);
+  c.lineTo(0, H);
+  c.fill();
+  c.fillStyle = "rgba(240,240,245,0.9)";
+  c.fillRect(0, 0, W, 30);
+  c.fillStyle = "#2c2c30";
+  c.font = "15px ui-sans-serif, system-ui, sans-serif";
+  c.textAlign = "left";
+  c.textBaseline = "middle";
+  c.fillText("Pear   Finder   File   Edit   View   Go   Window   Help", 44, 15);
+  c.beginPath();
+  c.ellipse(24, 15, 7, 8, 0, 0, Math.PI * 2);
+  c.fill();
+  /* a flat dock, enough of one to say what this is */
+  c.fillStyle = "rgba(240,240,245,0.75)";
+  c.beginPath();
+  c.roundRect(W / 2 - DOCK.w / 2, H - 74, DOCK.w, 58, 16);
+  c.fill();
+  const over = hover ? dockHit(W, H, hover.x, hover.y) : -1;
+  const colours = ["#5b8def", "#57b894", "#e6a23c", "#e26d6d", "#9b6de2", "#6dc7e2"];
+  colours.forEach((col, i) => {
+    const t = dockTile(W, H, i);
+    /* A tile rises under the pointer. Without it the dock looks painted on, and
+       nobody finds the one that does something. */
+    const lift = i === over ? DOCK.up : 0;
+    c.fillStyle = col;
+    c.beginPath();
+    c.roundRect(t.x, t.y - lift, t.w, t.h, 10);
+    c.fill();
+    if (lift) {
+      c.fillStyle = "rgba(255,255,255,0.85)";
+      c.beginPath();
+      c.arc(t.x + t.w / 2, H - 12, 3, 0, Math.PI * 2);
+      c.fill();
+    }
+  });
+}
+
+function drawMac(
+  c: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  ms: number,
+  hover: { x: number; y: number } | null,
+) {
+  if (ms < 3200) return drawHappyMac(c, W, H, Math.min(1, ms / 2800));
+  const t = ms - 3200;
+  /* The bar that stops at nine tenths, which is the whole joke. */
+  const k = t < 2200 ? (t / 2200) * 0.9 : t < 6200 ? 0.9 : Math.min(1, 0.9 + (t - 6200) / 900);
+  if (t < 7400) return drawPearBoot(c, W, H, k);
+  drawPearDesktop(c, W, H, hover);
+}
+
+/* Sheep follow a shepherd. With nobody driving they graze along the hill; once
+   the visitor takes control they walk to the pointer and stand round it - which
+   is also the moment the demo is quietly showing that the mouse really works. */
+function moveFlock(W: number, H: number, dt: number, herd: { x: number; y: number } | null) {
+  /* The hill is drawn against the full frame, so the curve is measured against
+     it - but nothing grazes behind the taskbar, hence the floor. */
+  const floor = H - BAR.h - 18;
+  SHEEP.forEach((s, i) => {
+    const top = hillY(s.x, W, H, 0.86, 0.19, 0.55) + 6;
+    if (herd) {
+      /* A ring around the pointer, flattened because the grass is a plane seen
+         at an angle. A place each, so they stand around it instead of piling on
+         the same spot. */
+      const slot = (i / SHEEP.length) * Math.PI * 2;
+      const wantX = herd.x + Math.cos(slot) * 150;
+      const wantY = herd.y + Math.sin(slot) * 52;
+      const dx = wantX - s.x;
+      const dy = wantY - s.y;
+      if (Math.abs(dx) > 4) s.dir = dx > 0 ? 1 : -1;
+      /* Its own pace, so they arrive one after another rather than in step, and
+         slow enough to watch: about ten seconds across the meadow. */
+      const pace = 95 + s.speed * 2.5;
+      s.x += Math.max(-pace, Math.min(pace, dx * 1.2)) * dt;
+      s.y += Math.max(-pace / 2, Math.min(pace / 2, dy * 1.2)) * dt;
+      s.y = Math.max(top, Math.min(floor, s.y));
+      s.deep = (s.y - top) / Math.max(1, floor - top);
+    } else {
+      /* Grazing: along the grass and slowly up and down it, turning back at the
+         crest and at the near edge. */
+      s.x = (s.x + s.speed * s.dir * dt + W) % W;
+      s.deep += s.drift * dt;
+      if (s.deep < 0.06 || s.deep > 0.94) {
+        s.drift = -s.drift;
+        s.deep = Math.max(0.06, Math.min(0.94, s.deep));
+      }
+      s.y = top + s.deep * (floor - top);
+    }
+    /* Nearer is bigger, which is the only perspective this meadow needs. */
+    s.size = 0.7 + s.deep * 1.0;
+  });
+}
+
+/* The pointer, drawn on the screen the way a KVM draws the target's own cursor.
+   Every picture guest gets it - it is the visitor's hand in the demo - and it is
+   drawn only while they are actually driving. */
+/* The launcher, drawn the way rofi looks: a box, the line you are typing, and
+   the matches under it. */
+interface Launcher {
+  query: string;
+  items: string[];
+  sel: number;
+}
+const demoLauncher = () =>
+  (window as unknown as { __espkvmDemoLauncher?: () => Launcher | null }).__espkvmDemoLauncher?.() ??
+  null;
+
+/* A status bar of the kind a tiling desktop wears: workspaces on the left, what
+   is focused in the middle, the machine's own numbers on the right. */
+function drawHalfBar(c: CanvasRenderingContext2D, W: number, quiet: boolean) {
+  const h = 30;
+  c.fillStyle = "rgba(10,16,24,0.82)";
+  c.fillRect(0, 0, W, h);
+  c.fillStyle = "#5277C3";
+  c.fillRect(0, h - 2, W, 2);
+  c.textBaseline = "middle";
+  c.textAlign = "left";
+  c.font = "14px ui-monospace, Menlo, Consolas, monospace";
+  ["1", "2", "3", "4"].forEach((n, i) => {
+    const x = 12 + i * 30;
+    if (i === 1) {
+      c.fillStyle = "#5277C3";
+      c.beginPath();
+      c.roundRect(x - 6, 6, 24, h - 12, 4);
+      c.fill();
+    }
+    c.fillStyle = i === 1 ? "#fff" : "#8fa3bd";
+    c.fillText(n, x, h / 2);
+  });
+  c.fillStyle = "#c8d6e5";
+  c.textAlign = "center";
+  c.fillText("halfos - the meadow is next door", W / 2, h / 2);
+  c.textAlign = "right";
+  c.fillStyle = "#8fa3bd";
+  const now = new Date();
+  c.fillText(
+    `43C  ${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}`,
+    W - 14,
+    h / 2,
+  );
+  c.textAlign = "left";
+  if (quiet) {
+    /* The launcher has no button, so the desktop says how to reach it. */
+    c.textAlign = "center";
+    c.fillStyle = "rgba(200,214,229,0.5)";
+    c.font = "15px ui-sans-serif, system-ui, sans-serif";
+    c.fillText("type anything to run something", W / 2, 58);
+    c.textAlign = "left";
+  }
+}
+
+function drawLauncher(c: CanvasRenderingContext2D, W: number, H: number, l: Launcher) {
+  const w = 620;
+  const rowH = 40;
+  const h = 62 + Math.max(1, Math.min(6, l.items.length)) * rowH;
+  const x = (W - w) / 2;
+  const y = H * 0.22;
+  c.fillStyle = "rgba(12,16,22,0.94)";
+  c.beginPath();
+  c.roundRect(x, y, w, h, 10);
+  c.fill();
+  c.strokeStyle = "#5277C3";
+  c.lineWidth = 2;
+  c.stroke();
+  c.textAlign = "left";
+  c.textBaseline = "middle";
+  c.font = "20px ui-monospace, Menlo, Consolas, monospace";
+  c.fillStyle = "#7EBAE4";
+  c.fillText("run:", x + 20, y + 32);
+  c.fillStyle = "#e8eef6";
+  c.fillText(l.query + (Math.floor(performance.now() / 500) % 2 ? "_" : ""), x + 76, y + 32);
+  l.items.slice(0, 6).forEach((item, i) => {
+    const ry = y + 62 + i * rowH;
+    if (i === l.sel) {
+      c.fillStyle = "#5277C3";
+      c.beginPath();
+      c.roundRect(x + 8, ry, w - 16, rowH - 4, 6);
+      c.fill();
+    }
+    c.fillStyle = i === l.sel ? "#fff" : "#b9c6d6";
+    c.font = "18px ui-monospace, Menlo, Consolas, monospace";
+    c.fillText(item, x + 22, ry + rowH / 2 - 2);
+  });
+  if (!l.items.length) {
+    c.fillStyle = "#7b8797";
+    c.fillText("no match", x + 22, y + 82);
+  }
+}
+
+function drawCursor(c: CanvasRenderingContext2D, x: number, y: number) {
+  c.beginPath();
+  c.moveTo(x, y);
+  c.lineTo(x, y + 22);
+  c.lineTo(x + 6, y + 16);
+  c.lineTo(x + 13, y + 24);
+  c.lineTo(x + 17, y + 21);
+  c.lineTo(x + 10, y + 13);
+  c.lineTo(x + 18, y + 12);
+  c.closePath();
+  c.fillStyle = "#fff";
+  c.strokeStyle = "#000";
+  c.lineWidth = 1.5;
+  c.fill();
+  c.stroke();
+}
+
+/* The taskbar, and the button that is not called Start. Geometry in one place,
+   so what looks pressable is what answers a click. */
+const BAR = { h: 44, btnW: 108, menuW: 250, menuH: 200, menuTop: 28 };
+let startOpen = false;
+
+function startButton(W: number, H: number) {
+  void W;
+  return { x: 8, y: H - BAR.h + 6, w: BAR.btnW, h: BAR.h - 12 };
+}
+function startItems(H: number) {
+  const labels = ["Programs", "Documents", "Settings", "Shut Down"];
+  return labels.map((label, i) => ({
+    label,
+    x: 8,
+    y: H - BAR.h - BAR.menuH + BAR.menuTop + 12 + i * 40,
+    w: BAR.menuW - 16,
+    h: 36,
+  }));
+}
+
+function drawTaskbar(c: CanvasRenderingContext2D, W: number, H: number, hover: { x: number; y: number } | null) {
+  if (startOpen) {
+    const mx = 4;
+    const my = H - BAR.h - BAR.menuH;
+    c.fillStyle = "#f4f6fb";
+    c.beginPath();
+    c.roundRect(mx, my, BAR.menuW, BAR.menuH, 8);
+    c.fill();
+    c.fillStyle = "#245edb";
+    c.beginPath();
+    c.roundRect(mx, my, BAR.menuW, BAR.menuTop, [8, 8, 0, 0]);
+    c.fill();
+    c.fillStyle = "#fff";
+    c.font = "14px ui-sans-serif, system-ui, sans-serif";
+    c.textAlign = "left";
+    c.textBaseline = "middle";
+    c.fillText("shepherd", mx + 12, my + BAR.menuTop / 2);
+    for (const item of startItems(H)) {
+      const over = hover && hover.x > item.x && hover.x < item.x + item.w && hover.y > item.y && hover.y < item.y + item.h;
+      if (over) {
+        c.fillStyle = "#316ac5";
+        c.beginPath();
+        c.roundRect(item.x, item.y, item.w, item.h, 5);
+        c.fill();
+      }
+      c.fillStyle = over ? "#fff" : "#1b1b22";
+      c.font = "15px ui-sans-serif, system-ui, sans-serif";
+      c.fillText(item.label, item.x + 12, item.y + item.h / 2);
+    }
+  }
+
+  c.fillStyle = "#245edb";
+  c.fillRect(0, H - BAR.h, W, BAR.h);
+  const b = startButton(W, H);
+  c.fillStyle = startOpen ? "#2f7f2f" : "#3ca03c";
+  c.beginPath();
+  c.roundRect(b.x, b.y, b.w, b.h, 8);
+  c.fill();
+  c.fillStyle = "#fff";
+  c.font = "bold 17px ui-sans-serif, system-ui, sans-serif";
+  c.textAlign = "left";
+  c.textBaseline = "middle";
+  c.fillText("finish", b.x + 16, b.y + b.h / 2);
+  /* One window on the bar, and a clock, because a taskbar without them is a
+     blue stripe. */
+  c.fillStyle = "#3a72e0";
+  c.beginPath();
+  c.roundRect(b.x + b.w + 10, b.y, 190, b.h, 4);
+  c.fill();
+  c.fillStyle = "#e8eefc";
+  c.font = "14px ui-sans-serif, system-ui, sans-serif";
+  c.fillText("Meadow", b.x + b.w + 22, b.y + b.h / 2);
+  const now = new Date();
+  const clock = `${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}`;
+  c.textAlign = "right";
+  c.fillText(clock, W - 16, H - BAR.h / 2);
+  c.textAlign = "left";
+}
+
+function drawHills(
+  c: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  t: number,
+  dt: number,
+  herd: { x: number; y: number } | null,
+) {
+  c.fillStyle = "#4b8fe3";
+  c.fillRect(0, 0, W, H);
+  c.fillStyle = "#ffffff";
+  for (const [cx, cy, r] of [[210, 120, 26], [250, 128, 34], [292, 122, 22], [880, 90, 20], [915, 98, 28], [950, 92, 18]]) {
+    c.beginPath();
+    c.arc(cx, cy, r, 0, Math.PI * 2);
+    c.fill();
+  }
+  fillHill(c, W, H, 0.72, 0.16, 2.4, "#4f8f38");
+  fillHill(c, W, H, 0.86, 0.19, 0.55, "#77bd4b");
+  moveFlock(W, H, dt, herd);
+  /* Far ones first, so a near sheep passes in front of one further up. */
+  for (const s of [...SHEEP].sort((a, b) => a.y - b.y)) {
+    drawSheep(c, s.x, s.y, s.size, (t / 220) * s.speed * 0.08, s.dir, s.black);
+    if (s.black) {
+      blackSheepAt.x = s.x;
+      blackSheepAt.y = s.y;
+      blackSheepAt.r = 30 * s.size;
+    }
+  }
+  drawTaskbar(c, W, H, herd);
+}
 
 /* Characters go where the grid says, one at a time: the transparent selection
    layer is placed by the same numbers, and a drawn character that does not sit
    under its own hitbox is worse than no picture at all. */
 function drawDemoGrid(c: CanvasRenderingContext2D, g: DemoGrid, W: number, H: number) {
-  c.fillStyle = "#05080c";
+  c.fillStyle = g.bg ?? "#05080c";
   c.fillRect(0, 0, W, H);
-  c.fillStyle = "#c8d6e5";
+  c.fillStyle = g.bg ? "#eef2f8" : "#c8d6e5";
   c.textBaseline = "top";
   c.font = `${Math.round(g.cellHeight * 0.82)}px ui-monospace, Menlo, Consolas, monospace`;
   const rows = g.text.split("\n");
@@ -117,16 +674,64 @@ function startDemoScreen() {
      control), like the real KVM; otherwise the screen drifts on its own. The
      eased cursor trails slightly behind; a click sends a discharge along the
      rays. */
+  /* Where a screen pixel is on the canvas. In "fit" the canvas is letterboxed
+     inside its box, so the bars have to come off first - mapping against the
+     whole box drifts the pointer on whichever axis is padded. The same sum the
+     real input path does in mapToTarget(). */
+  const toCanvas = (e: { clientX: number; clientY: number }) => {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    const scale = Math.min(r.width / W, r.height / H);
+    const shownW = W * scale;
+    const shownH = H * scale;
+    const x = ((e.clientX - r.left - (r.width - shownW) / 2) / shownW) * W;
+    const y = ((e.clientY - r.top - (r.height - shownH) / 2) / shownH) * H;
+    if (x < 0 || y < 0 || x > W || y > H) return null;
+    return { x, y };
+  };
+
   const onMove = (e: PointerEvent) => {
     if (!props.engaged) return;
-    const r = el.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    target.x = Math.max(0, Math.min(W, ((e.clientX - r.left) / r.width) * W));
-    target.y = Math.max(0, Math.min(H, ((e.clientY - r.top) / r.height) * H));
+    const p = toCanvas(e);
+    if (!p) return;
+    target.x = p.x;
+    target.y = p.y;
     hasPointer = true;
   };
-  const onDown = () => {
-    if (props.engaged) clickT = performance.now();
+  const crash = () =>
+    (window as unknown as { __espkvmDemoCrash?: () => void }).__espkvmDemoCrash?.();
+
+  const onDown = (e: PointerEvent) => {
+    if (!props.engaged) return;
+    clickT = performance.now();
+    const p = toCanvas(e);
+    if (!p) return;
+    const { x, y } = p;
+    const scene = demoScene();
+    /* Petting the black sheep is a mistake, and so is the red one in the dock. */
+    if (scene === "hills") {
+      const b = startButton(W, H);
+      const onButton = x > b.x && x < b.x + b.w && y > b.y && y < b.y + b.h;
+      if (onButton) {
+        startOpen = !startOpen;
+      } else if (startOpen) {
+        const item = startItems(H).find(
+          (it) => x > it.x && x < it.x + it.w && y > it.y && y < it.y + it.h,
+        );
+        startOpen = false;
+        /* Only one of them does anything, and it is the honest one. */
+        if (item?.label === "Shut Down") {
+          (window as unknown as { __espkvmDemoPower?: (a: string) => void }).__espkvmDemoPower?.(
+            "hold",
+          );
+        }
+      } else if (Math.hypot(x - blackSheepAt.x, y - blackSheepAt.y + 14) < blackSheepAt.r) {
+        crash();
+      }
+    } else if (scene === "mac" && demoSceneMs() > 10600) {
+      /* The red one is the one that ends it; the rest just bounce. */
+      if (dockHit(W, H, x, y) === 3) crash();
+    }
   };
   window.addEventListener("pointermove", onMove);
   window.addEventListener("pointerdown", onDown);
@@ -137,7 +742,10 @@ function startDemoScreen() {
 
   const t0 = performance.now();
   let lastText = "";
+  let lastFrame = 0;
   const draw = (t: number) => {
+    const dt = lastFrame ? Math.min(0.1, (t - lastFrame) / 1000) : 0;
+    lastFrame = t;
     /* A text screen while the machine is booting or sitting at a prompt. It
        changes rarely, so it is redrawn only when it changes. */
     const g = demoGrid();
@@ -150,19 +758,38 @@ function startDemoScreen() {
       return;
     }
     lastText = "";
-    const s = (t - t0) / 1000;
-    /* Until engaged, ignore the real cursor and drift on our own. */
+    /* The eased pointer is caught up here, before the branches, because every
+       picture guest draws it - not just the constellation. */
     if (!props.engaged) hasPointer = false;
+    const driving = props.engaged && hasPointer;
+    if (driving) {
+      cur.x += (target.x - cur.x) * 0.18;
+      cur.y += (target.y - cur.y) * 0.18;
+    }
+    /* The picture guests are redrawn every frame. */
+    const scene = demoScene();
+    if (scene === "hills") {
+      /* The flock only has a shepherd once the visitor is actually driving. */
+      drawHills(c, W, H, t, dt, driving ? cur : null);
+      if (driving) drawCursor(c, cur.x, cur.y);
+      demoRAF = requestAnimationFrame(draw);
+      return;
+    }
+    if (scene === "mac") {
+      drawMac(c, W, H, demoSceneMs(), driving ? cur : null);
+      if (driving) drawCursor(c, cur.x, cur.y);
+      demoRAF = requestAnimationFrame(draw);
+      return;
+    }
+    const s = (t - t0) / 1000;
     /* Gentle autonomous motion until the visitor moves the mouse. */
     if (!hasPointer) {
       target.x = W / 2 + Math.cos(s * 0.6) * W * 0.34;
       target.y = H / 2 + Math.sin(s * 0.9) * H * 0.34;
     }
-    cur.x += (target.x - cur.x) * 0.08;
-    cur.y += (target.y - cur.y) * 0.08;
-
     c.fillStyle = "#0a141d";
     c.fillRect(0, 0, W, H);
+    drawLambdaFlake(c, W / 2, H / 2, Math.min(W, H) * 0.36);
     const glow = c.createRadialGradient(cur.x, cur.y, 0, cur.x, cur.y, 340);
     glow.addColorStop(0, "rgba(76,154,255,0.20)");
     glow.addColorStop(1, "rgba(76,154,255,0)");
@@ -204,21 +831,10 @@ function startDemoScreen() {
       }
     }
 
-    /* The lagging cursor arrow. */
-    c.beginPath();
-    c.moveTo(cur.x, cur.y);
-    c.lineTo(cur.x, cur.y + 22);
-    c.lineTo(cur.x + 6, cur.y + 16);
-    c.lineTo(cur.x + 13, cur.y + 24);
-    c.lineTo(cur.x + 17, cur.y + 21);
-    c.lineTo(cur.x + 10, cur.y + 13);
-    c.lineTo(cur.x + 18, cur.y + 12);
-    c.closePath();
-    c.fillStyle = "#fff";
-    c.strokeStyle = "#000";
-    c.lineWidth = 1.5;
-    c.fill();
-    c.stroke();
+    const launcher = demoLauncher();
+    drawHalfBar(c, W, !launcher);
+    if (launcher) drawLauncher(c, W, H, launcher);
+    if (driving) drawCursor(c, cur.x, cur.y);
 
     demoRAF = requestAnimationFrame(draw);
   };
