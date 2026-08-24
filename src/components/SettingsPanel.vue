@@ -352,13 +352,8 @@ async function doRestart() {
   }
 }
 
-/*
- * Settings to a file and back.
- *
- * The device already decides what may leave it - secrets are write-only and
- * never served - so this is the console's job entirely: what is on screen, plus
- * a header saying which firmware and which board wrote it.
- */
+/* Settings to a file and back. The device already decides what may leave it, so
+   this is just what is on screen plus a header naming firmware and board. */
 const importReport = ref<string[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
 

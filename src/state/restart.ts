@@ -107,14 +107,8 @@ export const restartWatch = reactive({
   lost: false,
 });
 
-/*
- * The clock every step runs on.
- *
- * A step with a percentage moves by itself, but the one in the middle - the
- * device writing and verifying the image on its own - has no bytes to report and
- * only the clock to go by. Without something ticking it, that step sat at zero
- * for its whole length and the console looked frozen (#23).
- */
+/* The clock every step runs on. The step with no percentage - the device writing
+   the image on its own - has only this, and nothing was ticking it (#23). */
 let clock: ReturnType<typeof setInterval> | undefined;
 let stepStarted = 0;
 

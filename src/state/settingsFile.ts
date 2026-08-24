@@ -1,13 +1,8 @@
 /*
- * Settings in a file.
- *
- * Two real cases, one file: bringing a second box up like the first, and
- * keeping a copy of a working configuration before "Restore defaults".
- *
- * What the file cannot contain is passwords and private keys. The firmware
- * marks those write-only and never serves them, so an export physically cannot
- * carry one - and an import has to say so out loud, or someone clones a config,
- * sees "done", and spends a week wondering why the VPN never comes up.
+ * Settings in a file: a copy before "Restore defaults", or a second box brought
+ * up like the first. Passwords and private keys cannot be in it - the firmware
+ * never serves them - and an import has to say so, or someone clones a config
+ * and waits a week for a VPN that was never given its key.
  */
 
 import type { Setting, Values } from "./device";
@@ -15,12 +10,8 @@ import type { Setting, Values } from "./device";
 export const FILE_KIND = "espkvm-settings";
 export const FILE_VERSION = 1;
 
-/*
- * What makes a device itself. Copying these onto a second box is how you get two
- * devices answering to one name: two hostnames the same means two certificates
- * with the same subject, and a browser then trusts neither of them. A static
- * address copied twice is worse. Held back by default, and said so in the report.
- */
+/* What makes a device itself: two boxes with one hostname sign two certificates
+   with the same subject and a browser trusts neither. Held back on import. */
 export const IDENTITY_KEYS = ["net_hostname", "net_ip", "net_mask", "net_gw", "net_dns"];
 
 export interface SettingsFile {
@@ -38,9 +29,10 @@ export interface SettingsFile {
 }
 
 const NOTE =
-  "ESP-KVM settings. No passwords or keys are in here - the device never serves them - " +
-  "but this does describe a network: hostname, addresses, broker and VPN endpoints. " +
-  "Treat it as you would a router's config before posting it anywhere.";
+  "ESP-KVM settings. No passwords and no private keys are in here - the device never " +
+  "serves them - but this does describe a network: hostname and addresses, the MQTT " +
+  "broker, and the VPN peer, meaning its endpoint and its public key. Treat it as you " +
+  "would a router's config before posting it anywhere.";
 
 /** Everything this device is willing to hand over, plus enough to read it later. */
 export function buildFile(
@@ -165,7 +157,7 @@ export function describePlan(plan: ImportPlan, applied: boolean): string[] {
   }
   if (plan.secrets.length) {
     lines.push(
-      `Passwords and keys are never in the file (${plan.secrets.join(", ")}) - ` +
+      `Passwords and private keys are never in the file (${plan.secrets.join(", ")}) - ` +
         "set them again by hand, or the VPN and the broker will not come up.",
     );
   }
