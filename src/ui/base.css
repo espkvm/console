@@ -19,10 +19,13 @@ body,
 
 /* One pixel of room for the page to be scrolled into - see installPagePin().
    Android's captive-portal WebView reads the document's scroll position to
-   decide whether its own pull-to-refresh should take the gesture. */
-html {
-  height: calc(100dvh + 1px);
-  overflow-y: auto;
+   decide whether its own pull-to-refresh should take the gesture. Touch only:
+   on a desktop browser that pixel is a scrollbar and nothing else. */
+@media (pointer: coarse) {
+  html {
+    height: calc(100dvh + 1px);
+    overflow-y: auto;
+  }
 }
 
 body {

@@ -16,6 +16,10 @@
 const PIN = 1;
 
 export function installPagePin(): () => void {
+  /* Only where the gesture exists - the stylesheet gives the pixel to a coarse
+     pointer only, so on a desktop there is nothing to pin. */
+  if (!window.matchMedia?.("(pointer: coarse)").matches) return () => {};
+
   const el = () => document.scrollingElement ?? document.documentElement;
 
   const pin = () => {
