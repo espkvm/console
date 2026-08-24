@@ -48,12 +48,47 @@ let stream: VideoStream | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 
 /* Demo build only (static site at /demo/): there is no device, so the "screen"
-   is an abstract animation - a constellation of points that lights up around a
-   cursor which lags behind the real one - just to make the pane feel live and
-   reactive. Tree-shaken out of the firmware build. */
+   is drawn here. A booting machine is drawn as the character grid the demo
+   backend reports - the same grid the selection layer sits on, so Select and
+   Copy work on it - and once it has booted, an abstract constellation that
+   follows the cursor. Tree-shaken out of the firmware build. */
 const DEMO = import.meta.env.MODE === "demo";
 let demoRAF = 0;
 let demoCleanup: (() => void) | null = null;
+
+/* The demo backend hands its screen over on the window rather than through an
+   import, so nothing in this component can pull the demo into a real build. */
+interface DemoGrid {
+  cols: number;
+  rows: number;
+  cellWidth: number;
+  cellHeight: number;
+  originX: number;
+  originY: number;
+  text: string;
+}
+const demoGrid = () =>
+  (window as unknown as { __espkvmDemoScreen?: () => DemoGrid | null })
+    .__espkvmDemoScreen?.() ?? null;
+
+/* Characters go where the grid says, one at a time: the transparent selection
+   layer is placed by the same numbers, and a drawn character that does not sit
+   under its own hitbox is worse than no picture at all. */
+function drawDemoGrid(c: CanvasRenderingContext2D, g: DemoGrid, W: number, H: number) {
+  c.fillStyle = "#05080c";
+  c.fillRect(0, 0, W, H);
+  c.fillStyle = "#c8d6e5";
+  c.textBaseline = "top";
+  c.font = `${Math.round(g.cellHeight * 0.82)}px ui-monospace, Menlo, Consolas, monospace`;
+  const rows = g.text.split("\n");
+  for (let r = 0; r < rows.length; r++) {
+    const y = g.originY + r * g.cellHeight + g.cellHeight * 0.1;
+    for (let col = 0; col < rows[r].length; col++) {
+      const ch = rows[r][col];
+      if (ch !== " ") c.fillText(ch, g.originX + col * g.cellWidth, y);
+    }
+  }
+}
 
 function startDemoScreen() {
   const el = canvas.value;
@@ -101,7 +136,20 @@ function startDemoScreen() {
   };
 
   const t0 = performance.now();
+  let lastText = "";
   const draw = (t: number) => {
+    /* A text screen while the machine is booting or sitting at a prompt. It
+       changes rarely, so it is redrawn only when it changes. */
+    const g = demoGrid();
+    if (g) {
+      if (g.text !== lastText) {
+        lastText = g.text;
+        drawDemoGrid(c, g, W, H);
+      }
+      demoRAF = requestAnimationFrame(draw);
+      return;
+    }
+    lastText = "";
     const s = (t - t0) / 1000;
     /* Until engaged, ignore the real cursor and drift on our own. */
     if (!props.engaged) hasPointer = false;

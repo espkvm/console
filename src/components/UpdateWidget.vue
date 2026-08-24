@@ -246,6 +246,10 @@ watch(updateUrl, () => void checkForUpdate());
  * until the next attempt clears it.
  */
 function fail(message: string) {
+  /* The watch owns the whole screen, so it has to come down with the failure -
+     otherwise a refused image leaves the console behind an overlay that says
+     what it was doing a moment ago, with no way out but a reload. */
+  endWatch();
   phase.value = "idle";
   installError.value = message;
   toast.error(message);

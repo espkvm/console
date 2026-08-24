@@ -1,1 +1,27 @@
-{"mounted": true, "totalBytes": 31914983424, "freeBytes": 20000000000, "active": "nixos-graphical-25.05.809261.7c815e513adb-x86_64-linux.iso", "writable": false, "writeReason": "this board cannot write the microSD reliably; prepare the card in a reader", "rescue": {"supported": true, "hasImage": true, "capacityBytes": 4194304}, "images": []}
+{
+  "mounted": true,
+  "totalBytes": 31914983424,
+  "freeBytes": 20000000000,
+  "active": "",
+  "writable": false,
+  "writeReason": "this board cannot write the microSD reliably; prepare the card in a reader",
+  "rescue": {
+    "supported": true,
+    "hasImage": true,
+    "capacityBytes": 4194304
+  },
+  "images": [
+    {
+      "name": "nixos-graphical-25.05-x86_64-linux.iso",
+      "size": 1181116006
+    },
+    {
+      "name": "memtest86plus-7.20.iso",
+      "size": 20971520
+    },
+    {
+      "name": "systemrescue-11.03-amd64.iso",
+      "size": 891289600
+    }
+  ]
+}

@@ -15,7 +15,7 @@
   "macros_json": "[]",
   "msc_enable": false,
   "msc_mode": 0,
-  "msc_image": "nixos-graphical-25.05.809261.7c815e513adb-x86_64-linux.iso",
+  "msc_image": "",
   "pwr_wol_mac": "",
   "atx_enable": false,
   "atx_pwr_gpio": -1,
