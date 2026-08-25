@@ -14,6 +14,7 @@
  */
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
+import { textSpans } from "../screen/textSpans";
 import type { ScreenText, VideoStatus } from "../state/device";
 import { VideoStream } from "../video/stream";
 import Icon from "./Icon.vue";
@@ -31,6 +32,16 @@ const props = defineProps<{
   /** The screen read as characters, when the operator has asked to select it.
       Null means no layer: the picture behaves as usual. */
   textLayer?: ScreenText | null;
+  /**
+   * Show that layer instead of the picture, rather than invisibly over it.
+   *
+   * The text mode: what the target's screen says, as characters, at a few
+   * kilobytes a screen instead of megabits a second. It is an extra way to look
+   * at a machine - over a phone tether, over a link that will not carry video -
+   * not a replacement for the picture, which is why it is a button and not a
+   * setting.
+   */
+  textView?: boolean;
 }>();
 
 const emit = defineEmits<{ surface: [HTMLElement | null] }>();
@@ -1050,13 +1061,7 @@ watch(() => [props.status?.width, props.status?.height], updateBox);
 const layerRows = computed(() => {
   const t = props.textLayer;
   if (!t) return [];
-  const lines = t.text.split("\n");
-  while (lines.length < t.rows) lines.push("");
-  /* A blank row still has to occupy its row: an empty element collapses to no
-     height at all, and every row below it would then sit above the characters
-     it was read from. A single space is the cheapest way to keep the box, and
-     it is what a blank line copies as anyway. */
-  return lines.slice(0, t.rows).map((l) => (l.length ? l : " "));
+  return textSpans(t.text, t.rows, t.highlight);
 });
 
 const layerStyle = computed(() => {
@@ -1087,7 +1092,12 @@ const layerStyle = computed(() => {
 
 const noSignal = computed(() => props.status !== null && !props.status.signal);
 const showOverlay = computed(
-  () => props.paused || failed.value || noSignal.value || codecError.value !== null || !loaded.value,
+  () =>
+    /* In text mode the characters are the content, and the stream is paused on
+       purpose - saying "Video paused" over them would be telling the operator
+       off for the thing they just asked for. */
+    !props.textView &&
+    (props.paused || failed.value || noSignal.value || codecError.value !== null || !loaded.value),
 );
 </script>
 
@@ -1126,11 +1136,18 @@ const showOverlay = computed(
 
     <div
       v-if="textLayer"
-      class="screen-text"
+      :class="['screen-text', { 'screen-text-solid': textView }]"
       :style="layerStyle"
       aria-label="Screen text, selectable"
     >
-      <div v-for="(line, i) in layerRows" :key="i" class="screen-text-line">{{ line }}</div>
+      <div v-for="(spans, i) in layerRows" :key="i" class="screen-text-line">
+        <span
+          v-for="(span, j) in spans"
+          :key="j"
+          :class="{ 'screen-text-mark': span.mark }"
+          >{{ span.text }}</span
+        >
+      </div>
     </div>
 
     <div v-if="!DEMO && showOverlay" class="screen-overlay">

@@ -111,6 +111,8 @@ export interface VideoStatus {
    * only an explicit `true` as a yes.
    */
   textMode?: boolean;
+  /** How long the picture has been one flat colour, in ms; 0 when it is not. */
+  flatMs?: number;
 }
 
 /**
@@ -304,6 +306,12 @@ export interface ScreenText {
   confidence: number;
   ageMs: number;
   text: string;
+  /**
+   * Cells drawn the other way round from the rest of the screen, as runs of
+   * [row, column, length] - which on a character screen is what a selection is:
+   * the menu row you are on, a highlighted button. Absent when there are none.
+   */
+  highlight?: number[][];
 }
 
 /**

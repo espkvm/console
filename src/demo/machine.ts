@@ -515,6 +515,8 @@ export interface DemoScreen {
   alert?: string;
   /** The demo paints its own background: a blue screen has to be blue. */
   bg?: string;
+  /** Cells drawn the other way round, as the device reports them: [row, col, len]. */
+  highlight?: number[][];
 }
 
 /** The screen as the firmware would report it, or null when it is a picture. */
@@ -537,6 +539,9 @@ export function demoScreenText(): DemoScreen | null {
     text: rows.map((r) => r.padEnd(COLS, " ").slice(0, COLS)).join("\n"),
     alert: stage === "stuck" ? "no boot device" : undefined,
     bg: stage === "crash" && guest !== "none" ? CRASH[guest].bg : undefined,
+    /* Memtest draws its banner the other way round, as the real one does - and
+       that is what the device reports as a highlight. */
+    highlight: stage === "shell" && guest === "memtest" ? [[0, 0, COLS]] : undefined,
   };
 }
 

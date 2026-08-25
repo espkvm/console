@@ -315,6 +315,29 @@
   color: transparent;
 }
 
+/* Text mode: the same layer, shown instead of the picture rather than over it.
+   A screen is two kilobytes of characters, so this is the way to work on a
+   machine over a link that will not carry video. Deliberately an extra way to
+   look, not a replacement - the picture is still what a KVM is for. */
+.screen-text-solid {
+  color: var(--text);
+  background: #000;
+}
+
+.screen-text-solid ::selection,
+.screen-text-solid::selection {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--text);
+}
+
+/* What the target draws the other way round - the row a menu is sitting on.
+   Invisible over the picture, because the picture already shows it; in text
+   mode it is the only thing that says where you are. */
+.screen-text-solid .screen-text-mark {
+  background: var(--text);
+  color: #000;
+}
+
 .screen-overlay {
   position: absolute;
   inset: 0;

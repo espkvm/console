@@ -136,6 +136,12 @@ function rate(kbps: number): string {
             <dt>Viewers</dt>
             <dd class="mono">{{ status.viewers }}</dd>
           </div>
+          <div v-if="(status.flatMs ?? 0) > 0" class="fact">
+            <dt title="Nearly every pixel is the same colour, and has been">
+              One flat colour for
+            </dt>
+            <dd class="mono warn">{{ Math.round((status.flatMs ?? 0) / 1000) }} s</dd>
+          </div>
           <div class="fact">
             <dt>Bridge SYS_STATUS</dt>
             <dd class="mono">0x{{ status.sysStatus.toString(16) }}</dd>

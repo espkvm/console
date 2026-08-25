@@ -113,11 +113,31 @@ let screenTextPollId = 0;
  */
 const textModeLikely = computed(() => status.value?.textMode === true);
 
+/*
+ * Two ways a text screen stops being one, and both have to hand the picture
+ * back by themselves - a mode nobody can read, shown with the video stopped, is
+ * a black rectangle and a puzzle.
+ *
+ * The mode changing is watched below (textModeLikely). The other way is the
+ * machine staying at the same resolution and simply drawing something that is
+ * not characters - a desktop, a graphical installer - which shows up only as
+ * "no text on file". Twice in a row, because one miss can be a screen caught
+ * mid-repaint.
+ */
+const TEXT_MISSES_BEFORE_GIVING_UP = 2;
+let textMisses = 0;
+
 async function refreshScreenText(): Promise<ScreenText | null> {
   try {
     screenText.value = await loadScreenText();
   } catch {
     screenText.value = null;
+  }
+  if (screenText.value) {
+    textMisses = 0;
+  } else if (textView.value && ++textMisses >= TEXT_MISSES_BEFORE_GIVING_UP) {
+    void toggleTextView();
+    toast.info("The screen is a picture again - back to video");
   }
   return screenText.value;
 }
@@ -168,11 +188,22 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
+/* Both ways of using the text - selecting it and reading it instead of the
+   picture - want it kept current, and neither should stop the other's poll. */
+function keepScreenTextFresh() {
+  const wanted = selectingText.value || textView.value;
+  if (wanted && !screenTextPollId) {
+    screenTextPollId = window.setInterval(() => void refreshScreenText(), 2000);
+  } else if (!wanted && screenTextPollId) {
+    window.clearInterval(screenTextPollId);
+    screenTextPollId = 0;
+  }
+}
+
 async function toggleSelectText() {
   if (selectingText.value) {
     selectingText.value = false;
-    window.clearInterval(screenTextPollId);
-    screenTextPollId = 0;
+    keepScreenTextFresh();
     return;
   }
   if (!(await refreshScreenText())) {
@@ -182,13 +213,48 @@ async function toggleSelectText() {
   /* Control goes back to the operator's mouse for as long as this lasts. */
   engaged.value = false;
   selectingText.value = true;
-  screenTextPollId = window.setInterval(() => void refreshScreenText(), 2000);
+  keepScreenTextFresh();
+}
+
+/*
+ * Text mode: the screen as characters, instead of the picture.
+ *
+ * A screen is two kilobytes of text and a picture is megabits a second, so this
+ * is what makes a machine workable over a phone tether or a link that will not
+ * carry video - and the keyboard still goes to the target, which is most of what
+ * a BIOS needs. It is an extra way to look, never the default: it pauses the
+ * stream while it is on and gives the picture straight back when it is off.
+ */
+const textView = ref(false);
+/* Whether the stream was already stopped when text mode began. Turning it off
+   must give back the state the operator left, not the state text mode wanted:
+   somebody who had paused the picture on purpose should not find it running. */
+let pausedBeforeText = false;
+
+async function toggleTextView() {
+  textMisses = 0;
+  if (textView.value) {
+    textView.value = false;
+    paused.value = pausedBeforeText;
+    keepScreenTextFresh();
+    return;
+  }
+  if (!(await refreshScreenText())) {
+    toast.info("Nothing to show: this screen is not made of text");
+    return;
+  }
+  textView.value = true;
+  /* The saving is the whole point: no video while the text is being read. */
+  pausedBeforeText = paused.value;
+  paused.value = true;
+  keepScreenTextFresh();
 }
 
 /* The target left text behind - booted, or changed mode. The layer would then
    be characters from a screen that is gone, laid over a picture. */
 watch(textModeLikely, (still) => {
   if (!still && selectingText.value) void toggleSelectText();
+  if (!still && textView.value) void toggleTextView();
 });
 const paused = ref(false);
 /* Set while a firmware image is being handed to the device: the stream gives up
@@ -687,7 +753,8 @@ const engageNudge = ref(false);
 let engageNudgeId = 0;
 
 function nudgeEngage(e: PointerEvent) {
-  if (engaged.value || paused.value || touchMode.value || heldByOther.value) return;
+  if (engaged.value || (paused.value && !textView.value) || touchMode.value) return;
+  if (heldByOther.value) return;
   if (selectingText.value) return;
   const t = e.target as HTMLElement | null;
   /* Only the picture: not the panels, and not the invitation itself. */
@@ -929,7 +996,8 @@ const LED_BITS: Array<[number, string]> = [
             :engage-mode="engageMode"
             :fit="fit"
             :paused="paused || updateHoldsStream"
-            :text-layer="selectingText ? screenText : null"
+            :text-layer="selectingText || textView ? screenText : null"
+          :text-view="textView"
             :pause-note="
               updateHoldsStream
                 ? 'The picture is back the moment the update is done - it gives up its connection so the image gets the device to itself.'
@@ -939,7 +1007,7 @@ const LED_BITS: Array<[number, string]> = [
           />
 
           <button
-            v-if="!engaged && !paused && !touchMode && !heldByOther && !selectingText"
+            v-if="!engaged && (!paused || textView) && !touchMode && !heldByOther && !selectingText"
             type="button"
             :class="['screen-engage', { 'screen-engage-nudge': engageNudge }]"
             @pointerdown="onEngage($event)"
@@ -958,7 +1026,7 @@ const LED_BITS: Array<[number, string]> = [
           </div>
 
           <TouchControls
-            v-if="touchMode && !paused && !heldByOther"
+            v-if="touchMode && (!paused || textView) && !heldByOther"
             :control="input.control"
             :layout="layout"
           />
@@ -1139,6 +1207,20 @@ const LED_BITS: Array<[number, string]> = [
           @click="toggleSelectText()"
         >
           Select
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm"
+          :class="{ 'btn-on': textView }"
+          :disabled="!textModeLikely"
+          :title="
+            textModeLikely
+              ? 'Read the screen as characters instead of video - a couple of kilobytes a screen, for a link that will not carry a picture'
+              : 'The target is not showing a text screen'
+          "
+          @click="toggleTextView()"
+        >
+          Text
         </button>
         <button
           type="button"

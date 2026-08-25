@@ -9,7 +9,8 @@
     "dev:mock": "vite --mode mock",
     "dev:demo": "vite --mode demo",
     "build:demo": "vite build --mode demo",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "test": "node --test --experimental-strip-types --import ./test/register.mjs test/*.test.ts"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.8",
