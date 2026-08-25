@@ -9,7 +9,7 @@
  * it are shown disabled with the reason; the flash rescue slot, whose writes are
  * reliable, can be uploaded to from here.
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 
 import {
   deleteImage,
@@ -35,6 +35,7 @@ const exposed = computed(() => !!props.values.msc_enable);
 
 async function toggleExpose(e: Event) {
   const on = (e.target as HTMLInputElement).checked;
+  writes++;
   try {
     emit("values", await saveSettings({ msc_enable: on }));
   } catch (err) {
@@ -53,20 +54,42 @@ const rescuePct = ref(0);
 const rescueRate = ref(0);
 const rescueEta = ref(Infinity);
 
-async function refreshImages() {
-  loadingImages.value = true;
+/* A write started here beats a listing that was already in the air: the reply
+   may describe the card as it was a moment before, and the choice must not jump
+   back under the operator's hand. */
+let writes = 0;
+
+async function refreshImages(quiet = false) {
+  if (!quiet) loadingImages.value = true;
+  const seen = writes;
   try {
-    storage.value = await loadImages();
+    const fresh = await loadImages();
+    if (quiet && seen !== writes) return;
+    storage.value = fresh;
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    /* A poll nobody asked for stays quiet about a card it could not read. */
+    if (!quiet) toast.error(err instanceof Error ? err.message : String(err));
   } finally {
-    loadingImages.value = false;
+    if (!quiet) loadingImages.value = false;
   }
 }
 
 /* The panel is only mounted when the operator opens it, so this reads the card
-   on open rather than on every console load. */
-onMounted(() => void refreshImages());
+   on open rather than on every console load. It keeps reading while it is open:
+   the medium can change elsewhere - another session, or the demo loading one by
+   itself - and a panel saying "ejected" while the target boots is worse than a
+   small request every few seconds. */
+const POLL_MS = 3000;
+let poll = 0;
+onMounted(() => {
+  void refreshImages();
+  poll = window.setInterval(() => {
+    if (document.hidden || loadingImages.value) return;
+    if (uploadingImage.value || uploadingRescue.value) return;
+    void refreshImages(true);
+  }, POLL_MS);
+});
+onUnmounted(() => window.clearInterval(poll));
 
 async function onImageChosen(e: Event) {
   const input = e.target as HTMLInputElement;
@@ -122,6 +145,7 @@ async function onRescueChosen(e: Event) {
 }
 
 async function selectImage(name: string) {
+  writes++;
   try {
     emit("values", await saveSettings({ msc_image: name }));
     if (storage.value) storage.value.active = name;
@@ -132,6 +156,7 @@ async function selectImage(name: string) {
 
 async function removeImage(name: string) {
   if (!confirm(`Delete ${name} from the card?`)) return;
+  writes++;
   try {
     storage.value = await deleteImage(name);
   } catch (err) {

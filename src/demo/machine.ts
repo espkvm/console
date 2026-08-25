@@ -26,10 +26,29 @@ export type Guest = "none" | "halfos" | "xp" | "memtest" | "mac";
 /* What is in the drive, and what actually booted - two different things. A disc
    swapped while the machine runs changes nothing until it restarts. */
 let inserted = "";
-let exposed = false;
-/* Why there is nothing to boot, in the words the screen shows. Decided when the
-   drive is read, so it describes the machine as it started, not as it is now. */
-let hint = "Insert an image under Media, then press Reset.";
+/* The demo starts with the drive switched on - the fixture says so too, and the
+   two have to agree. A visitor here is not debugging a USB gadget; make them
+   choose a disc, not find a checkbox first. */
+let exposed = true;
+/* The image the console has selected, drive gate aside, so the panel and the
+   machine can be put back in step after the demo inserts one by itself. */
+let chosen = "";
+
+/* Has the visitor done anything at all? Until they have, the demo drives itself
+   - people arrive expecting a picture, and a screen that waits to be poked is a
+   screen most of them leave. The first thing they do stops the autopilot for
+   good: from then on the machine only does what it is told. */
+let touched = false;
+/* Why there is nothing to boot, in the words the screen shows - the next thing
+   to do, read from the drive as it stands right now. A visitor who switches the
+   drive on should not still be told to switch it on. */
+function hint(): string {
+  if (!exposed) {
+    return "Switch Expose virtual media on under Media, choose an image, then press Reset.";
+  }
+  if (!chosen) return "Choose an image under Media, then press Reset.";
+  return `Press Reset to boot ${chosen}.`;
+}
 let guest: Guest = "none";
 
 /* The demo opens on a machine that is starting up, not a dark screen: the boot
@@ -194,14 +213,22 @@ function lines(): string[] {
     return memtestLines(t);
   }
   if (stage === "post" || stage === "stuck" || stage === "boot") {
+    /* It types itself out while it runs; afterwards it is simply there, whatever
+       the clock of the stage that followed says. */
     for (const [at, text] of POST) {
-      if (t >= at) out.push(text);
+      if (stage !== "post" || t >= at) out.push(text);
     }
   }
   if (stage === "stuck") {
     out.push("No boot device found");
     out.push("");
-    out.push(hint);
+    if (touched) {
+      out.push(hint());
+    } else {
+      const left = Math.max(0, Math.ceil((STUCK_AUTO_MS - t) / 1000));
+      out.push(`No image has been chosen, so this demo loads one itself in ${left} s.`);
+      out.push("To pick your own: open Media, choose an image, press Reset.");
+    }
   }
   if (stage === "boot" && guest !== "none") {
     for (const [at, text] of BOOT[guest]) {
@@ -217,6 +244,14 @@ function lines(): string[] {
 /** Time is what moves this machine on, so every read looks at the clock first. */
 const POST_MS = 3200;
 const BOOT_MS = 2800;
+/* What the autopilot does, and when. Long enough to read the screen it is
+   leaving and to go looking for the drive yourself, short enough that nobody
+   decides the demo is broken. */
+const STUCK_AUTO_MS = 15000;
+const AUTO_IMAGE = "halfos-life-3.iso";
+const SHELL_AUTO_MS = 9000;
+const AUTO_CMD = "startx";
+const AUTO_KEY_MS = 130;
 
 /** Time is what moves this machine on. It runs until nothing more is due, so a
     tab that was in the background comes back where it should be, not one step
@@ -229,20 +264,47 @@ function tick() {
          decides what it is booting. */
       guest = guestFor(inserted);
       mediaMounted = Boolean(inserted);
-      hint = exposed
-        ? "Insert an image under Media, then press Reset."
-        : "Switch Expose virtual media on under Media, choose an image, then press Reset.";
       go(mediaMounted ? "boot" : "stuck", POST_MS);
     } else if (stage === "boot" && t > BOOT_MS) {
       /* Two of them are pictures from here on; the other two land on a screen. */
       go(guest === "xp" || guest === "mac" ? "desktop" : "shell", BOOT_MS);
+    } else if (stage === "stuck" && !touched && t > STUCK_AUTO_MS) {
+      /* Nobody chose an image, so the demo chooses one. Through the drive, not
+         around it: the console sees the same insertion a visitor would make. */
+      chosen = AUTO_IMAGE;
+      inserted = AUTO_IMAGE;
+      exposed = true;
+      guest = guestFor(inserted);
+      mediaMounted = true;
+      go("boot", STUCK_AUTO_MS);
+    } else if (stage === "shell" && guest === "halfos" && !touched && t > SHELL_AUTO_MS) {
+      /* And it types the one command the screen asks for, letter by letter, so
+         the visitor sees a keyboard reaching the target rather than a jump cut. */
+      const n = Math.floor((t - SHELL_AUTO_MS) / AUTO_KEY_MS);
+      if (n < AUTO_CMD.length) {
+        typed = AUTO_CMD.slice(0, n);
+        return;
+      }
+      shell.push("demo:~$ " + AUTO_CMD);
+      typed = "";
+      go("desktop", SHELL_AUTO_MS + AUTO_CMD.length * AUTO_KEY_MS);
     } else {
       return;
     }
   }
 }
 
+/** The visitor did something. Stops the autopilot, and drops whatever it was
+    half-way through typing so the line does not read as the visitor's. */
+export function demoTouched() {
+  if (touched) return;
+  tick();
+  touched = true;
+  if (stage === "shell") typed = "";
+}
+
 export function demoPower(action: "click" | "hold" | "reset" | "wake") {
+  demoTouched();
   tick();
   if (action === "hold") {
     go("off");
@@ -262,6 +324,7 @@ export function demoPower(action: "click" | "hold" | "reset" | "wake") {
 /** Which image is in the drive, by name - that is all the console tells us. */
 /** Fall over, in whatever way this guest falls over. */
 export function demoCrash() {
+  demoTouched();
   tick();
   if (guest !== "none" && stage !== "crash" && stage !== "off") {
     go("crash");
@@ -284,8 +347,19 @@ function guestFor(name: string): Guest {
 /** What the target would see: the chosen image, but only while virtual media is
     switched on. With it off there is no drive at all, whatever is selected. */
 export function demoMountMedia(name: string, isExposed: boolean) {
+  /* Only a change counts as a visitor: the console writes the settings back as
+     it polls, and the autopilot must not read its own insertion as a hand on
+     the wheel. */
+  if (name !== chosen || isExposed !== exposed) demoTouched();
+  chosen = name;
   exposed = isExposed;
   inserted = isExposed ? name : "";
+}
+
+/** The drive as the console should show it - the demo may have loaded it. */
+export function demoMedia(): { image: string; exposed: boolean } {
+  tick();
+  return { image: chosen, exposed };
 }
 
 /*
@@ -375,6 +449,7 @@ function launcherKeys(mod: number, usages: number[]) {
 }
 
 export function demoKeys(mod: number, usages: number[]) {
+  if (usages.some(Boolean)) demoTouched();
   tick();
   if (stage === "desktop" && guest === "halfos") {
     return launcherKeys(mod, usages);

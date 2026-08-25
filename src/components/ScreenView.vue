@@ -666,7 +666,18 @@ function startDemoScreen() {
   }));
   const target = { x: W / 2, y: H / 2 };
   const cur = { x: W / 2, y: H / 2 };
+  /* Where the drawn arrow is. It is not `cur`: handing control back (Esc) leaves
+     the target's own pointer standing where it was, the way a real machine does,
+     while the picture behind it carries on moving. */
+  const pointerAt = { x: W / 2, y: H / 2 };
+  /* Whether the visitor has ever driven. Before that there is no pointer to
+     draw, and an arrow parked in the middle of the screen looks broken. */
+  let everPointed = false;
   let hasPointer = false;
+  /* When the pointer last actually moved. A hand that has gone still is not a
+     shepherd, so the flock stops following it and goes back to the grass. */
+  let movedAt = -1e9;
+  const STILL_MS = 4000;
   let clickT = -1e9;
   const PULSE = 520;
 
@@ -694,6 +705,7 @@ function startDemoScreen() {
     if (!props.engaged) return;
     const p = toCanvas(e);
     if (!p) return;
+    if (Math.hypot(p.x - target.x, p.y - target.y) > 1) movedAt = performance.now();
     target.x = p.x;
     target.y = p.y;
     hasPointer = true;
@@ -762,22 +774,29 @@ function startDemoScreen() {
        picture guest draws it - not just the constellation. */
     if (!props.engaged) hasPointer = false;
     const driving = props.engaged && hasPointer;
+    /* The scene's focus eases along whatever it is given - the visitor's hand
+       while they drive, its own wandering when they do not. */
+    cur.x += (target.x - cur.x) * 0.18;
+    cur.y += (target.y - cur.y) * 0.18;
     if (driving) {
-      cur.x += (target.x - cur.x) * 0.18;
-      cur.y += (target.y - cur.y) * 0.18;
+      pointerAt.x = cur.x;
+      pointerAt.y = cur.y;
+      everPointed = true;
     }
     /* The picture guests are redrawn every frame. */
     const scene = demoScene();
     if (scene === "hills") {
-      /* The flock only has a shepherd once the visitor is actually driving. */
-      drawHills(c, W, H, t, dt, driving ? cur : null);
-      if (driving) drawCursor(c, cur.x, cur.y);
+      /* The flock only has a shepherd once the visitor is actually driving, and
+         only while the hand keeps moving. */
+      const shepherd = driving && t - movedAt < STILL_MS ? cur : null;
+      drawHills(c, W, H, t, dt, shepherd);
+      if (everPointed) drawCursor(c, pointerAt.x, pointerAt.y);
       demoRAF = requestAnimationFrame(draw);
       return;
     }
     if (scene === "mac") {
       drawMac(c, W, H, demoSceneMs(), driving ? cur : null);
-      if (driving) drawCursor(c, cur.x, cur.y);
+      if (everPointed) drawCursor(c, pointerAt.x, pointerAt.y);
       demoRAF = requestAnimationFrame(draw);
       return;
     }
@@ -834,7 +853,7 @@ function startDemoScreen() {
     const launcher = demoLauncher();
     drawHalfBar(c, W, !launcher);
     if (launcher) drawLauncher(c, W, H, launcher);
-    if (driving) drawCursor(c, cur.x, cur.y);
+    if (everPointed) drawCursor(c, pointerAt.x, pointerAt.y);
 
     demoRAF = requestAnimationFrame(draw);
   };

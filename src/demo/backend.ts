@@ -22,6 +22,7 @@ import {
   demoKeys,
   demoLauncher,
   demoMachine,
+  demoMedia,
   demoMountMedia,
   demoPower,
   demoScene,
@@ -36,6 +37,16 @@ let settings: Json = { ...(settingsFixture as Json) };
 
 /* The card's contents, so an uploaded image joins the list. */
 let images: Json = { ...(storageImages as Json) };
+
+/* A visitor who does nothing gets an image loaded for them, and that happens
+   inside the machine. Bring the console's own idea of the drive back in step, or
+   Media would show "ejected" while the screen is plainly booting something. */
+function syncMedia() {
+  const m = demoMedia();
+  if (settings.msc_image === m.image && Boolean(settings.msc_enable) === m.exposed) return;
+  settings = { ...settings, msc_image: m.image, msc_enable: m.exposed };
+  images = { ...images, active: m.image };
+}
 
 /* Whether the demo is serving an "operator" certificate, so the TLS panel can be
    tried out (install flips it on, revert flips it off). No real restart happens. */
@@ -191,6 +202,7 @@ async function route(
       case "/api/v1/pins":
         return json(pins);
       case "/api/v1/settings":
+        syncMedia();
         return json(settings);
       case "/api/v1/settings/schema":
         return json(schema);
@@ -199,6 +211,7 @@ async function route(
       case "/api/v1/video/status":
         return json(liveStatus());
       case "/api/v1/storage/images":
+        syncMedia();
         return json(images);
       case "/api/v1/system/usbprobe":
         return json(usbprobe);
