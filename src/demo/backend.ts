@@ -18,6 +18,7 @@ import storageImages from "./fixtures/storage-images.json";
 import usbprobe from "./fixtures/usbprobe.json";
 import authSession from "./fixtures/auth-session.json";
 import {
+  demoAsk,
   demoCrash,
   demoKeys,
   demoLauncher,
@@ -416,6 +417,11 @@ class DemoSocket extends EventTarget {
     );
     if (b.length >= 8 && b[0] === 0x03) {
       demoKeys(b[1], Array.from(b.subarray(2, 8)));
+    } else if (b.length >= 1 && b[0] === 0x05) {
+      /* Release all - sent when control is handed back. The machine tracks what
+         is held to tell a press from a key that simply has not been let go, so
+         it has to hear about this too. */
+      demoKeys(0, []);
     }
   }
   close(): void {
@@ -456,6 +462,7 @@ export function installDemoBackend(): void {
     __espkvmDemoCrash?: unknown;
     __espkvmDemoPower?: unknown;
     __espkvmDemoLauncher?: unknown;
+    __espkvmDemoAsk?: unknown;
   };
   w.__espkvmDemoScreen = demoScreenText;
   w.__espkvmDemoScene = demoScene;
@@ -465,6 +472,9 @@ export function installDemoBackend(): void {
   w.__espkvmDemoCrash = demoCrash;
   w.__espkvmDemoPower = demoPower;
   w.__espkvmDemoLauncher = demoLauncher;
+  /* Which control the visitor is being asked for. The console points at it - a
+     newcomer cannot find "Media" or "Select" from a sentence alone. */
+  w.__espkvmDemoAsk = demoAsk;
 
   window.XMLHttpRequest = DemoXhr as unknown as typeof XMLHttpRequest;
 

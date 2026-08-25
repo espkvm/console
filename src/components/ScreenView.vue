@@ -785,6 +785,15 @@ function startDemoScreen() {
     }
     /* The picture guests are redrawn every frame. */
     const scene = demoScene();
+    if (scene === "off") {
+      /* Powered off: the same nothing a KVM shows when the target stops
+         driving the cable. The status bar says "No signal" beside it. */
+      c.fillStyle = "#000";
+      c.fillRect(0, 0, W, H);
+      lastText = "";
+      demoRAF = requestAnimationFrame(draw);
+      return;
+    }
     if (scene === "hills") {
       /* The flock only has a shepherd once the visitor is actually driving, and
          only while the hand keeps moving. */

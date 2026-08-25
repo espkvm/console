@@ -30,9 +30,15 @@ export interface RestartNote {
  * seconds after that. These are expectations, not promises - the console still
  * believes the device over the clock, and only uses these to say whether what
  * is happening is what usually happens.
+ *
+ * Both were too short and cried "longer than usual" on ordinary updates (#22):
+ * writing and verifying an image takes past forty seconds on a real board, not
+ * twelve, and coming back takes a few seconds more than twenty. An expectation
+ * that is beaten every time teaches people to ignore the one warning that
+ * matters, so these are set past what a healthy device takes.
  */
-export const EXPECTED_RESTART_MS = 20_000;
-export const EXPECTED_WRITE_MS = 12_000;
+export const EXPECTED_RESTART_MS = 28_000;
+export const EXPECTED_WRITE_MS = 55_000;
 
 export function rememberRestart(note: RestartNote) {
   try {

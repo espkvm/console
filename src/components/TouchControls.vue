@@ -9,9 +9,10 @@
  * uses (see layouts.ts), so what the target types matches its own layout. The
  * field never keeps its text - every input is intercepted and re-sent as HID.
  */
-import { ref } from "vue";
+import { onUnmounted, ref } from "vue";
 
 import { charToHid } from "../layouts";
+import { usageForCode } from "../input/keymap";
 import type { Control } from "../input/control";
 
 const props = defineProps<{ control: Control; layout: string }>();
@@ -75,6 +76,53 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+/*
+ * A pad for the keys a phone keyboard does not have.
+ *
+ * Arrows are the reason it exists - no soft keyboard offers them, and a BIOS
+ * menu or a boot list is unusable without them - and Esc, Tab and Enter come
+ * along because they are missing for the same reason and wanted in the same
+ * places. Held down, a key repeats, the way it would on a real keyboard: a long
+ * list is no fun one tap at a time.
+ */
+const PAD_REPEAT_DELAY_MS = 400;
+const PAD_REPEAT_MS = 90;
+
+/* `area` places each key in the grid below; the arrows keep the shape they have
+   on a keyboard so a thumb finds them without reading. */
+const PAD_KEYS = [
+  { code: "Escape", text: "Esc", label: "Escape", area: "esc" },
+  { code: "ArrowUp", text: "\u2191", label: "Arrow up", area: "up" },
+  { code: "Tab", text: "Tab", label: "Tab", area: "tab" },
+  { code: "ArrowLeft", text: "\u2190", label: "Arrow left", area: "left" },
+  { code: "ArrowDown", text: "\u2193", label: "Arrow down", area: "down" },
+  { code: "ArrowRight", text: "\u2192", label: "Arrow right", area: "right" },
+  { code: "Enter", text: "Enter", label: "Enter", area: "enter" },
+];
+
+const padOpen = ref(false);
+let repeatTimer = 0;
+let repeatInterval = 0;
+
+function padPress(code: string) {
+  const hid = usageForCode(code);
+  if (!hid) return;
+  sendKey(hid);
+  padRelease();
+  repeatTimer = window.setTimeout(() => {
+    repeatInterval = window.setInterval(() => sendKey(hid), PAD_REPEAT_MS);
+  }, PAD_REPEAT_DELAY_MS);
+}
+
+function padRelease() {
+  clearTimeout(repeatTimer);
+  clearInterval(repeatInterval);
+  repeatTimer = 0;
+  repeatInterval = 0;
+}
+
+onUnmounted(padRelease);
+
 function toggleKeyboard() {
   if (oskOpen.value) {
     field.value?.blur();
@@ -86,16 +134,46 @@ function toggleKeyboard() {
 
 <template>
   <div class="touch-controls" role="toolbar" aria-label="Touch controls">
-    <button type="button" class="touch-btn" @click="tap(1)">Left</button>
-    <button type="button" class="touch-btn" @click="tap(2)">Right</button>
-    <button
-      type="button"
-      class="touch-btn"
-      :class="{ 'touch-btn-on': oskOpen }"
-      @click="toggleKeyboard"
-    >
-      Keyboard
-    </button>
+    <!-- The pad sits above the row so a thumb on it is nowhere near the
+         buttons that open and close it. -->
+    <div v-if="padOpen" class="touch-pad" role="group" aria-label="Keys">
+      <button
+        v-for="k in PAD_KEYS"
+        :key="k.code"
+        type="button"
+        class="touch-btn touch-pad-btn"
+        :style="{ gridArea: k.area }"
+        :aria-label="k.label"
+        @pointerdown.prevent="padPress(k.code)"
+        @pointerup="padRelease"
+        @pointercancel="padRelease"
+        @pointerleave="padRelease"
+      >
+        {{ k.text }}
+      </button>
+    </div>
+
+    <div class="touch-row">
+      <button type="button" class="touch-btn" @click="tap(1)">Left</button>
+      <button type="button" class="touch-btn" @click="tap(2)">Right</button>
+      <button
+        type="button"
+        class="touch-btn"
+        :class="{ 'touch-btn-on': padOpen }"
+        aria-label="Arrow keys"
+        @click="padOpen = !padOpen"
+      >
+        Keys
+      </button>
+      <button
+        type="button"
+        class="touch-btn"
+        :class="{ 'touch-btn-on': oskOpen }"
+        @click="toggleKeyboard"
+      >
+        Keyboard
+      </button>
+    </div>
 
     <input
       ref="field"
@@ -123,6 +201,8 @@ function toggleKeyboard() {
   bottom: 12px;
   transform: translateX(-50%);
   display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 8px;
   padding: 6px;
   border-radius: 10px;
@@ -130,6 +210,27 @@ function toggleKeyboard() {
   border: 1px solid var(--border);
   box-shadow: var(--shadow-pop, 0 6px 20px rgba(0, 0, 0, 0.4));
   z-index: 5;
+}
+
+.touch-row {
+  display: flex;
+  gap: 8px;
+}
+
+/* Arrows in the shape they have on a keyboard, with the three keys a phone
+   hides around them. */
+.touch-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-areas:
+    "esc up tab"
+    "left down right"
+    "enter enter enter";
+  gap: 6px;
+}
+
+.touch-pad-btn {
+  min-width: 56px;
 }
 
 .touch-btn {

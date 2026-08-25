@@ -167,20 +167,8 @@ async function switchSlot(slot: OtaSlot) {
   switchLost.value = true;
 }
 
-/** The badge is narrow, so the phase gets one short word next to the ring. */
-const badgeText = computed(() => {
-  switch (phase.value) {
-    case "downloading":
-    case "uploading":
-      return `${firmwarePct.value}%`;
-    case "writing":
-      return "flash";
-    case "restarting":
-      return "boot";
-    default:
-      return props.system?.version ?? "";
-  }
-});
+/** The badge carries the version and nothing else - the install has the screen. */
+const badgeText = computed(() => props.system?.version ?? "");
 
 /** One line for the badge tooltip and the button label while an install runs. */
 const statusText = computed(() => {
@@ -376,25 +364,22 @@ async function onFirmwareChosen(e: Event) {
   await sendImage(file, file.name);
 }
 
-/* The badge outline: a filling ring while bytes move, a pulsing full ring while
-   the device works on its own, accent when an update is available, a plain
-   border otherwise. */
-const ringStyle = computed(() => {
-  if (measured.value) {
-    return {
-      background: `conic-gradient(var(--accent) ${firmwarePct.value}%, var(--border) ${firmwarePct.value}%)`,
-    };
-  }
-  if (uploading.value || updateAvailable.value) return { background: "var(--accent)" };
-  return {};
-});
+/* The badge outline: accent when an update is available, a plain border
+   otherwise. It used to carry the install as a filling ring and a pulse, which
+   ran at the same time as the full-screen account of the same install - two
+   things saying one thing, and the moving one made the version underneath hard
+   to read (#22). The screen tells the story; the badge just says which version
+   this is. */
+const ringStyle = computed(() =>
+  updateAvailable.value ? { background: "var(--accent)" } : {},
+);
 </script>
 
 <template>
   <div class="uw" v-if="system">
     <button
       type="button"
-      :class="['uw-badge', { 'uw-working': uploading && !measured }]"
+      class="uw-badge"
       :style="ringStyle"
       :title="uploading ? statusText : updateAvailable ? 'Update available' : 'Firmware'"
       :aria-label="`Firmware ${system.version}${updateAvailable ? ', update available' : ''}`"
@@ -559,7 +544,8 @@ const ringStyle = computed(() => {
               </template>
               <template v-else-if="phase === 'writing'">
                 The image is on the device, which is now writing and verifying it. This takes
-                about half a minute and there is no progress to show for it - keep this page open.
+                the better part of a minute and there is no progress to show for it - keep this
+                page open.
               </template>
               <template v-else-if="phase === 'restarting'">
                 <template v-if="unconfirmed">
@@ -618,18 +604,6 @@ const ringStyle = computed(() => {
   color: var(--text);
   font-size: var(--text-sm);
   line-height: 1.4;
-}
-
-/* The device is working with nothing to report: the ring stays full and
-   breathes, so a long silent phase still looks alive. */
-.uw-working {
-  animation: uw-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes uw-pulse {
-  50% {
-    opacity: 0.45;
-  }
 }
 
 /* The OTA slot list: one row per app slot, its version and state, and the button
@@ -712,7 +686,6 @@ const ringStyle = computed(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .uw-working,
   .progress-sweep {
     animation: none;
   }

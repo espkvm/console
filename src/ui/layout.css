@@ -127,8 +127,32 @@
   touch-action: none;
 }
 
+/* The picture and everything drawn over it. Its own box, so "centred" means
+   centred on the picture even when a pinned panel has taken part of the stage. */
+.stage-view {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
 /* The panel floats over the picture instead of shrinking it: a KVM screen that
-   resizes whenever a panel opens forces the operator to re-find everything. */
+   resizes whenever a panel opens forces the operator to re-find everything.
+   Pinning is the other bargain - on a wide screen there is room for both, and
+   then covering the target is the worse of the two - and it turns the panel from
+   something over the stage into part of it. */
+.stage {
+  display: flex;
+}
+
+.stage-pinned > .panel {
+  position: static;
+  flex: 0 0 auto;
+  /* Beside the rail it belongs to, whichever end of the row that is. */
+  order: -1;
+  box-shadow: none;
+}
+
 .panel {
   position: absolute;
   /* Above the touch controls, which carry a z-index of their own and would
@@ -161,6 +185,12 @@
   right: 0;
   border-right: none;
   border-left: 1px solid var(--border);
+}
+
+/* With the rail on the right the pinned panel belongs beside it, so the row
+   turns around rather than the panel jumping to the far side. */
+.layout-right .stage-pinned {
+  flex-direction: row-reverse;
 }
 
 .panel-head {
@@ -335,6 +365,40 @@
   border-color: var(--accent);
 }
 
+/* Somebody clicked the picture expecting that to take control. Point at the
+   thing that does. */
+.screen-engage-nudge {
+  border-color: var(--accent);
+  animation: engage-nudge 0.55s ease-in-out;
+}
+
+@keyframes engage-nudge {
+  0%, 100% { transform: translateX(-50%) scale(1); }
+  15% { transform: translateX(calc(-50% - 7px)) scale(1.05); }
+  40% { transform: translateX(calc(-50% + 7px)) scale(1.05); }
+  65% { transform: translateX(calc(-50% - 4px)) scale(1.02); }
+  85% { transform: translateX(calc(-50% + 2px)) scale(1); }
+}
+
+/* The demo asks for a control by name; this is the console pointing at it.
+   Slow on purpose - it should read as "over here", not as an alarm. */
+.asking {
+  border-color: var(--accent);
+  animation: asking 1.8s ease-in-out infinite;
+}
+
+@keyframes asking {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-engage-nudge,
+  .asking {
+    animation: none;
+  }
+}
+
 .screen-engage-hint {
   font-size: var(--text-xs);
   color: var(--text-faint);
@@ -386,6 +450,11 @@
 
   .panel {
     width: 100%;
+  }
+
+  /* No room to pin anything beside a panel that is the whole width. */
+  .stage-pinned > .panel {
+    position: absolute;
   }
 
   .rail {

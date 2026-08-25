@@ -46,7 +46,7 @@ function hint(): string {
   if (!exposed) {
     return "Switch Expose virtual media on under Media, choose an image, then press Reset.";
   }
-  if (!chosen) return "Choose an image under Media, then press Reset.";
+  if (!chosen) return "Choose an image under Media - the disc button on the left - then press Reset.";
   return `Press Reset to boot ${chosen}.`;
 }
 let guest: Guest = "none";
@@ -70,7 +70,8 @@ function go(next: Stage, spent?: number) {
     shell = [
       "HalfOS Life 3.0 - the one that exists",
       "",
-      "This screen is text, not a picture. Drag across it to select, and copy.",
+      "This screen is text, not a picture. Turn Select on, bottom right, then drag",
+      "across the words and press Copy.",
       "Type startx for the pointer demo.",
       "",
     ];
@@ -227,7 +228,7 @@ function lines(): string[] {
     } else {
       const left = Math.max(0, Math.ceil((STUCK_AUTO_MS - t) / 1000));
       out.push(`No image has been chosen, so this demo loads one itself in ${left} s.`);
-      out.push("To pick your own: open Media, choose an image, press Reset.");
+      out.push("To pick your own: open Media - the disc button on the left - and press Reset.");
     }
   }
   if (stage === "boot" && guest !== "none") {
@@ -448,16 +449,24 @@ function launcherKeys(mod: number, usages: number[]) {
   }
 }
 
+/* What was down in the report before this one. The console sends the whole set
+   of keys that are held, the way a keyboard does - not one event per press - so
+   somebody typing fast enough to overlap two keys sends the first one again in
+   the next report. Only what is newly down counts as a press. */
+let heldKeys: number[] = [];
+
 export function demoKeys(mod: number, usages: number[]) {
-  if (usages.some(Boolean)) demoTouched();
+  const down = usages.filter(Boolean);
+  const fresh = down.filter((u) => !heldKeys.includes(u));
+  heldKeys = down;
+  if (down.length) demoTouched();
   tick();
   if (stage === "desktop" && guest === "halfos") {
-    return launcherKeys(mod, usages);
+    return launcherKeys(mod, fresh);
   }
   if (stage !== "shell") return;
   const shift = (mod & 0x22) !== 0;
-  for (const u of usages) {
-    if (!u) continue;
+  for (const u of fresh) {
     if (u === 0x28) {
       /* Enter: answer the two commands worth answering, echo the rest. */
       const cmd = typed.trim();
@@ -531,9 +540,23 @@ export function demoScreenText(): DemoScreen | null {
   };
 }
 
-/** What the screen is: characters, or one of the two pictures a guest shows. */
-export function demoScene(): "text" | "particles" | "hills" | "mac" {
+/** What the demo would like the visitor to do next, so the console can point at
+    the control instead of describing it. Nothing once they are under way. */
+export function demoAsk(): "media" | "select" | null {
   tick();
+  if (stage === "stuck") return "media";
+  if (stage === "shell" || stage === "crash") return "select";
+  return null;
+}
+
+/** What the screen is: nothing at all, characters, or one of the pictures. */
+export function demoScene(): "off" | "text" | "particles" | "hills" | "mac" {
+  tick();
+  /* A machine with no power has no picture. Saying so matters: without it the
+     drawing fell through to the constellation, so a target that had just been
+     shut down looked like a running desktop - and Reset, which does nothing to
+     a machine that is already off, looked broken. Reported by DaveDavenport. */
+  if (stage === "off") return "off";
   if (stage === "desktop") {
     return guest === "xp" ? "hills" : guest === "mac" ? "mac" : "particles";
   }

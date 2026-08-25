@@ -4,7 +4,7 @@
  * doing, a rail of panels that slide over the picture rather than displacing
  * it, and the target's screen filling everything else.
  */
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import Icon from "./components/Icon.vue";
 import InputPanel from "./components/InputPanel.vue";
@@ -17,7 +17,9 @@ import ScreenView from "./components/ScreenView.vue";
 import DiagWidget from "./components/DiagWidget.vue";
 import OsWidget from "./components/OsWidget.vue";
 import MediaPanel from "./components/MediaPanel.vue";
+import PowerWidget from "./components/PowerWidget.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
+import VideoWidget from "./components/VideoWidget.vue";
 import ToastHost from "./components/ToastHost.vue";
 import TouchControls from "./components/TouchControls.vue";
 import UpdateWidget from "./components/UpdateWidget.vue";
@@ -43,23 +45,17 @@ import {
   type StorageInfo,
   saveSettings,
   restartDevice,
-  wakeTarget,
-  powerClick,
-  powerHold,
-  powerReset,
   type UsbProbe,
   Unauthorized,
 } from "./state/device";
 import { loadSession, type SessionState } from "./state/auth";
 import { toast } from "./state/toasts";
 
-type PanelId = "video" | "input" | "media" | "power" | "settings" | null;
+type PanelId = "input" | "media" | "settings" | null;
 
 const PANEL_TITLES: Record<string, string> = {
-  video: "Video",
   input: "Input",
   media: "Virtual media",
-  power: "Power",
   settings: "Settings",
 };
 
@@ -75,49 +71,8 @@ const firmwareChanged = ref(false);
 const usbProbe = ref<UsbProbe | null>(null);
 const storage = ref<StorageInfo | null>(null);
 
-/* Wake-on-LAN: the target MAC is a setting, the button is here. */
+/* Wake-on-LAN: the target MAC is a setting; the button lives in PowerWidget. */
 const wolMac = computed(() => String(values.value.pwr_wol_mac ?? "").trim());
-const waking = ref(false);
-async function wake() {
-  waking.value = true;
-  try {
-    await wakeTarget();
-    toast.info("Wake-on-LAN packet sent");
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
-  } finally {
-    waking.value = false;
-  }
-}
-
-/* ATX power control. The device holds each button pulse itself, so these calls
- * return at once; the destructive ones confirm first, matching the rest of the
- * console. Power state, when a LED is sensed, comes from system/info. */
-const atxBusy = ref(false);
-const atxKnown = computed(() => Boolean(system.value?.atx?.known));
-const atxOn = computed(() => Boolean(system.value?.atx?.on));
-async function atxAction(run: () => Promise<void>, ok: string) {
-  atxBusy.value = true;
-  try {
-    await run();
-    toast.info(ok);
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
-  } finally {
-    atxBusy.value = false;
-  }
-}
-function atxPower() {
-  atxAction(powerClick, "Power button pressed");
-}
-function atxForceOff() {
-  if (!confirm("Hold the power button to force the target off? Unsaved work is lost.")) return;
-  atxAction(powerHold, "Holding power button (force off)");
-}
-function atxReset() {
-  if (!confirm("Press the reset button on the target?")) return;
-  atxAction(powerReset, "Reset button pressed");
-}
 const ready = ref(false);
 const loadError = ref<string | null>(null);
 const session = ref<SessionState | null>(null);
@@ -602,6 +557,15 @@ async function startConsole() {
   };
   void tick();
 
+  if (DEMO) {
+    clearInterval(demoAskId);
+    demoAskId = window.setInterval(() => {
+      const ask = (window as unknown as { __espkvmDemoAsk?: () => "media" | "select" | null })
+        .__espkvmDemoAsk;
+      demoAsk.value = ask ? ask() : null;
+    }, 700);
+  }
+
   /* System figures change slowly - temperature, uptime, free memory - but they
      do change, and a page left open for an hour showing the values it loaded
      with is worse than showing none. */
@@ -659,6 +623,8 @@ async function onPasswordChanged() {
 onUnmounted(() => {
   clearTimeout(pollId);
   clearInterval(systemPollId);
+  clearInterval(demoAskId);
+  clearTimeout(engageNudgeId);
   window.removeEventListener("keydown", onGlobalKey);
 });
 
@@ -690,11 +656,63 @@ function onEngage(e: PointerEvent) {
   input.engageFromPointer(e);
 }
 
-function formatRate(kbps: number): string {
-  if (kbps <= 0) return "idle";
-  if (kbps < 1000) return `${kbps} kbit/s`;
-  return `${(kbps / 1000).toFixed(1)} Mbit/s`;
+/* Clicking the picture does not take control - the first click would land on
+   the target before you had it - so the invitation is a button. People click the
+   picture anyway and nothing happens, which reads as broken; wave the button at
+   them instead. */
+/*
+ * A pinned panel takes its space from the picture instead of covering it. Off by
+ * default, because a picture that resizes whenever a panel opens makes you find
+ * everything again; on a wide screen there is room for both, and then covering
+ * the target is the worse of the two. Remembered per browser - it depends on the
+ * window, not on the device - and ignored on a phone, where the panel is the
+ * whole width and there would be nothing left to pin it beside.
+ */
+const PIN_KEY = "espkvm:panel-pinned";
+const panelPinned = ref(false);
+try {
+  panelPinned.value = localStorage.getItem(PIN_KEY) === "1";
+} catch {
+  /* private window: it simply starts unpinned every time */
 }
+watch(panelPinned, (on) => {
+  try {
+    localStorage.setItem(PIN_KEY, on ? "1" : "0");
+  } catch {
+    /* nothing to remember it with */
+  }
+});
+
+const engageNudge = ref(false);
+let engageNudgeId = 0;
+
+function nudgeEngage(e: PointerEvent) {
+  if (engaged.value || paused.value || touchMode.value || heldByOther.value) return;
+  if (selectingText.value) return;
+  const t = e.target as HTMLElement | null;
+  /* Only the picture: not the panels, and not the invitation itself. */
+  if (t?.closest(".panel, .screen-engage, .screen-notice, .touch-controls")) return;
+  clearTimeout(engageNudgeId);
+  /* Off and on again so a second click restarts the animation. Through nextTick
+     rather than a frame: a browser that is not painting this tab would hold a
+     frame callback forever, and the click still deserves an answer. */
+  engageNudge.value = false;
+  void nextTick(() => {
+    engageNudge.value = true;
+    engageNudgeId = window.setTimeout(() => (engageNudge.value = false), 900);
+  });
+}
+
+/* Demo build only: the fake machine says which control it is waiting for, and
+   that control glows until it is used. Knowing where "Media" lives is obvious
+   to us and to nobody arriving from a link. Tree-shaken out of the firmware. */
+const DEMO = import.meta.env.MODE === "demo";
+const demoAsk = ref<"media" | "select" | null>(null);
+let demoAskId = 0;
+const askingMedia = computed(() => DEMO && demoAsk.value === "media" && panel.value !== "media");
+const askingSelect = computed(
+  () => DEMO && demoAsk.value === "select" && !selectingText.value && textModeLikely.value,
+);
 
 async function toggleFullscreen() {
   try {
@@ -835,32 +853,12 @@ const LED_BITS: Array<[number, string]> = [
         </g>
       </svg>
 
+      <!-- Whether the device answers at all, then what its picture is doing. -->
       <span class="stat">
-        <span
-          :class="['dot', online ? (status!.signal ? 'dot-ok' : 'dot-warn') : 'dot-bad']"
-        />
-        {{ online ? (status!.signal ? "Online" : "No signal") : "Unreachable" }}
+        <span :class="['dot', online ? 'dot-ok' : 'dot-bad']" />
+        {{ online ? "Online" : "Unreachable" }}
       </span>
-
-      <template v-if="online && status!.signal">
-        <span class="stat mono">{{ status!.width }}x{{ status!.height }}</span>
-        <span class="stat mono hide-narrow" title="Codec and published frame rate">
-          {{ codec }} {{ status!.fps.toFixed(1) }} fps
-        </span>
-        <span class="stat mono hide-narrow" title="Encoded frames skipped as unchanged">
-          {{ status!.skippedFps.toFixed(0) }} skipped
-        </span>
-        <span class="stat mono hide-narrow" title="Outgoing video bitrate">
-          {{ formatRate(status!.kbps) }}
-        </span>
-        <span
-          v-if="status!.encoderBusyPct >= 90"
-          class="stat mono warn hide-narrow"
-          title="The encoder has no headroom left; lower the frame rate limit or the resolution"
-        >
-          encoder {{ status!.encoderBusyPct }}%
-        </span>
-      </template>
+      <VideoWidget v-if="online" :status="status" :codec="codec" />
 
       <span class="statusbar-spacer" />
 
@@ -880,14 +878,6 @@ const LED_BITS: Array<[number, string]> = [
       <nav class="rail" aria-label="Panels">
         <button
           type="button"
-          :class="['rail-btn', { 'rail-btn-active': panel === 'video' }]"
-          aria-label="Video"
-          @click="togglePanel('video')"
-        >
-          <Icon name="screen" :size="18" />
-        </button>
-        <button
-          type="button"
           :class="['rail-btn', { 'rail-btn-active': panel === 'input' }]"
           aria-label="Input"
           @click="togglePanel('input')"
@@ -896,7 +886,7 @@ const LED_BITS: Array<[number, string]> = [
         </button>
         <button
           type="button"
-          :class="['rail-btn', { 'rail-btn-active': panel === 'media' }]"
+          :class="['rail-btn', { 'rail-btn-active': panel === 'media', asking: askingMedia }]"
           aria-label="Virtual media"
           :disabled="!caps.msc?.available"
           :title="caps.msc?.reason ?? 'Virtual media'"
@@ -904,17 +894,13 @@ const LED_BITS: Array<[number, string]> = [
         >
           <Icon name="disc" :size="18" />
         </button>
-        <button
-          type="button"
-          :class="['rail-btn', { 'rail-btn-active': panel === 'power' }]"
-          aria-label="Power"
-          :disabled="!(caps.wol?.available || caps.atx?.active)"
-          :title="caps.wol?.available || caps.atx?.active ? 'Power' : 'Power control is off'"
-          @click="togglePanel('power')"
-        >
-          <Icon name="power" :size="18" />
-        </button>
         <div class="rail-spacer" />
+        <PowerWidget
+          :caps="caps"
+          :atx="system?.atx ?? null"
+          :wol-mac="wolMac"
+          :side="uiRight ? 'right' : 'left'"
+        />
         <OsWidget
           :probe="usbProbe"
           :attached="input.target.value.attached"
@@ -931,50 +917,71 @@ const LED_BITS: Array<[number, string]> = [
         </button>
       </nav>
 
-      <main class="stage" :class="{ 'stage-touch': touchMode }">
-        <ScreenView
-          :status="status"
-          :engaged="engaged"
-          :engage-mode="engageMode"
-          :fit="fit"
-          :paused="paused || updateHoldsStream"
-          :text-layer="selectingText ? screenText : null"
-          :pause-note="
-            updateHoldsStream
-              ? 'The picture is back the moment the update is done - it gives up its connection so the image gets the device to itself.'
-              : ''
-          "
-          @surface="surface = $event"
-        />
+      <main
+        class="stage"
+        :class="{ 'stage-touch': touchMode, 'stage-pinned': panelPinned }"
+        @pointerdown="nudgeEngage"
+      >
+        <div class="stage-view">
+          <ScreenView
+            :status="status"
+            :engaged="engaged"
+            :engage-mode="engageMode"
+            :fit="fit"
+            :paused="paused || updateHoldsStream"
+            :text-layer="selectingText ? screenText : null"
+            :pause-note="
+              updateHoldsStream
+                ? 'The picture is back the moment the update is done - it gives up its connection so the image gets the device to itself.'
+                : ''
+            "
+            @surface="surface = $event"
+          />
 
-        <button
-          v-if="!engaged && !paused && !touchMode && !heldByOther && !selectingText"
-          type="button"
-          class="screen-engage"
-          @pointerdown="onEngage($event)"
-        >
-          {{
-            engageMode === "hover"
-              ? "Pointer follows the mouse. Click to send keystrokes."
-              : "Click to control the target"
-          }}
-          <span class="screen-engage-hint">Esc gives control back</span>
-        </button>
+          <button
+            v-if="!engaged && !paused && !touchMode && !heldByOther && !selectingText"
+            type="button"
+            :class="['screen-engage', { 'screen-engage-nudge': engageNudge }]"
+            @pointerdown="onEngage($event)"
+          >
+            {{
+              engageMode === "hover"
+                ? "Pointer follows the mouse. Click to send keystrokes."
+                : "Click to control the target"
+            }}
+            <span class="screen-engage-hint">Esc gives control back</span>
+          </button>
 
-        <div v-if="heldByOther && !paused" class="screen-notice">
-          <p>Another session is in control of this target.</p>
-          <button type="button" class="btn" @click="takeControl">Take control</button>
+          <div v-if="heldByOther && !paused" class="screen-notice">
+            <p>Another session is in control of this target.</p>
+            <button type="button" class="btn" @click="takeControl">Take control</button>
+          </div>
+
+          <TouchControls
+            v-if="touchMode && !paused && !heldByOther"
+            :control="input.control"
+            :layout="layout"
+          />
         </div>
-
-        <TouchControls
-          v-if="touchMode && !paused && !heldByOther"
-          :control="input.control"
-          :layout="layout"
-        />
 
         <aside v-if="panel" class="panel" :aria-label="PANEL_TITLES[panel]">
           <header class="panel-head">
             <h2>{{ PANEL_TITLES[panel] }}</h2>
+            <button
+              type="button"
+              class="btn btn-sm btn-icon hide-narrow"
+              :class="{ 'btn-on': panelPinned }"
+              :title="
+                panelPinned
+                  ? 'Let the panel float over the picture again'
+                  : 'Keep the panel open beside the picture instead of over it'
+              "
+              :aria-label="panelPinned ? 'Unpin the panel' : 'Pin the panel'"
+              :aria-pressed="panelPinned"
+              @click="panelPinned = !panelPinned"
+            >
+              <Icon name="pin" :size="15" />
+            </button>
             <button type="button" class="btn btn-sm" @click="panel = null">Close</button>
           </header>
           <div class="panel-body">
@@ -989,53 +996,6 @@ const LED_BITS: Array<[number, string]> = [
               @password-changed="onPasswordChanged"
             />
 
-            <dl v-else-if="panel === 'video' && status" class="facts">
-              <div class="fact">
-                <dt>Signal</dt>
-                <dd class="mono">{{ status.signal ? "locked" : "absent" }}</dd>
-              </div>
-              <div class="fact">
-                <dt>Mode</dt>
-                <dd class="mono">
-                  {{ status.width }}x{{ status.height }}{{ status.interlaced ? "i" : "p" }}
-                </dd>
-              </div>
-              <div class="fact">
-                <dt>Published</dt>
-                <dd class="mono">{{ status.fps.toFixed(2) }} fps</dd>
-              </div>
-              <div class="fact">
-                <dt>Skipped as unchanged</dt>
-                <dd class="mono">{{ status.skippedFps.toFixed(2) }} fps</dd>
-              </div>
-              <div class="fact">
-                <dt>Bitrate</dt>
-                <dd class="mono">{{ formatRate(status.kbps) }}</dd>
-              </div>
-              <div class="fact">
-                <dt title="Share of wall clock the encoder was busy">Encoder load</dt>
-                <dd class="mono" :class="{ warn: status.encoderBusyPct >= 90 }">
-                  {{ status.encoderBusyPct }}%
-                </dd>
-              </div>
-              <div class="fact">
-                <dt title="Mean time one frame took to encode">Encode time</dt>
-                <dd class="mono">{{ (status.encodeUs / 1000).toFixed(1) }} ms</dd>
-              </div>
-              <div class="fact">
-                <dt>Mode changes</dt>
-                <dd class="mono">{{ status.modeChanges }}</dd>
-              </div>
-              <div class="fact">
-                <dt>Viewers</dt>
-                <dd class="mono">{{ status.viewers }}</dd>
-              </div>
-              <div class="fact">
-                <dt>Bridge SYS_STATUS</dt>
-                <dd class="mono">0x{{ status.sysStatus.toString(16) }}</dd>
-              </div>
-            </dl>
-
             <InputPanel
               v-else-if="panel === 'input'"
               :control="input.control"
@@ -1046,58 +1006,6 @@ const LED_BITS: Array<[number, string]> = [
               @values="values = $event"
             />
             <MediaPanel v-else-if="panel === 'media'" :values="values" @values="values = $event" />
-            <div v-else-if="panel === 'power'" class="power-panel">
-              <template v-if="caps.atx?.active">
-                <h3>ATX power</h3>
-                <p class="muted">
-                  <template v-if="atxKnown">
-                    Target power:
-                    <span :class="['pill', atxOn ? 'pill-on' : 'pill-off']">{{
-                      atxOn ? "on" : "off"
-                    }}</span>
-                  </template>
-                  <template v-else>
-                    "Press" the target's front-panel buttons through the wired optocouplers.
-                  </template>
-                </p>
-                <div class="power-buttons">
-                  <button type="button" class="btn btn-sm" :disabled="atxBusy" @click="atxPower">
-                    Power
-                  </button>
-                  <button type="button" class="btn btn-sm" :disabled="atxBusy" @click="atxReset">
-                    Reset
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-danger"
-                    :disabled="atxBusy"
-                    @click="atxForceOff"
-                  >
-                    Force off
-                  </button>
-                </div>
-              </template>
-
-              <template v-if="caps.wol?.available">
-                <h3>Wake on LAN</h3>
-                <p v-if="!wolMac" class="muted">
-                  Set the target's MAC address under Settings &rarr; Power, then wake it from here.
-                </p>
-                <template v-else>
-                  <p class="muted">
-                    Send a magic packet to <span class="mono">{{ wolMac }}</span>. The target must
-                    have Wake-on-LAN enabled and keep standby power.
-                  </p>
-                  <button type="button" class="btn btn-sm" :disabled="waking" @click="wake">
-                    {{ waking ? "Sending..." : "Wake target" }}
-                  </button>
-                </template>
-              </template>
-
-              <p v-if="!caps.atx?.active && !caps.wol?.available" class="muted">
-                {{ caps.atx?.reason ?? "Power control is not available." }}
-              </p>
-            </div>
           </div>
         </aside>
       </main>
@@ -1221,7 +1129,7 @@ const LED_BITS: Array<[number, string]> = [
         <button
           type="button"
           class="btn btn-sm"
-          :class="{ 'btn-on': selectingText }"
+          :class="{ 'btn-on': selectingText, asking: askingSelect }"
           :disabled="!textModeLikely"
           :title="
             textModeLikely
