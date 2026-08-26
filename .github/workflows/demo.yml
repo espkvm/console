@@ -1,0 +1,74 @@
+# The interactive demo, published at demo.espkvm.io.
+#
+# It lives here rather than in espkvm.io because it is this repository's own
+# build: the site used to carry the console as a submodule and build it during
+# its own deploy, which meant the demo only refreshed when the SITE was
+# deployed, and made a static site depend on Node. Here it rebuilds on every
+# console commit, and the site goes back to being pure Python.
+#
+# The demo is one self-contained file (vite-plugin-singlefile inlines
+# everything), so it needs no base path and works at the root of a domain
+# exactly as it did under /demo/.
+name: demo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and let a newer commit win: an older build finishing
+# late must not replace what main says now.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build:demo
+
+      - name: Assemble the page
+        run: |
+          mkdir -p _site
+          cp dist/index.html _site/index.html
+          # The tag goes into the artefact, never into the source - see
+          # demo/analytics.html for why.
+          python3 - <<'PY'
+          from pathlib import Path
+          page = Path("_site/index.html")
+          html = page.read_text()
+          tag = Path("demo/analytics.html").read_text()
+          if "googletagmanager.com" in html:
+              raise SystemExit("the build already carries a tag - it must not")
+          if "<head>" not in html:
+              raise SystemExit("no <head> to put the tag in")
+          page.write_text(html.replace("<head>", "<head>\n" + tag, 1))
+          PY
+          # Pages needs this file in the artefact for the custom domain to stick.
+          echo 'demo.espkvm.io' > _site/CNAME
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

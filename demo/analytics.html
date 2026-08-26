@@ -1,0 +1,16 @@
+<!--
+  The tag for the hosted demo, and only for the hosted demo.
+
+  It is spliced into the built page by the workflow, never imported by the app,
+  so it cannot reach `npm run build` and from there the firmware. That matters:
+  the console is the code the device ships, and a KVM in someone's basement has
+  no business talking to Google. Same arrangement the site used while it hosted
+  the demo itself (espkvm.io tools/add-analytics.py) - moved here with the demo.
+-->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-GMCW6ZNY7D"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-GMCW6ZNY7D');
+</script>
