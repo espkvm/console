@@ -12,6 +12,8 @@ import LoginView from "./components/LoginView.vue";
 import RestartOverlay from "./components/RestartOverlay.vue";
 import { installNoPagePull } from "./input/noPagePull";
 import { installPagePin } from "./input/keepPagePinned";
+import { installKeyboardInset } from "./input/keyboardInset";
+import { ScreenTextStream } from "./screen/textStream";
 import { runRestart, takeRestart } from "./state/restart";
 import ScreenView from "./components/ScreenView.vue";
 import DiagWidget from "./components/DiagWidget.vue";
@@ -34,6 +36,8 @@ import {
   type VideoStatus,
   type ScreenText,
   enumName,
+  enumIndex,
+  settingBlockedReason,
   loadCapabilities,
   loadSchema,
   loadSystemInfo,
@@ -83,7 +87,18 @@ const locked = computed(
 const mustChange = computed(() => Boolean(session.value?.mustChange));
 
 const panel = ref<PanelId>(null);
-const fit = ref<"fit" | "actual">("fit");
+/* Why there is no video at all, in the device's own words - a capture board
+   that never answered, or a pipeline that could not start. Different from "no
+   signal", which means the board is there and the target is quiet. */
+const videoBlocked = computed(() =>
+  caps.value.video && !caps.value.video.available
+    ? (caps.value.video.reason ?? "The capture path did not start.")
+    : null,
+);
+/* How the picture is sized. "fit" shrinks a picture too big for the stage and
+   leaves a smaller one alone; "stretch" fills the stage either way; "actual" is
+   one screen pixel per browser pixel. */
+const fit = ref<"fit" | "stretch" | "actual">("fit");
 const engaged = ref(false);
 
 /*
@@ -101,6 +116,10 @@ const engaged = ref(false);
 const screenText = ref<ScreenText | null>(null);
 const selectingText = ref(false);
 let screenTextPollId = 0;
+let screenTextPollEvery = 0;
+let textStream: ScreenTextStream | null = null;
+/* Whether readings can be pushed to us. False after the socket has refused. */
+let textStreamPushes = true;
 
 /*
  * The device decides, because the device is the one that can read the screen.
@@ -127,17 +146,22 @@ const textModeLikely = computed(() => status.value?.textMode === true);
 const TEXT_MISSES_BEFORE_GIVING_UP = 2;
 let textMisses = 0;
 
-async function refreshScreenText(): Promise<ScreenText | null> {
-  try {
-    screenText.value = await loadScreenText();
-  } catch {
-    screenText.value = null;
-  }
-  if (screenText.value) {
+/* One reading, however it arrived: pushed over the socket or fetched. */
+function applyScreenText(text: ScreenText | null) {
+  screenText.value = text;
+  if (text) {
     textMisses = 0;
   } else if (textView.value && ++textMisses >= TEXT_MISSES_BEFORE_GIVING_UP) {
-    void toggleTextView();
+    leaveTextView();
     toast.info("The screen is a picture again - back to video");
+  }
+}
+
+async function refreshScreenText(): Promise<ScreenText | null> {
+  try {
+    applyScreenText(await loadScreenText());
+  } catch {
+    applyScreenText(null);
   }
   return screenText.value;
 }
@@ -188,15 +212,74 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-/* Both ways of using the text - selecting it and reading it instead of the
-   picture - want it kept current, and neither should stop the other's poll. */
+/*
+ * A key pressed in text mode is somebody walking a menu, and the menu answers
+ * at once - so waiting up to a poll for the highlight to catch up makes the
+ * whole mode feel like it is not listening. Ask for a fresh reading right after
+ * the key instead, with a short wait for the target to repaint.
+ */
+let textNudgeId = 0;
+
+function nudgeScreenText() {
+  if (!textView.value && !selectingText.value) return;
+  window.clearTimeout(textNudgeId);
+  textNudgeId = window.setTimeout(() => void refreshScreenText(), 120);
+}
+
+/*
+ * Both ways of using the text - selecting it and reading it instead of the
+ * picture - want it kept current.
+ *
+ * The device pushes readings over the video socket as it makes them, which is
+ * what makes a menu answer a keypress: no request per reading, and no waiting
+ * for the next tick of a poll. Polling is what happens when that socket will
+ * not open - an older firmware, or a browser that cannot have it - and then the
+ * mode being read instead of the picture polls faster than the layer over it.
+ */
+function stopScreenTextPoll() {
+  if (!screenTextPollId) return;
+  window.clearInterval(screenTextPollId);
+  screenTextPollId = 0;
+  window.removeEventListener("keydown", nudgeScreenText, true);
+}
+
 function keepScreenTextFresh() {
   const wanted = selectingText.value || textView.value;
-  if (wanted && !screenTextPollId) {
-    screenTextPollId = window.setInterval(() => void refreshScreenText(), 2000);
-  } else if (!wanted && screenTextPollId) {
-    window.clearInterval(screenTextPollId);
-    screenTextPollId = 0;
+  if (!wanted) {
+    stopScreenTextPoll();
+    textStream?.stop();
+    textStream = null;
+    /* A socket that failed while the last screen was up says nothing about the
+       next one - a device that restarted, say. Give it another chance. */
+    textStreamPushes = true;
+    return;
+  }
+
+  if (textStreamPushes) {
+    stopScreenTextPoll();
+    if (!textStream) {
+      textStream = new ScreenTextStream({
+        onText: (text) => applyScreenText(text),
+        onGone: () => applyScreenText(null),
+        onUnavailable: () => {
+          textStream?.stop();
+          textStream = null;
+          textStreamPushes = false;
+          keepScreenTextFresh();
+        },
+      });
+    }
+    return;
+  }
+
+  const every = textView.value ? 700 : 2000;
+  if (screenTextPollId && every !== screenTextPollEvery) {
+    stopScreenTextPoll();
+  }
+  if (!screenTextPollId) {
+    screenTextPollEvery = every;
+    screenTextPollId = window.setInterval(() => void refreshScreenText(), every);
+    window.addEventListener("keydown", nudgeScreenText, true);
   }
 }
 
@@ -231,30 +314,148 @@ const textView = ref(false);
    somebody who had paused the picture on purpose should not find it running. */
 let pausedBeforeText = false;
 
-async function toggleTextView() {
-  textMisses = 0;
-  if (textView.value) {
-    textView.value = false;
-    paused.value = pausedBeforeText;
-    keepScreenTextFresh();
-    return;
-  }
+/*
+ * The setting behind it: "characters whenever this screen is made of them".
+ *
+ * A tick rather than a third mode, because it is a standing preference, not a
+ * place to be. The operator says once that a BIOS should arrive as text, and
+ * the view follows the target through a boot: characters at the boot menu,
+ * picture the moment the desktop paints, characters again at the next reboot.
+ * Remembered per browser like the pinned panel - it is how this operator likes
+ * to work, not something about the device.
+ */
+const PREFER_TEXT_KEY = "espkvm:prefer-text";
+const textPreferred = ref(false);
+try {
+  textPreferred.value = localStorage.getItem(PREFER_TEXT_KEY) === "1";
+} catch {
+  /* private window: it simply starts off every time */
+}
+
+function leaveTextView() {
+  if (!textView.value) return;
+  textView.value = false;
+  paused.value = pausedBeforeText;
+  keepScreenTextFresh();
+  watchForTextAgain();
+}
+
+/**
+ * Show the characters, if there are any.
+ *
+ * @param auto true when the view decided by itself rather than being asked. An
+ *   automatic switch stays out of the way of a deliberate pause and says
+ *   nothing when the screen turns out not to be text - that is the normal
+ *   answer on a desktop, not a thing worth a toast every few seconds.
+ */
+async function enterTextView(auto = false): Promise<boolean> {
+  if (textView.value) return true;
+  if (auto && paused.value) return false;
   if (!(await refreshScreenText())) {
-    toast.info("Nothing to show: this screen is not made of text");
-    return;
+    if (!auto) toast.info("Nothing to show: this screen is not made of text");
+    return false;
   }
+  textMisses = 0;
   textView.value = true;
-  /* The saving is the whole point: no video while the text is being read. */
+  /* The saving is the whole point: no video while the text is being read. The
+     encoder only ever starts again when a reading fails. */
   pausedBeforeText = paused.value;
   paused.value = true;
   keepScreenTextFresh();
+  watchForTextAgain();
+  return true;
+}
+
+watch(textPreferred, (on) => {
+  try {
+    localStorage.setItem(PREFER_TEXT_KEY, on ? "1" : "0");
+  } catch {
+    /* nothing to remember it with */
+  }
+  if (on) void enterTextView();
+  else leaveTextView();
+  watchForTextAgain();
+});
+
+/*
+ * Coming back to text once the picture has taken over.
+ *
+ * Leaving is already hysteretic - TEXT_MISSES_BEFORE_GIVING_UP readings in a row
+ * must come back empty - and the return has to match it, or the view would flip
+ * on every screen that sits near the scanner's 90% accept threshold: a boot
+ * splash, a menu drawing a progress bar, a console mid-repaint. Flipping the
+ * VIEW is far more jarring than flipping a transport, so it is worth being slow
+ * about. Two readings three seconds apart means about six seconds of agreement
+ * before the picture gives way, and the same before it comes back.
+ *
+ * Asking costs the device very little on a screen that is holding still: the
+ * scanner reads one settled picture once (`s_done`) and a repeat ask is then
+ * served from what is already on file. A screen that keeps changing pays the
+ * cheap probe - 48 sample cells - which is what rules a desktop out before the
+ * full pass.
+ */
+const TEXT_RETRY_MS = 3000;
+const TEXT_RETRY_MAX_MS = 30000;
+const TEXT_HITS_BEFORE_RETURNING = 2;
+let textHits = 0;
+let textRetryId = 0;
+let textRetryEvery = TEXT_RETRY_MS;
+
+/*
+ * Backed off, because asking is not free the way the reading is.
+ *
+ * `/api/v1/screen/text` waits up to 1.2 s for the first reading of a wide mode
+ * the device was not scanning before, and it holds one of seven HTTPS sockets
+ * while it waits. A desktop left at 1080p would otherwise answer "not text"
+ * every three seconds for hours, for nothing. So the gap grows while the answer
+ * keeps being no and snaps back to three seconds the moment it is yes - which is
+ * the case worth being quick about, since a machine that has just dropped to a
+ * console is about to be read.
+ */
+function watchForTextAgain() {
+  const wanted = textPreferred.value && !textView.value && !selectingText.value;
+  if (textRetryId) {
+    window.clearTimeout(textRetryId);
+    textRetryId = 0;
+  }
+  if (!wanted) {
+    textHits = 0;
+    textRetryEvery = TEXT_RETRY_MS;
+    return;
+  }
+  textRetryId = window.setTimeout(() => {
+    textRetryId = 0;
+    void (async () => {
+      /* The resolution alone can rule it out, and that check costs nothing -
+         it is already in the status this page polls anyway. */
+      if (textModeLikely.value && !paused.value && (await refreshScreenText())) {
+        textRetryEvery = TEXT_RETRY_MS;
+        if (++textHits >= TEXT_HITS_BEFORE_RETURNING) {
+          textHits = 0;
+          if (await enterTextView(true)) return;
+        }
+      } else {
+        textHits = 0;
+        textRetryEvery = Math.min(textRetryEvery * 2, TEXT_RETRY_MAX_MS);
+      }
+      watchForTextAgain();
+    })();
+  }, textRetryEvery);
 }
 
 /* The target left text behind - booted, or changed mode. The layer would then
-   be characters from a screen that is gone, laid over a picture. */
+   be characters from a screen that is gone, laid over a picture. The preference
+   is untouched: the picture is what this screen is, not what the operator asked
+   for, and the next text screen brings the characters back. */
 watch(textModeLikely, (still) => {
   if (!still && selectingText.value) void toggleSelectText();
-  if (!still && textView.value) void toggleTextView();
+  if (!still && textView.value) leaveTextView();
+  if (still) {
+    /* A mode change is news, so it earns a fresh look rather than whatever the
+       back-off had grown to while the last screen was a picture. */
+    textRetryEvery = TEXT_RETRY_MS;
+    watchForTextAgain();
+  }
 });
 const paused = ref(false);
 /* Set while a firmware image is being handed to the device: the stream gives up
@@ -300,6 +501,7 @@ const input = useInput({
   pointerMode,
   invertScroll,
   surface,
+  fit,
   touchActive: touchMode,
   onDisengage: () => (engaged.value = false),
 });
@@ -329,6 +531,39 @@ const codec = computed(
   () => status.value?.codec || enumName(schema.value, values.value, "vid_codec") || "-",
 );
 const online = computed(() => status.value !== null);
+
+/*
+ * H.264 is not on every board, and the device says so rather than the console
+ * guessing: the same reason the settings form gives, in the same words.
+ */
+const h264Blocked = computed(() => {
+  const setting = schema.value.find((entry) => entry.key === "vid_codec");
+  if (!setting) return "this firmware does not offer a codec choice";
+  const blocked = settingBlockedReason(setting, caps.value);
+  if (blocked) return blocked;
+  return setting.choices?.includes("h264") ? null : "this board has no H.264 encoder";
+});
+
+/*
+ * Choosing a codec from the status bar writes the same setting the form does.
+ * Text mode is turned off on the way: it hides the picture, so leaving it on
+ * would make the choice look like it did nothing.
+ */
+async function setCodec(name: "mjpeg" | "h264") {
+  const index = enumIndex(schema.value, "vid_codec", name);
+  if (index === null) return;
+  /*
+   * Picking a codec no longer leaves the text view: the tick is a standing
+   * preference and the codec is what the picture is made of when there is a
+   * picture to show. They are answers to different questions, so choosing one
+   * says nothing about the other.
+   */
+  try {
+    values.value = await saveSettings({ vid_codec: index });
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "the device would not take that codec");
+  }
+}
 
 /* Connection state for the footer icons: what is plugged in and live. "on" is
    lit, "idle" is present-but-inactive (HDMI cable up, no picture), "off" is
@@ -577,6 +812,12 @@ async function startConsole() {
     bootVersion = sys.version;
     reportRestart(sys.version);
     ready.value = true;
+    /* The preference is remembered, so a page opened on a BIOS should arrive as
+       characters rather than after the first six seconds of the retry rhythm. */
+    if (textPreferred.value) {
+      void enterTextView(true);
+    }
+    watchForTextAgain();
   } catch (err) {
     loadError.value = err instanceof Error ? err.message : String(err);
   }
@@ -659,6 +900,7 @@ async function startConsole() {
 onMounted(async () => {
   installNoPagePull();
   installPagePin();
+  installKeyboardInset();
   document.documentElement.dataset.theme = theme.value;
   /* Start in touch mode on a device whose primary pointer is a finger. */
   if (window.matchMedia?.("(pointer: coarse)").matches) touchMode.value = true;
@@ -689,6 +931,11 @@ async function onPasswordChanged() {
 onUnmounted(() => {
   clearTimeout(pollId);
   clearInterval(systemPollId);
+  clearInterval(screenTextPollId);
+  clearTimeout(textRetryId);
+  textStream?.stop();
+  clearTimeout(textNudgeId);
+  window.removeEventListener("keydown", nudgeScreenText, true);
   clearInterval(demoAskId);
   clearTimeout(engageNudgeId);
   window.removeEventListener("keydown", onGlobalKey);
@@ -925,7 +1172,18 @@ const LED_BITS: Array<[number, string]> = [
         <span :class="['dot', online ? 'dot-ok' : 'dot-bad']" />
         {{ online ? "Online" : "Unreachable" }}
       </span>
-      <VideoWidget v-if="online" :status="status" :codec="codec" />
+      <VideoWidget
+        v-if="online"
+        :status="status"
+        :codec="codec"
+        :text-view="textView"
+        :text-preferred="textPreferred"
+        :text-available="textModeLikely"
+        :video-blocked="videoBlocked"
+        :h264-blocked="h264Blocked"
+        @set-codec="setCodec"
+        @prefer-text="textPreferred = $event"
+      />
 
       <span class="statusbar-spacer" />
 
@@ -995,6 +1253,7 @@ const LED_BITS: Array<[number, string]> = [
             :engaged="engaged"
             :engage-mode="engageMode"
             :fit="fit"
+            :video-blocked="videoBlocked"
             :paused="paused || updateHoldsStream"
             :text-layer="selectingText || textView ? screenText : null"
           :text-view="textView"
@@ -1020,7 +1279,12 @@ const LED_BITS: Array<[number, string]> = [
             <span class="screen-engage-hint">Esc gives control back</span>
           </button>
 
-          <div v-if="heldByOther && !paused" class="screen-notice">
+          <!-- Text mode sets `paused` to stop the video, but the keyboard still
+               goes to the target - that is most of what a BIOS needs. So the
+               notice has to survive that pause like the engage button and the
+               touch pad above do, or a text-mode operator whose keys are being
+               dropped is told nothing and has no way to take control back. -->
+          <div v-if="heldByOther && (!paused || textView)" class="screen-notice">
             <p>Another session is in control of this target.</p>
             <button type="button" class="btn" @click="takeControl">Take control</button>
           </div>
@@ -1211,20 +1475,6 @@ const LED_BITS: Array<[number, string]> = [
         <button
           type="button"
           class="btn btn-sm"
-          :class="{ 'btn-on': textView }"
-          :disabled="!textModeLikely"
-          :title="
-            textModeLikely
-              ? 'Read the screen as characters instead of video - a couple of kilobytes a screen, for a link that will not carry a picture'
-              : 'The target is not showing a text screen'
-          "
-          @click="toggleTextView()"
-        >
-          Text
-        </button>
-        <button
-          type="button"
-          class="btn btn-sm"
           :disabled="!textModeLikely"
           :title="
             textModeLikely
@@ -1238,9 +1488,16 @@ const LED_BITS: Array<[number, string]> = [
         <button
           type="button"
           class="btn btn-sm"
-          @click="fit = fit === 'fit' ? 'actual' : 'fit'"
+          :title="
+            fit === 'fit'
+              ? 'Shrink a picture bigger than the window; leave a smaller one alone'
+              : fit === 'stretch'
+                ? 'Fill the window, whatever the picture measures'
+                : 'One screen pixel per browser pixel'
+          "
+          @click="fit = fit === 'fit' ? 'stretch' : fit === 'stretch' ? 'actual' : 'fit'"
         >
-          {{ fit === "fit" ? "Fit" : "1:1" }}
+          {{ fit === "fit" ? "Fit" : fit === "stretch" ? "Stretch" : "1:1" }}
         </button>
         <button
           type="button"

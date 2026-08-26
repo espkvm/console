@@ -9,6 +9,16 @@
  * guess made in the UI.
  */
 
+/*
+ * The header the device wants on anything that changes something.
+ *
+ * Its session lives in a cookie, and a cookie alone cannot say whether the
+ * operator meant a request or another site did. A page elsewhere cannot add a
+ * header of its own without permission the device never grants, so this is what
+ * tells the two apart. See KVM_CONSOLE_HEADER in the firmware.
+ */
+export const CONSOLE_HEADER = { "X-ESP-KVM": "1" } as const;
+
 export type SettingType = "bool" | "int" | "enum" | "string";
 
 export interface Setting {
@@ -334,7 +344,7 @@ export async function loadScreenText(): Promise<ScreenText | null> {
 export async function saveSettings(patch: Values): Promise<Values> {
   const res = await fetch(SETTINGS_URL, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...CONSOLE_HEADER, "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   });
   if (res.status === 401) throw new Unauthorized();
@@ -346,7 +356,7 @@ export async function saveSettings(patch: Values): Promise<Values> {
 }
 
 export async function resetSettings(): Promise<Values> {
-  const res = await fetch(`${SETTINGS_URL}/reset`, { method: "POST" });
+  const res = await fetch(`${SETTINGS_URL}/reset`, { method: "POST", headers: CONSOLE_HEADER });
   if (!res.ok) throw new Error(`reset failed (${res.status})`);
   return (await res.json()) as Values;
 }
@@ -356,7 +366,7 @@ export async function resetSettings(): Promise<Values> {
  * setting; the device sends the packet from its own network interface.
  */
 export async function wakeTarget(): Promise<void> {
-  const res = await fetch("/api/v1/power/wake", { method: "POST" });
+  const res = await fetch("/api/v1/power/wake", { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
   if (!res.ok) throw new Error(await errorFromResponse(res, `wake failed (${res.status})`));
 }
@@ -368,7 +378,7 @@ export async function wakeTarget(): Promise<void> {
  * five-second hard off, `reset` taps the reset button.
  */
 async function powerAction(action: "click" | "hold" | "reset"): Promise<void> {
-  const res = await fetch(`/api/v1/power/${action}`, { method: "POST" });
+  const res = await fetch(`/api/v1/power/${action}`, { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
   if (!res.ok) throw new Error(await errorFromResponse(res, `power ${action} failed (${res.status})`));
 }
@@ -379,7 +389,7 @@ export const powerReset = () => powerAction("reset");
 
 /** Reboot the device itself (not the target). It drops off the network briefly. */
 export async function restartDevice(): Promise<void> {
-  const res = await fetch("/api/v1/system/restart", { method: "POST" });
+  const res = await fetch("/api/v1/system/restart", { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
   if (!res.ok) throw new Error(`restart failed (${res.status})`);
 }
@@ -392,7 +402,7 @@ export async function restartDevice(): Promise<void> {
 export async function switchBootSlot(label: string): Promise<void> {
   const res = await fetch("/api/v1/system/boot-slot", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...CONSOLE_HEADER, "Content-Type": "application/json" },
     body: JSON.stringify({ label }),
   });
   if (res.status === 401) throw new Unauthorized();
@@ -420,7 +430,7 @@ export async function getTlsStatus(): Promise<TlsStatus> {
 export async function installCert(pem: string): Promise<void> {
   const res = await fetch("/api/v1/tls/cert", {
     method: "PUT",
-    headers: { "Content-Type": "application/x-pem-file" },
+    headers: { ...CONSOLE_HEADER, "Content-Type": "application/x-pem-file" },
     body: pem,
   });
   if (res.status === 401) throw new Unauthorized();
@@ -429,7 +439,7 @@ export async function installCert(pem: string): Promise<void> {
 
 /** Remove the operator certificate and revert to the self-signed one; restarts. */
 export async function revertCert(): Promise<void> {
-  const res = await fetch("/api/v1/tls/cert", { method: "DELETE" });
+  const res = await fetch("/api/v1/tls/cert", { method: "DELETE", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
   if (!res.ok) throw new Error(await errorFromResponse(res, `revert failed (${res.status})`));
 }
@@ -468,6 +478,7 @@ export function uploadFirmware(
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/v1/system/update");
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.setRequestHeader("X-ESP-KVM", "1");
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
     };
@@ -703,6 +714,7 @@ export function uploadImage(file: File, onProgress?: (p: UploadProgress) => void
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/v1/storage/upload?name=${encodeURIComponent(file.name)}`);
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.setRequestHeader("X-ESP-KVM", "1");
     trackUpload(xhr, onProgress);
     xhr.onload = () => {
       if (xhr.status === 401) return reject(new Unauthorized());
@@ -725,6 +737,7 @@ export function uploadRescue(file: File, onProgress?: (p: UploadProgress) => voi
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/v1/storage/rescue");
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.setRequestHeader("X-ESP-KVM", "1");
     trackUpload(xhr, onProgress);
     xhr.onload = () => {
       if (xhr.status === 401) return reject(new Unauthorized());
@@ -745,6 +758,7 @@ export function uploadRescue(file: File, onProgress?: (p: UploadProgress) => voi
 export async function deleteImage(name: string): Promise<StorageInfo> {
   const res = await fetch(`/api/v1/storage/delete?name=${encodeURIComponent(name)}`, {
     method: "POST",
+    headers: CONSOLE_HEADER,
   });
   if (res.status === 401) throw new Unauthorized();
   const body = await res.json().catch(() => ({}));

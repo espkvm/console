@@ -23,7 +23,9 @@ const props = defineProps<{
   status: VideoStatus | null;
   engaged: boolean;
   engageMode: "click" | "hover";
-  fit: "fit" | "actual";
+  fit: "fit" | "stretch" | "actual";
+  /** Why there is no video at all (no capture board, pipeline did not start). */
+  videoBlocked?: string | null;
   /** Paused: nothing is read, so the device stops encoding entirely. */
   paused: boolean;
   /** Shown instead of the usual pause text when something other than the
@@ -703,7 +705,10 @@ function startDemoScreen() {
   const toCanvas = (e: { clientX: number; clientY: number }) => {
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height) return null;
-    const scale = Math.min(r.width / W, r.height / H);
+    const scale =
+      props.fit === "stretch"
+        ? Math.min(r.width / W, r.height / H)
+        : Math.min(1, r.width / W, r.height / H);
     const shownW = W * scale;
     const shownH = H * scale;
     const x = ((e.clientX - r.left - (r.width - shownW) / 2) / shownW) * W;
@@ -886,7 +891,15 @@ function surfaceEl(): HTMLElement | null {
 
 watch([canvas, img, useWebsocket], () => emit("surface", surfaceEl()));
 
+/** How long to leave a WebSocket that produced nothing before trying again. */
+const WS_RETRY_MS = 5000;
+let wsRetry: number | null = null;
+
 function startStream() {
+  if (wsRetry !== null) {
+    clearTimeout(wsRetry);
+    wsRetry = null;
+  }
   stream?.stop();
   /* Whatever the last attempt could not play, this one has not failed yet. */
   codecError.value = null;
@@ -909,7 +922,29 @@ function startStream() {
       failed.value = false;
       codecError.value = null;
     },
-    onUnavailable() {
+    onUnavailable(reason) {
+      /*
+       * There is only something to fall back TO while the device is producing
+       * JPEG. The multipart stream carries images and nothing else, so falling
+       * back to it against an H.264 device buys a guaranteed 409 - and then a
+       * loop, because the 409 sets `failed`, and the watcher below reads a
+       * non-MJPEG codec and sends us straight back to the WebSocket.
+       *
+       * That loop is what "Stream interrupted / Reconnecting..." forever
+       * actually is, and the device log shows it plainly: pairs of 409s spaced
+       * exactly FIRST_FRAME_TIMEOUT_MS apart, for as long as the tab is open.
+       * With no transport left, say so once instead of churning.
+       */
+      if (props.status && props.status.codec !== "mjpeg") {
+        codecError.value = reason;
+        loaded.value = false;
+        /* Still worth another go - the channel may have lost a race for a
+           socket rather than being broken - but at a rate that reads as
+           patience rather than the 2.5 s churn above. */
+        if (wsRetry !== null) clearTimeout(wsRetry);
+        wsRetry = window.setTimeout(startStream, WS_RETRY_MS);
+        return;
+      }
       /* Fall back once and stay there: flapping between transports would make
          the picture blink for as long as the channel is unhappy. */
       if (useWebsocket.value) {
@@ -990,10 +1025,45 @@ watch(failed, (isFailed) => {
   retryDelay = Math.min(retryDelay * 2, 30000);
 });
 
+/*
+ * The device changed codec: take the transport that can carry the new one.
+ *
+ * Only the WebSocket carries H.264, so a switch to it while the picture is
+ * coming over the multipart stream has to move. Waiting for the <img> to fail
+ * does not work, and that is the bug this fixes: the device ENDS the multipart
+ * response cleanly when the codec stops being MJPEG, and a cleanly ended
+ * multipart response fires no error - the element simply keeps showing its last
+ * frame. So `failed` stayed false, nothing reconnected, and the picture froze
+ * on the frame that happened to be up when the operator pressed H.264.
+ *
+ * Watching what the device reports rather than what this page asked for also
+ * covers a switch made somewhere else - another tab, the settings page.
+ *
+ * Level-triggered, and that matters: watching the codec alone fires only when
+ * it CHANGES, so it misses the ordinary case where the device was already on
+ * H.264 before this page could read its status - and it is spent if that one
+ * edge lands while text mode holds `paused`. Reading the pause too means it is
+ * re-checked when text mode lets go, which is exactly the "text -> H.264" step
+ * that showed the fault.
+ */
+watch(
+  () => [props.status?.codec, props.paused] as const,
+  ([codec]) => {
+    if (DEMO || props.paused || !codec) return;
+    if (codec !== "mjpeg" && !useWebsocket.value) {
+      failed.value = false;
+      loaded.value = false;
+      useWebsocket.value = true;
+    }
+  },
+  { immediate: true },
+);
+
 if (DEMO) onMounted(startDemoScreen);
 else if (!props.paused) startStream();
 onUnmounted(() => {
   stream?.stop();
+  if (wsRetry !== null) clearTimeout(wsRetry);
   if (demoRAF) cancelAnimationFrame(demoRAF);
   demoCleanup?.();
 });
@@ -1034,7 +1104,10 @@ function updateBox() {
   const iw = (el as HTMLCanvasElement).width || (el as HTMLImageElement).naturalWidth || r.width;
   const ih = (el as HTMLCanvasElement).height || (el as HTMLImageElement).naturalHeight || r.height;
   if (!host || iw <= 0 || ih <= 0 || r.width <= 0) return;
-  const scale = Math.min(r.width / iw, r.height / ih);
+  const scale =
+    props.fit === "stretch"
+      ? Math.min(r.width / iw, r.height / ih)
+      : Math.min(1, r.width / iw, r.height / ih);
   box.value = {
     left: r.left - host.left + (r.width - iw * scale) / 2,
     top: r.top - host.top + (r.height - ih * scale) / 2,
@@ -1057,6 +1130,35 @@ watch(() => props.fit, updateBox);
    observer can see: the canvas keeps its CSS box and swaps its intrinsic size.
    The status poll is what notices. */
 watch(() => [props.status?.width, props.status?.height], updateBox);
+
+/*
+ * Give the canvas the target's size before the first frame arrives.
+ *
+ * An empty <canvas> is 300x150 - the HTML default - and `.screen-fit` sizes the
+ * picture with `object-fit: scale-down`, which never enlarges. So a canvas that
+ * has not been drawn into yet shows as a ~300px black rectangle in the middle of
+ * a full-size stage: the "why is the screen so small after logging in" that a
+ * page refresh appeared to cure, because a reload got a frame in before anyone
+ * looked. Sizing the backing store from the status the device already reports
+ * makes the empty state a properly letterboxed black screen instead.
+ *
+ * Only while nothing has been drawn: assigning width or height clears a canvas,
+ * and doing that to a live picture would blink it on every status poll.
+ */
+function sizeCanvasBeforeFirstFrame() {
+  const el = canvas.value;
+  if (!el || loaded.value) return;
+  const w = props.status?.width || 1920;
+  const h = props.status?.height || 1080;
+  if (el.width === w && el.height === h) return;
+  el.width = w;
+  el.height = h;
+  ctx = el.getContext("2d");
+}
+
+watch([canvas, () => props.status?.width, () => props.status?.height], sizeCanvasBeforeFirstFrame, {
+  immediate: true,
+});
 
 const layerRows = computed(() => {
   const t = props.textLayer;
@@ -1097,19 +1199,34 @@ const showOverlay = computed(
        purpose - saying "Video paused" over them would be telling the operator
        off for the thing they just asked for. */
     !props.textView &&
-    (props.paused || failed.value || noSignal.value || codecError.value !== null || !loaded.value),
+    (props.paused ||
+    Boolean(props.videoBlocked) ||
+    failed.value ||
+    noSignal.value ||
+    codecError.value !== null ||
+    !loaded.value),
+);
+
+/* One class per sizing mode: shrink-only, fill the stage, or one pixel each. */
+const fitClass = computed(() =>
+  props.fit === "fit" ? "screen-fit" : props.fit === "stretch" ? "screen-stretch" : "screen-actual",
 );
 </script>
 
 <template>
   <div class="screen">
+    <!-- In text mode the picture is not merely paused, it is gone: leaving the
+         last frame under a text box would show a screen that is no longer
+         there, half covered by the one that is. Hidden rather than removed,
+         because the text layer is placed against this element's box - take it
+         out of the layout and the characters have nothing to line up with. -->
     <canvas
       v-show="useWebsocket"
       ref="canvas"
       :class="[
         'screen-img',
-        fit === 'fit' ? 'screen-fit' : 'screen-actual',
-        { 'screen-engaged': engaged },
+        fitClass,
+        { 'screen-engaged': engaged, 'screen-img-blank': textView },
       ]"
     />
     <img
@@ -1118,8 +1235,8 @@ const showOverlay = computed(
       ref="img"
       :class="[
         'screen-img',
-        fit === 'fit' ? 'screen-fit' : 'screen-actual',
-        { 'screen-engaged': engaged },
+        fitClass,
+        { 'screen-engaged': engaged, 'screen-img-blank': textView },
       ]"
       :src="streamUrl"
       alt="Target screen"
@@ -1134,9 +1251,18 @@ const showOverlay = computed(
       "
     />
 
+    <!-- The engaged outline follows whatever the operator is actually looking
+         at. On the picture it rides the canvas; in text mode the canvas is
+         `visibility: hidden` (screen-img-blank), so an outline on it is hidden
+         with it - which is why the blue frame that says "the keyboard is going
+         to the target" simply vanished the moment text mode came up, even
+         though the keyboard was still going there. -->
     <div
       v-if="textLayer"
-      :class="['screen-text', { 'screen-text-solid': textView }]"
+      :class="[
+        'screen-text',
+        { 'screen-text-solid': textView, 'screen-engaged': engaged && textView },
+      ]"
       :style="layerStyle"
       aria-label="Screen text, selectable"
     >
@@ -1153,14 +1279,21 @@ const showOverlay = computed(
     <div v-if="!DEMO && showOverlay" class="screen-overlay">
       <div class="screen-message">
         <span class="screen-message-icon">
-          <Icon :name="noSignal || failed || codecError ? 'warning' : 'screen'" :size="26" />
+          <Icon
+            :name="videoBlocked || noSignal || failed || codecError ? 'warning' : 'screen'"
+            :size="26"
+          />
         </span>
-        <h2 v-if="paused">{{ pauseNote ? "Video paused for the update" : "Video paused" }}</h2>
+        <h2 v-if="videoBlocked">Video is not available</h2>
+        <h2 v-else-if="paused">{{ pauseNote ? "Video paused for the update" : "Video paused" }}</h2>
         <h2 v-else-if="noSignal">No signal</h2>
         <h2 v-else-if="codecError">Cannot play this stream</h2>
         <h2 v-else-if="failed">Stream interrupted</h2>
         <h2 v-else>Waiting for the first frame...</h2>
-        <p v-if="paused" class="muted">
+        <!-- The device's own sentence: it knows why, and inventing a second
+             wording here would only disagree with Settings. -->
+        <p v-if="videoBlocked" class="muted">{{ videoBlocked }}</p>
+        <p v-else-if="paused" class="muted">
           {{
             pauseNote ||
             "The stream is disconnected and the device has stopped encoding. Input still works."
@@ -1170,7 +1303,8 @@ const showOverlay = computed(
           The target is not sending video. It may be powered off, asleep, or its cable unplugged.
         </p>
         <p v-else-if="codecError" class="muted">
-          {{ codecError }}. Select the MJPEG codec in Settings -> Video to use this browser.
+          {{ codecError }}. Picking MJPEG in the video readout gives a picture this page can
+          always show.
         </p>
         <p v-else-if="failed" class="muted">Reconnecting...</p>
       </div>

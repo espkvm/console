@@ -28,7 +28,7 @@ import {
   saveSettings,
   settingBlockedReason,
 } from "../state/device";
-import { changePassword } from "../state/auth";
+import { changePassword, createViewToken, loadSession, revokeViewToken } from "../state/auth";
 import {
   buildFile,
   describePlan,
@@ -51,6 +51,53 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{ values: [Values]; passwordChanged: [] }>();
+
+/*
+ * A viewing token, for a dashboard that can only be given a URL.
+ *
+ * Home Assistant's camera integrations speak basic auth or nothing, and this
+ * device speaks a session cookie - so putting a target's screen on a dashboard
+ * used to mean turning the login off. The token is the alternative, and it is
+ * deliberately narrow: the picture and the figures that describe it, no way to
+ * touch the machine. The device keeps only a hash, so it is shown once.
+ */
+const tokenBusy = ref(false);
+const tokenShown = ref("");
+const tokenExists = ref(false);
+void loadSession()
+  .then((s) => {
+    tokenExists.value = Boolean(s.viewToken);
+  })
+  .catch(() => {
+    /* the panel still works; the button simply offers to make one */
+  });
+
+async function makeViewToken() {
+  tokenBusy.value = true;
+  try {
+    tokenShown.value = await createViewToken();
+    tokenExists.value = true;
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    tokenBusy.value = false;
+  }
+}
+
+async function dropViewToken() {
+  if (!confirm("Revoke the viewing token? Anything using it stops working.")) return;
+  tokenBusy.value = true;
+  try {
+    await revokeViewToken();
+    tokenExists.value = false;
+    tokenShown.value = "";
+    toast.info("Viewing token revoked");
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    tokenBusy.value = false;
+  }
+}
 
 const sections = computed(() => {
   const present = new Set(props.schema.map((s) => s.section));
@@ -730,6 +777,39 @@ async function doRevertCert() {
         {{ changingPassword ? "Changing..." : "Change password" }}
       </button>
     </form>
+
+    <div v-if="currentSection === 'security'" class="firmware">
+      <h3>Viewing token</h3>
+      <p class="setting-note">
+        One long string that opens the picture and nothing else - the MJPEG stream, a single
+        frame, and the capture's figures. It is for a dashboard that can only be handed a URL,
+        such as a camera card in Home Assistant. It cannot press a key, touch the power, or
+        change a setting, and the device keeps only a hash of it, so it is shown once.
+      </p>
+      <p v-if="tokenShown" class="setting-note mono token-shown">{{ tokenShown }}</p>
+      <p v-if="tokenShown" class="setting-note">
+        Copy it now. Use it as <span class="mono">?token=...</span> on
+        <span class="mono">/stream</span>, or as an
+        <span class="mono">Authorization: Bearer</span> header.
+      </p>
+      <p v-else-if="tokenExists" class="setting-note">
+        A token exists. Making a new one replaces it; whatever used the old one stops working.
+      </p>
+      <div class="token-buttons">
+        <button type="button" class="btn btn-sm" :disabled="tokenBusy" @click="makeViewToken">
+          {{ tokenExists ? "Replace the token" : "Create a token" }}
+        </button>
+        <button
+          v-if="tokenExists"
+          type="button"
+          class="btn btn-sm btn-danger"
+          :disabled="tokenBusy"
+          @click="dropViewToken"
+        >
+          Revoke
+        </button>
+      </div>
+    </div>
 
     <div v-if="currentSection === 'security'" class="firmware">
       <h3>Device certificate</h3>

@@ -5,6 +5,7 @@
  * HttpOnly cookie that this code cannot read, and every answer about who is
  * logged in comes from asking the device rather than from remembering.
  */
+import { CONSOLE_HEADER } from "./device";
 
 export interface SessionState {
   /** The device requires a login at all. */
@@ -13,12 +14,36 @@ export interface SessionState {
   /** Logged in with the default password; nothing else may proceed. */
   mustChange: boolean;
   user: string;
+  /** A viewing token exists. What it is, the device will not say twice. */
+  viewToken?: boolean;
+}
+
+/*
+ * The viewing token: a credential for a dashboard, and for nothing else.
+ *
+ * It opens the MJPEG stream, one frame and the capture's figures - enough for a
+ * camera card in Home Assistant - and no endpoint that can touch the target.
+ * The device keeps only a hash, so the string comes back exactly once.
+ */
+export async function createViewToken(): Promise<string> {
+  const body = await postJson("/api/v1/auth/token", {});
+  const token = String(body.token ?? "");
+  if (!token) throw new Error("the device did not return a token");
+  return token;
+}
+
+export async function revokeViewToken(): Promise<void> {
+  const res = await fetch("/api/v1/auth/token", {
+    method: "DELETE",
+    headers: CONSOLE_HEADER,
+  });
+  if (!res.ok) throw new Error(`revoke failed (${res.status})`);
 }
 
 async function postJson(url: string, body: unknown): Promise<Record<string, unknown>> {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...CONSOLE_HEADER, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   const parsed = (await res.json().catch(() => ({}))) as { error?: string };

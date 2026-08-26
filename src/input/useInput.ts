@@ -27,6 +27,8 @@ export interface InputOptions {
   invertScroll: Ref<boolean>;
   /** Element showing the target's screen; pointer coordinates map onto it. */
   surface: Ref<HTMLElement | null>;
+  /** How the picture is sized inside that element - only "stretch" enlarges it. */
+  fit: Ref<"fit" | "stretch" | "actual">;
   /** When true, touch mode owns the surface and desktop pointer handling stands down. */
   touchActive?: Ref<boolean>;
   onDisengage(): void;
@@ -81,18 +83,24 @@ export function useInput(opts: InputOptions) {
     if (r.width <= 0 || r.height <= 0) return null;
 
     /*
-     * In "fit" the element fills the stage but the picture is letterboxed
-     * inside it by object-fit: contain, so the element box is wider or taller
-     * than the video. Mapping against the whole box would put the pointer into
-     * the black bars - the cursor drifts on whichever axis is padded. Find the
+     * In "fit" and "stretch" the element fills the stage but the picture is
+     * letterboxed inside it, so the element box is wider or taller than the
+     * video. Mapping against the whole box would put the pointer into the
+     * black bars - the cursor drifts on whichever axis is padded. Find the
      * rectangle the video actually occupies from its intrinsic size (a canvas
      * carries the frame resolution in width/height, an <img> in natural*), and
-     * map into that. In "actual" the two aspects match, so this is a no-op.
+     * map into that. Only "stretch" enlarges: under "fit" a picture smaller
+     * than the stage sits at its own size in the middle, with bars on both
+     * axes, so the scale stops at 1. In "actual" the two aspects match, so
+     * this is a no-op.
      */
     const iw = (el as HTMLCanvasElement).width || (el as HTMLImageElement).naturalWidth || r.width;
     const ih =
       (el as HTMLCanvasElement).height || (el as HTMLImageElement).naturalHeight || r.height;
-    const scale = Math.min(r.width / iw, r.height / ih);
+    const grow = opts.fit.value === "stretch";
+    const scale = grow
+      ? Math.min(r.width / iw, r.height / ih)
+      : Math.min(1, r.width / iw, r.height / ih);
     const shownW = iw * scale;
     const shownH = ih * scale;
     const padX = (r.width - shownW) / 2;

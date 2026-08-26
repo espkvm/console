@@ -394,6 +394,19 @@
   gap: var(--space-3);
 }
 
+/* The viewing token when it is first shown: long, and meant to be copied whole,
+   so it wraps rather than running off the panel. */
+.token-shown {
+  word-break: break-all;
+  user-select: all;
+}
+
+.token-buttons {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
 /* Small state badge, e.g. target power on/off. */
 .pill {
   display: inline-block;

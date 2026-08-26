@@ -2,7 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- interactive-widget: on Chromium the keyboard then shrinks the layout
+         viewport itself, so dvh already accounts for it and the measuring in
+         keyboardInset.ts has nothing left to correct. Browsers that do not know
+         the key ignore it, and there the measuring does the work. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="color-scheme" content="dark light" />
     <link rel="icon" href="./favicon.ico" sizes="any" />
     <!-- Installable PWA: run full-screen and standalone from the home screen,
