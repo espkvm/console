@@ -579,10 +579,42 @@ export interface PublishedRelease {
 }
 
 const RELEASES_URL = "https://api.github.com/repos/espkvm/espkvm/releases?per_page=30";
+/*
+ * GitHub allows 60 unauthenticated API calls an hour, counted per IP - and the
+ * IP here is the operator's, since the browser makes this call, so it is shared
+ * with every other tab and machine behind the same address. One request per
+ * click is not much, but a page reload would spend another, and a list of
+ * releases is not worth being fresh to the second. Held for ten minutes.
+ */
+const RELEASES_CACHE_KEY = "espkvm.releases";
+/* Keyed by board: `hasImage` is answered for one board, not in general. */
+const releasesCacheKey = (boardId: string | undefined) => `${RELEASES_CACHE_KEY}.${boardId ?? "any"}`;
+const RELEASES_CACHE_MS = 10 * 60 * 1000;
+
+/** What the rate-limit headers say, when they say we have run out. */
+function rateLimitMessage(res: Response): string | null {
+  if (res.status !== 403 && res.status !== 429) return null;
+  if (res.headers.get("x-ratelimit-remaining") !== "0") return null;
+  const reset = Number(res.headers.get("x-ratelimit-reset"));
+  const when = Number.isFinite(reset) && reset > 0 ? new Date(reset * 1000) : null;
+  const at = when
+    ? ` It resets at ${when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`
+    : "";
+  return `GitHub is rate-limiting this network - 60 requests an hour, counted per address, shared with anything else here that talks to it.${at}`;
+}
 
 export async function listReleases(boardId: string | undefined): Promise<PublishedRelease[]> {
-  const res = await fetch(RELEASES_URL, { cache: "no-store" });
-  if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
+  try {
+    const held = sessionStorage.getItem(releasesCacheKey(boardId));
+    if (held) {
+      const { at, list } = JSON.parse(held) as { at: number; list: PublishedRelease[] };
+      if (Date.now() - at < RELEASES_CACHE_MS) return list;
+    }
+  } catch {
+    /* private window, or something else wrote nonsense there: just ask */
+  }
+  const res = await fetch(RELEASES_URL);
+  if (!res.ok) throw new Error(rateLimitMessage(res) ?? `GitHub answered ${res.status}`);
   const body = (await res.json()) as Array<{
     tag_name?: string;
     published_at?: string;
@@ -591,7 +623,7 @@ export async function listReleases(boardId: string | undefined): Promise<Publish
     draft?: boolean;
     assets?: Array<{ name?: string }>;
   }>;
-  return body
+  const list = body
     .filter((r) => r.tag_name && !r.draft)
     .map((r) => ({
       version: r.tag_name as string,
@@ -603,6 +635,13 @@ export async function listReleases(boardId: string | undefined): Promise<Publish
         ? (r.assets ?? []).some((a) => a.name === `espkvm-${r.tag_name}-${boardId}.bin`)
         : true,
     }));
+  try {
+    sessionStorage.setItem(releasesCacheKey(boardId), JSON.stringify({ at: Date.now(), list }));
+  } catch {
+    /* nothing to remember it with; the list still works, it just costs a
+       request again after a reload */
+  }
+  return list;
 }
 
 export interface InstallStatus {
