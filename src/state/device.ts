@@ -144,6 +144,8 @@ export interface SystemInfo {
   project: string;
   version: string;
   built: string;
+  /** The id this board's published image is named with, e.g. "funcev". */
+  boardId?: string;
   idf: string;
   partition: string;
   /** A second app slot exists, so an update could be installed. */
@@ -557,6 +559,78 @@ export async function waitForDevice(
   } finally {
     if (tick) window.clearInterval(tick);
   }
+}
+
+/**
+ * Every published release, straight from GitHub.
+ *
+ * Only the list comes from the browser. The images cannot: the host serving
+ * release assets sends no cross-origin header, so a fetch from this page is
+ * refused however the URL is reached - including through the API's own asset
+ * route, which redirects to that same host. Which is why installing an earlier
+ * release is the device's job, and why it is off until someone turns it on.
+ */
+export interface PublishedRelease {
+  version: string;
+  published?: string;
+  notes?: string;
+  /** False when this release carries no image for the board we are talking to. */
+  hasImage: boolean;
+}
+
+const RELEASES_URL = "https://api.github.com/repos/espkvm/espkvm/releases?per_page=30";
+
+export async function listReleases(boardId: string | undefined): Promise<PublishedRelease[]> {
+  const res = await fetch(RELEASES_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
+  const body = (await res.json()) as Array<{
+    tag_name?: string;
+    published_at?: string;
+    html_url?: string;
+    prerelease?: boolean;
+    draft?: boolean;
+    assets?: Array<{ name?: string }>;
+  }>;
+  return body
+    .filter((r) => r.tag_name && !r.draft)
+    .map((r) => ({
+      version: r.tag_name as string,
+      published: r.published_at,
+      notes: r.html_url,
+      /* Named exactly as the release workflow builds it, so an id this device
+         reports and a file that exists are the same test. */
+      hasImage: boardId
+        ? (r.assets ?? []).some((a) => a.name === `espkvm-${r.tag_name}-${boardId}.bin`)
+        : true,
+    }));
+}
+
+export interface InstallStatus {
+  state: "idle" | "running" | "done" | "failed";
+  percent: number;
+  version: string;
+  message: string;
+}
+
+/** Ask the device to fetch and install a published release. Returns at once. */
+export async function installRelease(version: string): Promise<void> {
+  const res = await fetch("/api/v1/system/install", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-ESP-KVM": "1" },
+    body: JSON.stringify({ version }),
+  });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `the device answered ${res.status}`);
+  }
+}
+
+export async function installStatus(): Promise<InstallStatus> {
+  const res = await fetch("/api/v1/system/install", { cache: "no-store" });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(`the device answered ${res.status}`);
+  return (await res.json()) as InstallStatus;
 }
 
 /**

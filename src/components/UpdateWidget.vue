@@ -15,12 +15,17 @@
  * there. The browser fetches the image and hands it to the same endpoint a
  * manual upload uses.
  */
-import { computed, ref, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 
 import {
   compareVersions,
   downloadFirmware,
   fetchRelease,
+  listReleases,
+  installRelease as requestDeviceInstall,
+  installStatus,
+  type PublishedRelease,
+  type InstallStatus,
   switchBootSlot,
   uploadFirmware,
   type FirmwareRelease,
@@ -373,6 +378,120 @@ async function onFirmwareChosen(e: Event) {
 const ringStyle = computed(() =>
   updateAvailable.value ? { background: "var(--accent)" } : {},
 );
+
+/*
+ * Going back to an earlier release.
+ *
+ * The list is read here - GitHub's API allows a cross-origin read - but the
+ * image cannot be: the host its assets come from sends no such header, so the
+ * browser is refused whichever URL it tries. The device fetches it instead,
+ * which it only does when the operator has said it may (fw_fetch), because a
+ * KVM often sits where nothing should be reaching the internet at all.
+ */
+const fetchAllowed = computed(() => Boolean(props.values.fw_fetch));
+const releases = ref<PublishedRelease[]>([]);
+const releasesError = ref<string | null>(null);
+const loadingReleases = ref(false);
+const install = ref<InstallStatus | null>(null);
+const installStarting = ref<string | null>(null);
+let installPoll = 0;
+
+async function loadReleases() {
+  loadingReleases.value = true;
+  releasesError.value = null;
+  try {
+    releases.value = await listReleases(props.system?.boardId);
+  } catch (err) {
+    releasesError.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    loadingReleases.value = false;
+  }
+}
+
+/* What is worth offering: a published build for this board that is not the one
+   already running. The direction is not filtered - going forward through a
+   version that was skipped is the same operation. */
+const otherReleases = computed(() =>
+  releases.value.filter((r) => r.hasImage && r.version !== props.system?.version),
+);
+
+function stopInstallPoll() {
+  if (installPoll) {
+    window.clearInterval(installPoll);
+    installPoll = 0;
+  }
+}
+
+/*
+ * The device fetches it, so the console has nothing to upload - but the
+ * operator still needs the same thing the upload path gives them: a checklist
+ * that says which stage it is in, and a reload once the device is back. Without
+ * the reload a console left over from the old firmware goes on driving the new
+ * one, which is exactly what `firmwareChanged` exists to complain about.
+ */
+async function startInstall(version: string) {
+  if (!confirm(`Install ${version} and restart the device?`)) return;
+  installStarting.value = version;
+  releasesError.value = null;
+  install.value = null;
+  beginWatch(`Installing ${version}`, [
+    { key: "fetch", label: "The device is fetching the image" },
+    { key: "write", label: "Writing and verifying it" },
+    { key: "restart", label: "Restarting" },
+  ]);
+  watchStep("fetch", "Asking for the image...", { pct: null });
+  try {
+    await requestDeviceInstall(version);
+  } catch (err) {
+    endWatch();
+    installStarting.value = null;
+    releasesError.value = err instanceof Error ? err.message : String(err);
+    return;
+  }
+  emit("hold-stream", true);
+
+  stopInstallPoll();
+  installPoll = window.setInterval(() => {
+    void (async () => {
+      let st: InstallStatus;
+      try {
+        st = await installStatus();
+      } catch {
+        /* The device goes away the moment it is done, so a poll that fails is
+           the ordinary end of this - the state below is what decides. */
+        return;
+      }
+      install.value = st;
+      if (st.state === "running") {
+        if (st.percent >= 0) {
+          watchStep("fetch", "Downloading the image to the device...", { pct: st.percent });
+          watchPct(st.percent);
+        } else {
+          watchStep("fetch", st.message, { pct: null });
+        }
+        return;
+      }
+      stopInstallPoll();
+      installStarting.value = null;
+      emit("hold-stream", false);
+      if (st.state === "failed") {
+        endWatch();
+        releasesError.value = st.message;
+        return;
+      }
+      /* Written down before the wait: the verdict is read on the far side of a
+         reload that throws away everything this function knows. */
+      watchStep("write", "Written and verified.", { pct: null, expectedMs: EXPECTED_WRITE_MS });
+      rememberRestart({ kind: "update", from: props.system?.version, to: version });
+      if (await watchBack()) {
+        watchStep("restart", "The device is back. Reloading the console...");
+        setTimeout(() => location.reload(), 1500);
+      }
+    })();
+  }, 1000);
+}
+
+onUnmounted(stopInstallPoll);
 </script>
 
 <template>
@@ -438,6 +557,59 @@ const ringStyle = computed(() =>
           </p>
           <p v-if="switchLost" class="setting-note setting-note-blocked">
             The device did not answer after the switch. Reload the page to see which slot it is on.
+          </p>
+        </div>
+
+        <!-- Earlier releases. The two slots above already let the operator go
+             back one step; this is how to go further, and it is the device that
+             fetches the image because the browser is not allowed to. -->
+        <div v-if="system.updatable" class="uw-slots">
+          <div class="uw-slots-head">Published releases</div>
+          <p v-if="!fetchAllowed" class="setting-note">
+            Installing an earlier release means the device downloading it itself, which is off
+            until you allow it in Settings &rarr; System. The browser cannot fetch these images:
+            the host they are served from refuses cross-origin reads.
+          </p>
+          <template v-else-if="install && install.state === 'running'">
+            <p class="setting-note">
+              Installing {{ install.version }} &mdash; {{ install.message
+              }}<span v-if="install.percent >= 0"> {{ install.percent }}%</span>
+            </p>
+          </template>
+          <template v-else-if="install && install.state === 'failed'">
+            <p class="setting-note setting-note-blocked">
+              {{ install.version }} was not installed: {{ install.message }}
+            </p>
+          </template>
+          <template v-else>
+            <button
+              v-if="!releases.length"
+              type="button"
+              class="btn btn-sm btn-quiet"
+              :disabled="loadingReleases"
+              @click="loadReleases()"
+            >
+              {{ loadingReleases ? "Reading..." : "Show published releases" }}
+            </button>
+            <div v-for="rel in otherReleases" :key="rel.version" class="uw-slot">
+              <span class="mono uw-slot-name">{{ rel.version }}</span>
+              <span class="mono uw-slot-ver">{{ (rel.published ?? "").slice(0, 10) }}</span>
+              <span class="uw-slot-badges">
+                <a v-if="rel.notes" :href="rel.notes" target="_blank" rel="noopener">notes</a>
+              </span>
+              <button
+                type="button"
+                class="btn btn-sm btn-quiet"
+                :disabled="installStarting !== null"
+                :title="`Have the device fetch ${rel.version} and restart into it`"
+                @click="startInstall(rel.version)"
+              >
+                {{ installStarting === rel.version ? "Starting..." : "Install" }}
+              </button>
+            </div>
+          </template>
+          <p v-if="releasesError" class="setting-note setting-note-blocked">
+            {{ releasesError }}
           </p>
         </div>
 
