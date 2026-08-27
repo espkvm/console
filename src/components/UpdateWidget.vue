@@ -60,6 +60,19 @@ const props = defineProps<{ system: SystemInfo | null; values: Values }>();
 const emit = defineEmits<{ (e: "hold-stream", hold: boolean): void }>();
 
 const open = ref(false);
+
+/*
+ * Everything that raises the restart splash goes through here.
+ *
+ * The splash covers the page behind a blur, and this popup was still open under
+ * it - lit up, with the progress bar visibly filling through the frosting. Put
+ * the popup away as the splash goes up: the splash is the thing to watch now,
+ * and what is underneath should not compete with it.
+ */
+function beginWatchHere(label: string, steps: Parameters<typeof beginWatch>[1] = []) {
+  open.value = false;
+  beginWatch(label, steps);
+}
 const release = ref<FirmwareRelease | null>(null);
 const checking = ref(false);
 const checkError = ref<string | null>(null);
@@ -159,7 +172,7 @@ async function switchSlot(slot: OtaSlot) {
     toast.error(err instanceof Error ? err.message : String(err));
     return;
   }
-  beginWatch(`Booting ${slot.label}`);
+  beginWatchHere(`Booting ${slot.label}`);
 
   rememberRestart({ kind: "slot", from: props.system?.version, to: ver });
   if (await watchBack()) {
@@ -288,7 +301,7 @@ async function sendImage(image: Blob, label: string, version?: string) {
   /* Installing a published build starts the watch earlier, at the download, and
      keeps its own longer list of steps. */
   if (!restartWatch.active) {
-    beginWatch(`Installing ${label}`, [
+    beginWatchHere(`Installing ${label}`, [
       { key: "send", label: "Sending the image to the device" },
       { key: "write", label: "Writing and verifying it" },
       { key: "restart", label: "Restarting onto the new image" },
@@ -339,7 +352,7 @@ async function installRelease() {
   installError.value = null;
   phase.value = "downloading";
   firmwarePct.value = 0;
-  beginWatch(`Installing ${target.version}`, [
+  beginWatchHere(`Installing ${target.version}`, [
     { key: "download", label: "Fetching the image from the release" },
     { key: "send", label: "Sending the image to the device" },
     { key: "write", label: "Writing and verifying it" },
@@ -434,7 +447,7 @@ async function startInstall(version: string) {
   installStarting.value = version;
   releasesError.value = null;
   install.value = null;
-  beginWatch(`Installing ${version}`, [
+  beginWatchHere(`Installing ${version}`, [
     { key: "fetch", label: "The device is fetching the image" },
     { key: "write", label: "Writing and verifying it" },
     { key: "restart", label: "Restarting" },
@@ -795,6 +808,21 @@ onUnmounted(stopInstallPoll);
   align-items: center;
   gap: var(--space-2, 8px);
   padding: var(--space-1, 4px) 0;
+  /* The popup asks for overflow-y: auto, and CSS turns the other axis from
+     visible into auto with it - so anything wider than the popup produces a
+     horizontal scrollbar, which was visible sliding about under the restart
+     splash. Flex items do not shrink below their content unless told to, and a
+     version string like v.0.36.0-2-gf373f94-dirty is wider than 320px allows.
+     So let the row and its text shrink, and cut the text with an ellipsis. */
+  min-width: 0;
+}
+
+.uw-slot-name,
+.uw-slot-ver {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .uw-slot-name {
@@ -888,6 +916,9 @@ onUnmounted(stopInstallPoll);
   max-width: 90vw;
   max-height: 70vh;
   overflow-y: auto;
+  /* Named rather than left to compute: see the note on .uw-slot. Nothing here
+     is meant to be reachable sideways. */
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
