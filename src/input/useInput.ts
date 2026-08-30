@@ -17,6 +17,7 @@ import {
   type TargetState,
 } from "./control";
 import { isModifierCode, modifierMask, usageForCode } from "./keymap";
+import { pictureRect } from "../video/picture";
 
 export interface InputOptions {
   engaged: Ref<boolean>;
@@ -79,32 +80,17 @@ export function useInput(opts: InputOptions) {
   function mapToTarget(e: { clientX: number; clientY: number }) {
     const el = opts.surface.value;
     if (!el) return null;
-    const r = el.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) return null;
-
     /*
      * In "fit" and "stretch" the element fills the stage but the picture is
      * letterboxed inside it, so the element box is wider or taller than the
      * video. Mapping against the whole box would put the pointer into the
-     * black bars - the cursor drifts on whichever axis is padded. Find the
-     * rectangle the video actually occupies from its intrinsic size (a canvas
-     * carries the frame resolution in width/height, an <img> in natural*), and
-     * map into that. Only "stretch" enlarges: under "fit" a picture smaller
-     * than the stage sits at its own size in the middle, with bars on both
-     * axes, so the scale stops at 1. In "actual" the two aspects match, so
-     * this is a no-op.
+     * black bars - the cursor drifts on whichever axis is padded, which is
+     * what #32 saw on a 4K screen. pictureRect finds the rectangle the video
+     * actually occupies; in "actual" the two aspects match and it is a no-op.
      */
-    const iw = (el as HTMLCanvasElement).width || (el as HTMLImageElement).naturalWidth || r.width;
-    const ih =
-      (el as HTMLCanvasElement).height || (el as HTMLImageElement).naturalHeight || r.height;
-    const grow = opts.fit.value === "stretch";
-    const scale = grow
-      ? Math.min(r.width / iw, r.height / ih)
-      : Math.min(1, r.width / iw, r.height / ih);
-    const shownW = iw * scale;
-    const shownH = ih * scale;
-    const padX = (r.width - shownW) / 2;
-    const padY = (r.height - shownH) / 2;
+    const p = pictureRect(el, opts.fit.value);
+    if (!p) return null;
+    const { rect: r, width: shownW, height: shownH, padX, padY } = p;
 
     /* Coordinates are 0..32767, not pixels, so a resolution change on the
        target cannot shift the pointer mid-drag. */

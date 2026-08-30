@@ -16,6 +16,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { textSpans } from "../screen/textSpans";
 import type { ScreenText, VideoStatus } from "../state/device";
+import { pictureRect } from "../video/picture";
 import { VideoStream } from "../video/stream";
 import Icon from "./Icon.vue";
 
@@ -1099,20 +1100,14 @@ function measureAdvance(fontPx: number): number {
 function updateBox() {
   const el = (useWebsocket.value ? canvas.value : img.value) as HTMLElement | null;
   if (!el) return;
-  const r = el.getBoundingClientRect();
   const host = el.parentElement?.getBoundingClientRect();
-  const iw = (el as HTMLCanvasElement).width || (el as HTMLImageElement).naturalWidth || r.width;
-  const ih = (el as HTMLCanvasElement).height || (el as HTMLImageElement).naturalHeight || r.height;
-  if (!host || iw <= 0 || ih <= 0 || r.width <= 0) return;
-  const scale =
-    props.fit === "stretch"
-      ? Math.min(r.width / iw, r.height / ih)
-      : Math.min(1, r.width / iw, r.height / ih);
+  const p = pictureRect(el, props.fit);
+  if (!host || !p) return;
   box.value = {
-    left: r.left - host.left + (r.width - iw * scale) / 2,
-    top: r.top - host.top + (r.height - ih * scale) / 2,
-    width: iw * scale,
-    height: ih * scale,
+    left: p.rect.left - host.left + p.padX,
+    top: p.rect.top - host.top + p.padY,
+    width: p.width,
+    height: p.height,
   };
 }
 
