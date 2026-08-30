@@ -521,6 +521,16 @@ const heldByOther = computed(() => input.controlState.value === "held");
 watch(heldByOther, (held) => {
   if (held) engaged.value = false;
 });
+/*
+ * The same for a session that ends under a captured keyboard. The login screen
+ * replaces the console, but useInput lives up here and its window listeners do
+ * not go with it: every keystroke would still be swallowed and sent to the
+ * target, so the password cannot be typed into the form that just appeared.
+ * Esc would have released it, which is no way to find out.
+ */
+watch([locked, mustChange], ([lock, change]) => {
+  if (lock || change) engaged.value = false;
+});
 function takeControl() {
   input.control.takeControl();
 }
@@ -916,16 +926,27 @@ onMounted(async () => {
 });
 
 /* Signing in, or changing the password, both end with asking the device again
-   rather than assuming what happened. */
+   rather than assuming what happened. If that question fails, say so: the
+   sign-in has already worked, and leaving the login form up with no error is
+   what makes an operator reload the page to get anywhere. */
 async function onAuthenticated() {
-  session.value = await loadSession();
+  try {
+    session.value = await loadSession();
+  } catch (err) {
+    loadError.value = err instanceof Error ? err.message : String(err);
+    return;
+  }
   if (!locked.value && !mustChange.value) await startConsole();
 }
 
 async function onPasswordChanged() {
   toast.info("Password changed - sign in again");
   panel.value = null;
-  session.value = await loadSession();
+  try {
+    session.value = await loadSession();
+  } catch (err) {
+    loadError.value = err instanceof Error ? err.message : String(err);
+  }
 }
 
 onUnmounted(() => {
