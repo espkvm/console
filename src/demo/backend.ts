@@ -400,9 +400,10 @@ class DemoSocket extends EventTarget {
       this.onopen?.(e);
       this.dispatchEvent(e);
       /* On the control channel, report a target attached (status frame 0x81,
-         flags bit0 = attached) so the demo shows a live USB connection. */
+         flags bit0 = attached, bit1 = the bus is alive) so the demo shows a
+         live USB connection. */
       if (this.url.includes("/ws")) {
-        const status = new Uint8Array([0x81, 0x01, 0x00]);
+        const status = new Uint8Array([0x81, 0x03, 0x00]);
         const m = new MessageEvent("message", { data: status.buffer });
         this.onmessage?.(m);
         this.dispatchEvent(m);

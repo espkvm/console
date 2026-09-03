@@ -11,7 +11,7 @@
  *     0x06 ping
  *     0x07 take control
  *   device -> client
- *     0x81 status      flags:u8 (bit0 target attached), leds:u8
+ *     0x81 status      flags:u8 (bit0 target attached, bit1 bus alive), leds:u8
  *     0x82 pong
  *     0x83 control      state:u8 (0 held by another, 1 you hold it, 2 free)
  *
@@ -38,6 +38,12 @@ const PING_INTERVAL_MS = 2500;
 export interface TargetState {
   /** The target machine has enumerated our USB device. */
   attached: boolean;
+  /**
+   * There is a live USB bus on the target's side, enumerated or not. False is
+   * a port with no power or a cable that is out - which re-plugging from the
+   * device's end cannot fix, so the popup says so instead of offering it.
+   */
+  busAlive: boolean;
   /** False while the control channel is down: the device has not said either
    *  way, and reporting "no target" then blames the wrong thing. */
   known: boolean;
@@ -96,7 +102,12 @@ export class Control {
       if (!(ev.data instanceof ArrayBuffer)) return;
       const b = new Uint8Array(ev.data);
       if (b[0] === MSG_STATUS && b.length >= 3) {
-        this.#handlers.onTarget({ attached: (b[1] & 1) !== 0, leds: b[2], known: true });
+        this.#handlers.onTarget({
+          attached: (b[1] & 1) !== 0,
+          busAlive: (b[1] & 2) !== 0,
+          leds: b[2],
+          known: true,
+        });
       } else if (b[0] === MSG_CONTROL && b.length >= 2) {
         this.#handlers.onControl(b[1] === 1 ? "you" : b[1] === 2 ? "free" : "held");
       }
@@ -112,7 +123,7 @@ export class Control {
       }
       this.#handlers.onConnection("closed");
       /* Not "the target is gone" - we simply stopped being told. */
-      this.#handlers.onTarget({ attached: false, leds: 0, known: false });
+      this.#handlers.onTarget({ attached: false, busAlive: false, leds: 0, known: false });
       if (this.#closed) return;
       /* Back off so a device that is rebooting is not hammered, but stay
          responsive enough that a brief blip is invisible. The ceiling is high

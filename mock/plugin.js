@@ -110,6 +110,9 @@ const values = Object.fromEntries(
 const state = {
   signal: true,
   attached: true,
+  /* The target's port is live. Force it false to see what the console says
+     when there is no bus at all, as against a host that stopped listening. */
+  busAlive: true,
   leds: 0,
   width: 1920,
   height: 1080,
@@ -144,7 +147,13 @@ export function mockDevice() {
         if (!req.url.startsWith("/ws")) return;
         wss.handleUpgrade(req, socket, head, (ws) => {
           const sendStatus = () =>
-            ws.send(Buffer.from([0x81, state.attached ? 1 : 0, state.leds]));
+            ws.send(
+              Buffer.from([
+                0x81,
+                (state.attached ? 1 : 0) | (state.busAlive ? 2 : 0),
+                state.leds,
+              ]),
+            );
           ws.on("message", (data) => {
             const b = Buffer.from(data);
             if (b[0] === 0x06) {

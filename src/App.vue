@@ -748,11 +748,17 @@ const conns = computed<Conn[]>(() => {
     },
     {
       id: "usb",
+      /* Not attached splits in two, and they want opposite things done: a live
+         bus means the target is there and has stopped listening, which a
+         re-plug fixes; a dead one means its port has no power, which nothing on
+         this end can reach. */
       title: !input.target.value.known
         ? "USB - control channel down"
         : input.target.value.attached
           ? "USB - the target sees the keyboard and mouse"
-          : "USB - no target on the OTG port",
+          : input.target.value.busAlive
+            ? "USB - the target is not taking the keyboard"
+            : "USB - no power on the target's port",
       state: input.target.value.attached ? "on" : "off",
     },
     {
@@ -1458,10 +1464,16 @@ const LED_BITS: Array<[number, string]> = [
               </template>
 
               <template v-if="isUsbPill">
-                <p class="conn-note">
-                  If the target has stopped taking the keyboard - after an update,
-                  usually - re-plugging presents it as a new device. Nothing
-                  restarts.
+                <p v-if="input.target.value.known && !input.target.value.busAlive" class="conn-note">
+                  There is no live USB bus on the target's side: its port has no
+                  power, or the cable is out. Re-plugging from here cannot reach
+                  that - check the cable, and note that on some boards this same
+                  port powers the device.
+                </p>
+                <p v-else class="conn-note">
+                  If the target has stopped taking the keyboard - after an update
+                  or a sleep, usually - re-plugging presents it as a new device.
+                  Nothing restarts.
                 </p>
                 <button
                   type="button"

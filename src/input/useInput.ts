@@ -38,7 +38,7 @@ export interface InputOptions {
 const MAX_KEYS = 6;
 
 export function useInput(opts: InputOptions) {
-  const target = ref<TargetState>({ attached: false, leds: 0, known: false });
+  const target = ref<TargetState>({ attached: false, busAlive: false, leds: 0, known: false });
   const connection = ref<ConnectionState>("connecting");
   /* Who holds the single control session. Assume it is ours until the device
      says otherwise, so a lone operator is never told to "take control". */
