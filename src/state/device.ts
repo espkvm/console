@@ -385,6 +385,18 @@ async function powerAction(action: "click" | "hold" | "reset"): Promise<void> {
   if (!res.ok) throw new Error(await errorFromResponse(res, `power ${action} failed (${res.status})`));
 }
 
+/**
+ * Present the keyboard and mouse to the target again, as if the cable had been
+ * pulled and put back. What it is for: the device restarted (an update, above
+ * all) while the target stayed on, so the target still holds a connection this
+ * side has forgotten and input goes nowhere. Neither machine is restarted.
+ */
+export async function replugUsb(): Promise<void> {
+  const res = await fetch("/api/v1/hid/reattach", { method: "POST", headers: CONSOLE_HEADER });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(await errorFromResponse(res, `re-plug failed (${res.status})`));
+}
+
 export const powerClick = () => powerAction("click");
 export const powerHold = () => powerAction("hold");
 export const powerReset = () => powerAction("reset");

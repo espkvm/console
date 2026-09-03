@@ -331,6 +331,17 @@
 .conn-popup-net .conn-switch-title {
   margin-top: var(--space-2);
 }
+
+/* The USB pill's popup: a line of explanation, then the one thing to press. */
+.conn-note {
+  margin: 0 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  max-width: 34ch;
+}
+.conn-action {
+  width: 100%;
+}
 .conn-switch-btn {
   display: flex;
   align-items: center;

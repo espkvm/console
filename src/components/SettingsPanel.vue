@@ -119,7 +119,20 @@ onMounted(async () => {
   }
 });
 
-const pinSettings = computed(() => props.schema.filter((s) => s.pin));
+/*
+ * The pin settings that count when working out what is free.
+ *
+ * A setting the panel hides is one the operator cannot reach, and holding a pin
+ * against them for it would be unfair: the round LCD's five pins are stored even
+ * on a device running an I2C OLED, where they drive nothing at all. The device
+ * applies the same rule when it refuses a pin claimed twice, so the two agree
+ * about which pins are really spoken for.
+ */
+const pinSettings = computed(() =>
+  props.schema.filter(
+    (s) => s.pin && (!s.showIf || Number(props.values[s.showIf.key]) === s.showIf.eq),
+  ),
+);
 
 const reservedPins = computed(() => {
   const m = new Map<number, string>();

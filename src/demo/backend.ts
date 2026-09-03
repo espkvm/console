@@ -296,6 +296,10 @@ async function route(
       case "/api/v1/power/reset":
         demoPower("reset");
         return json({ status: "ok" });
+      /* Nothing to show: the demo target is always attached, so a re-plug is a
+         no-op here. It answers so the button behaves like the real one. */
+      case "/api/v1/hid/reattach":
+        return json({ status: "ok" });
       /* Writing the rescue partition is the one action still worth refusing:
          nothing about it can be shown, and it takes a minute on a real device. */
       case "/api/v1/storage/rescue":

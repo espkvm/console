@@ -1188,6 +1188,29 @@ const layerStyle = computed(() => {
 });
 
 const noSignal = computed(() => props.status !== null && !props.status.signal);
+
+/*
+ * Why there is no picture, as far as the bridge can tell.
+ *
+ * DDC5V is bit 0 of the capture chip's SYS_STATUS: the source's own +5 V on the
+ * HDMI input. It separates the two silences that look identical from here - a
+ * target that is off or unplugged, against one that is powered and simply not
+ * sending. Saying "it may be powered off, asleep, or unplugged" to somebody
+ * whose machine is plainly running sends them to check the wrong things.
+ */
+const DDC5V = 0x01;
+const noSignalNote = computed(() => {
+  const st = props.status;
+  if (!st) return "";
+  if ((st.sysStatus & DDC5V) === 0) {
+    return "Nothing is plugged into the HDMI input, or the machine on the other end is powered off.";
+  }
+  return (
+    "The cable is connected and the target has power, but it is not sending a picture. " +
+    "Its output may be switched off, or it decided nothing was connected when it started - " +
+    "the device offers it a fresh hotplug a few times when this happens."
+  );
+});
 const showOverlay = computed(
   () =>
     /* In text mode the characters are the content, and the stream is paused on
@@ -1294,9 +1317,7 @@ const fitClass = computed(() =>
             "The stream is disconnected and the device has stopped encoding. Input still works."
           }}
         </p>
-        <p v-else-if="noSignal" class="muted">
-          The target is not sending video. It may be powered off, asleep, or its cable unplugged.
-        </p>
+        <p v-else-if="noSignal" class="muted">{{ noSignalNote }}</p>
         <p v-else-if="codecError" class="muted">
           {{ codecError }}. Picking MJPEG in the video readout gives a picture this page can
           always show.

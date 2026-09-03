@@ -49,6 +49,7 @@ import {
   type StorageInfo,
   saveSettings,
   restartDevice,
+  replugUsb,
   type UsbProbe,
   Unauthorized,
 } from "./state/device";
@@ -643,6 +644,31 @@ async function switchNet(mode: "ethernet" | "wifi" | "ap") {
 const isNetPill = computed(() =>
   ["ethernet", "wifi", "ap"].includes(connDetail.value ?? ""),
 );
+
+/* The USB pill's popup carries the one repair that belongs to it. */
+const isUsbPill = computed(() => connDetail.value === "usb");
+
+const replugging = ref(false);
+
+/*
+ * Ask the device to come back to the target as a new USB device. The case this
+ * exists for: the device restarted under a target that stayed on, so the target
+ * still holds a connection this side has forgotten and keystrokes go nowhere.
+ * The device retries this by itself for the first minute after it boots; the
+ * button is for every time after that, and it saves pulling the cable.
+ */
+async function replug() {
+  if (replugging.value) return;
+  replugging.value = true;
+  try {
+    await replugUsb();
+    toast.info("Re-plugged - the target should pick the keyboard up in a moment");
+  } catch {
+    toast.error("Could not re-plug USB");
+  } finally {
+    replugging.value = false;
+  }
+}
 
 /*
  * Every address worth knowing, in the order someone reaches for them: the name
@@ -1386,11 +1412,11 @@ const LED_BITS: Array<[number, string]> = [
             <div
               class="conn-popup"
               :class="{ 'conn-popup-net': isNetPill }"
-              :role="isNetPill ? 'menu' : 'tooltip'"
+              :role="isNetPill || isUsbPill ? 'menu' : 'tooltip'"
             >
-              <!-- Every pill leads with its own state line; the network one then
-                   opens out into the full panel. -->
-              <span :class="isNetPill ? 'conn-popup-head' : ''">
+              <!-- Every pill leads with its own state line; the network and USB
+                   ones then open out into what can be done about it. -->
+              <span :class="isNetPill || isUsbPill ? 'conn-popup-head' : ''">
                 {{ conns.find((c) => c.id === connDetail)?.title ?? "" }}
               </span>
 
@@ -1429,6 +1455,22 @@ const LED_BITS: Array<[number, string]> = [
                     {{ m === "ethernet" ? "Ethernet" : m === "wifi" ? "WiFi" : "Hotspot" }}
                   </button>
                 </template>
+              </template>
+
+              <template v-if="isUsbPill">
+                <p class="conn-note">
+                  If the target has stopped taking the keyboard - after an update,
+                  usually - re-plugging presents it as a new device. Nothing
+                  restarts.
+                </p>
+                <button
+                  type="button"
+                  class="btn btn-sm conn-action"
+                  :disabled="replugging"
+                  @click="replug"
+                >
+                  {{ replugging ? "Re-plugging..." : "Re-plug USB" }}
+                </button>
               </template>
             </div>
           </template>
