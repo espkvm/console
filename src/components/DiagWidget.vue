@@ -8,7 +8,7 @@
  */
 import { computed, ref } from "vue";
 
-import type { SystemInfo } from "../state/device";
+import { CONSOLE_HEADER, type SystemInfo } from "../state/device";
 
 const props = defineProps<{ system: SystemInfo | null; side: "left" | "right" }>();
 
@@ -30,6 +30,23 @@ const uptimeLabel = computed(() => {
   if (s < 31536000) return `${Math.floor(s / 2592000)}m`;
   return `${Math.floor(s / 31536000)}y`;
 });
+
+/*
+ * A crash dump kept from a panic. It is offered here rather than announced
+ * loudly: by the time anyone reads this the device has been running again for
+ * a while, and the one thing worth doing with it is sending it to the project.
+ */
+const dumpBytes = computed(() => props.system?.crashDumpBytes ?? 0);
+const erasing = ref(false);
+
+async function eraseDump() {
+  erasing.value = true;
+  try {
+    await fetch("/api/v1/system/coredump", { method: "DELETE", headers: CONSOLE_HEADER });
+  } finally {
+    erasing.value = false;
+  }
+}
 </script>
 
 <template>
@@ -86,6 +103,21 @@ const uptimeLabel = computed(() => {
             and MAC, so give it a look before posting it in public.
           </span>
         </p>
+        <p class="dw-log" v-if="dumpBytes > 0">
+          <span class="dw-row">
+            <a href="/api/v1/system/coredump" download class="btn btn-sm">
+              Download the crash dump
+            </a>
+            <button type="button" class="btn btn-sm" :disabled="erasing" @click="eraseDump">
+              Throw it away
+            </button>
+          </span>
+          <span class="muted">
+            The firmware panicked and wrote {{ Math.round(dumpBytes / 1024) }} KB of
+            registers and stacks before rebooting. Worth attaching to a bug report
+            &mdash; it holds no settings and no keys.
+          </span>
+        </p>
       </div>
     </template>
   </div>
@@ -112,6 +144,12 @@ const uptimeLabel = computed(() => {
   flex-direction: column;
   gap: 6px;
   align-items: flex-start;
+}
+
+.dw-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .dw-log .muted {

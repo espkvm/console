@@ -155,6 +155,12 @@ export interface SystemInfo {
   uptimeSeconds: number;
   heapFree: number;
   psramFree: number;
+  /**
+   * Size of the crash dump the last panic left in flash, 0 when there is none.
+   * Absent on firmware built without the dump, or on a device whose partition
+   * table predates it.
+   */
+  crashDumpBytes?: number;
   /** 0 when the sensor is unavailable. */
   tempC: number;
   /**
