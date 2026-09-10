@@ -840,6 +840,9 @@ function reloadConsole() {
 
 async function startConsole() {
   let bootVersion: string | undefined;
+  /* The keyboard socket waits for this point rather than opening with the page:
+     before the sign-in the device refuses it, over and over. */
+  input.control.start();
   try {
     const [s, v, c, sys] = await Promise.all([
       loadSchema(),
@@ -968,7 +971,14 @@ async function onAuthenticated() {
     loadError.value = err instanceof Error ? err.message : String(err);
     return;
   }
-  if (!locked.value && !mustChange.value) await startConsole();
+  /* The sign-in worked and the device still says nobody is here: the session
+     cookie never came back. Say that instead of showing the same empty form,
+     which reads as "the password is wrong". */
+  if (locked.value) {
+    toast.error("Signed in, but the device did not get the session cookie back");
+    return;
+  }
+  if (!mustChange.value) await startConsole();
 }
 
 async function onPasswordChanged() {

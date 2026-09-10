@@ -72,6 +72,15 @@ export class Control {
 
   constructor(handlers: Handlers) {
     this.#handlers = handlers;
+  }
+
+  /*
+   * Opening the socket waits for a session. Before the sign-in there is none,
+   * and the device refuses the handshake and says so in its log every couple of
+   * seconds - noise about a page that is only showing a password form.
+   */
+  start() {
+    if (this.#ws || this.#retry !== null || this.#closed) return;
     this.#connect();
   }
 
