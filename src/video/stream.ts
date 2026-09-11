@@ -39,6 +39,16 @@ const DECODER_STALL_MS = 3000;
 /** Consecutive rebuilds that fail to revive it before we give up on the channel. */
 const MAX_STALL_REBUILDS = 3;
 
+/*
+ * The device treats a second message from a subscribed viewer as "send me a
+ * keyframe". We need that whenever this side, not the device, is what broke the
+ * reference chain: a delta dropped here is invisible to the device, so nothing
+ * would repair the picture until the next scheduled IDR - and a decoder still
+ * running behind drops that one too, which is how a tab comes back from the
+ * background showing blocks that never clear.
+ */
+const RESYNC_MIN_GAP_MS = 500;
+
 /** Anything a canvas can draw and that must be released afterwards. */
 export type Drawable = (ImageBitmap | VideoFrame) & { close(): void };
 
@@ -113,14 +123,45 @@ export class VideoStream {
   /** Rebuilds since the last frame actually came out; caps runaway stalls. */
   #stallRebuilds = 0;
   #lastMeta = { width: 0, height: 0, sequence: 0, pts: 0 };
+  /** performance.now() of the last keyframe we asked the device for. */
+  #lastResyncAt = 0;
+  #onVisibility = () => this.#visibilityChanged();
 
   constructor(handlers: Handlers) {
     this.#handlers = handlers;
+    document.addEventListener("visibilitychange", this.#onVisibility);
     this.#connect();
+  }
+
+  /*
+   * A hidden tab is throttled, and a throttled decoder falls behind until this
+   * class starts dropping deltas into it. Nobody is looking at the picture
+   * anyway, so let the decoder go while the tab is away and ask for a keyframe
+   * when it comes back. Frames that arrive meanwhile are read and discarded:
+   * the socket stays up, so control and the status bar keep working.
+   */
+  #visibilityChanged() {
+    if (this.#stopped) return;
+    if (document.visibilityState === "hidden") {
+      this.#resetDecoder();
+      this.#hadKeyframe = false;
+      return;
+    }
+    this.#resync();
+  }
+
+  /** Ask the device for a keyframe, at most one every RESYNC_MIN_GAP_MS. */
+  #resync() {
+    const now = performance.now();
+    if (now - this.#lastResyncAt < RESYNC_MIN_GAP_MS) return;
+    if (this.#ws?.readyState !== WebSocket.OPEN) return;
+    this.#lastResyncAt = now;
+    this.#ws.send(new Uint8Array([1]));
   }
 
   stop() {
     this.#stopped = true;
+    document.removeEventListener("visibilitychange", this.#onVisibility);
     if (this.#firstFrameTimer !== null) clearTimeout(this.#firstFrameTimer);
     this.#resetDecoder();
     this.#ws?.close();
@@ -226,6 +267,10 @@ export class VideoStream {
       return;
     }
 
+    /* Hidden tab: nothing is drawn, so nothing is decoded. #visibilityChanged
+       asks for a keyframe when it comes back. */
+    if (document.visibilityState === "hidden") return;
+
     const { keyframe, sps } = inspectAnnexB(payload);
 
     /* Stall watchdog: input is flowing (we are here) but the decoder has produced
@@ -267,8 +312,14 @@ export class VideoStream {
     if (keyframe) this.#hadKeyframe = true;
 
     /* Frames queued behind a decoder that cannot keep up are latency, not
-       smoothness. */
-    if (this.#decoder.decodeQueueSize > 2 && !keyframe) return;
+       smoothness - but a dropped delta breaks the reference chain, and every
+       frame after it decodes into blocks. So stop feeding deltas until a
+       keyframe arrives, and ask the device for one now. */
+    if (this.#decoder.decodeQueueSize > 2 && !keyframe) {
+      this.#hadKeyframe = false;
+      this.#resync();
+      return;
+    }
 
     try {
       this.#decoder.decode(
