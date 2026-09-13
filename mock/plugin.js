@@ -245,7 +245,7 @@ export function mockDevice() {
          * in: there is nothing here worth protecting.
          */
         if (url === "/api/v1/auth/session") {
-          return json(res, { required: false, authenticated: true, mustChange: false, user: "admin" });
+          return json(res, { required: true, authenticated: true, mustChange: false, user: "admin" });
         }
         if (url === "/api/v1/auth/login" && req.method === "POST") {
           return json(res, { mustChange: false });

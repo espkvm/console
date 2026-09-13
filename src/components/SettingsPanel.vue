@@ -28,7 +28,7 @@ import {
   saveSettings,
   settingBlockedReason,
 } from "../state/device";
-import { changePassword, createViewToken, loadSession, revokeViewToken } from "../state/auth";
+import { changePassword, createViewToken, loadSession, logout, revokeViewToken } from "../state/auth";
 import {
   buildFile,
   describePlan,
@@ -64,9 +64,15 @@ const emit = defineEmits<{ values: [Values]; passwordChanged: [] }>();
 const tokenBusy = ref(false);
 const tokenShown = ref("");
 const tokenExists = ref(false);
+/* Who is signed in, and whether anyone had to be: with the login off there is
+   nothing to sign out of, so the button stays away. */
+const sessionUser = ref("");
+const signedIn = ref(false);
 void loadSession()
   .then((s) => {
     tokenExists.value = Boolean(s.viewToken);
+    sessionUser.value = s.user;
+    signedIn.value = s.required && s.authenticated;
   })
   .catch(() => {
     /* the panel still works; the button simply offers to make one */
@@ -360,6 +366,23 @@ async function writeSecret(key: string, el: HTMLInputElement) {
   await write(key, value);
 }
 
+
+/*
+ * Signing out ends this session on the device and reloads the page: the
+ * keyboard and video sockets go with the page, so nothing is left knocking on
+ * a door that is now shut. Other open consoles keep their own sessions.
+ */
+const signingOut = ref(false);
+async function signOut() {
+  signingOut.value = true;
+  try {
+    await logout();
+    location.reload();
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+    signingOut.value = false;
+  }
+}
 
 /*
  * Changing the password.
@@ -756,6 +779,17 @@ async function doRevertCert() {
           Add this to your WireGuard hub as this device's peer public key.
         </p>
       </div>
+    </div>
+
+    <div v-if="currentSection === 'security' && signedIn" class="firmware">
+      <h3>Session</h3>
+      <p class="setting-note">
+        Signed in as <strong>{{ sessionUser }}</strong>. Signing out ends this session only;
+        other open consoles keep theirs.
+      </p>
+      <button type="button" class="btn btn-sm" :disabled="signingOut" @click="signOut">
+        {{ signingOut ? "Signing out..." : "Sign out" }}
+      </button>
     </div>
 
     <form
