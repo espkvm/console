@@ -81,7 +81,74 @@ const SCHEMA = [
     help: "URL of a manifest.json describing the newest build." },
   { key: "log_level", section: "system", title: "Log verbosity", type: "enum",
     choices: ["error", "warn", "info", "debug"], default: 2 },
+  { key: "macros_json", section: "macros", title: "User key macros", type: "string",
+    maxLength: 2000, default: "[]", requires: "hid" },
+  { key: "runbooks_json", section: "runbooks", title: "Runbooks", type: "string",
+    maxLength: 3000, default: "[]", requires: "runbooks" },
+  { key: "sched_enable", section: "schedules", title: "Run schedules", type: "bool",
+    default: 0, requires: "scheduler" },
+  { key: "sched_ntp", section: "schedules", title: "Time server (NTP)", type: "string",
+    maxLength: 64, default: "pool.ntp.org", requires: "scheduler" },
+  { key: "sched_tz", section: "schedules", title: "Time zone (POSIX TZ)", type: "string",
+    maxLength: 48, default: "UTC0", requires: "scheduler" },
+  { key: "schedules_json", section: "schedules", title: "Schedules", type: "string",
+    maxLength: 3000, default: "[]", requires: "scheduler" },
+  { key: "notify_enable", section: "notify", title: "Send notifications", type: "bool",
+    default: 0, requires: "notify" },
+  { key: "notify_watch", section: "notify", title: "On a screen-watch phrase", type: "bool",
+    default: 1, requires: "notify" },
+  { key: "notify_flat", section: "notify", title: "On a blank screen", type: "bool",
+    default: 0, requires: "notify" },
+  { key: "notify_snap", section: "notify", title: "Attach a screenshot", type: "bool",
+    default: 1, requires: "notify" },
+  { key: "notify_log", section: "notify", title: "Attach recent log", type: "bool",
+    default: 0, requires: "notify" },
+  { key: "notify_tg_token", section: "notify", title: "Telegram bot token", type: "string",
+    maxLength: 64, default: "", requires: "notify", secret: true },
+  { key: "notify_tg_chat", section: "notify", title: "Telegram chat id", type: "string",
+    maxLength: 32, default: "", requires: "notify" },
+  { key: "notify_url", section: "notify", title: "Webhook URL", type: "string",
+    maxLength: 200, default: "", requires: "notify" },
 ];
+
+/* A pretend runbook engine: it walks the script's lines on a timer, a wait
+   "matches" after two seconds, so the panel's polling and its Stop can be
+   seen without a target. */
+const runbook = { state: "idle", name: "", step: 0, steps: 0, line: "", message: "nothing has run", elapsedMs: 0 };
+let runbookTimer = null;
+let runbookStarted = 0;
+function runbookStatus() {
+  return { ...runbook, elapsedMs: runbook.state === "running" ? Date.now() - runbookStarted : runbook.elapsedMs };
+}
+function runbookStart(name, values) {
+  let list = [];
+  try { list = JSON.parse(values.runbooks_json || "[]"); } catch { list = []; }
+  const rb = list.find((r) => r.name === name);
+  if (!rb) return 404;
+  if (runbook.state === "running") return 409;
+  const lines = rb.script.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  Object.assign(runbook, { state: "running", name, step: 0, steps: lines.length, line: "", message: "running" });
+  runbookStarted = Date.now();
+  const advance = () => {
+    if (runbook.step >= lines.length) {
+      Object.assign(runbook, { state: "done", message: "done", elapsedMs: Date.now() - runbookStarted });
+      runbookTimer = null;
+      return;
+    }
+    runbook.step += 1;
+    runbook.line = lines[runbook.step - 1];
+    runbookTimer = setTimeout(advance, /^(wait|gone)\b/i.test(runbook.line) ? 2000 : 600);
+  };
+  advance();
+  return 202;
+}
+function runbookStop() {
+  if (runbook.state !== "running") return 409;
+  clearTimeout(runbookTimer);
+  runbookTimer = null;
+  Object.assign(runbook, { state: "stopped", message: `stopped at step ${runbook.step}`, elapsedMs: Date.now() - runbookStarted });
+  return 200;
+}
 
 /* Matches what the real device reports today: video and input work, the rest
  * is either absent hardware or not built yet. */
@@ -90,6 +157,9 @@ const CAPS = {
   mjpeg: { compiled: true, available: true, enabled: true, active: true },
   h264: { compiled: true, available: true, enabled: true, active: true },
   hid: { compiled: true, available: true, enabled: true, active: true },
+  runbooks: { compiled: true, available: true, enabled: true, active: true },
+  scheduler: { compiled: true, available: true, enabled: true, active: true },
+  notify: { compiled: true, available: true, enabled: true, active: true },
   msc: { compiled: true, available: false, enabled: false, active: false, setting: "msc_enable",
          reason: "virtual media not implemented yet" },
   atx: { compiled: true, available: false, enabled: false, active: false, setting: "atx_enable",
@@ -242,6 +312,49 @@ export function mockDevice() {
             }
             return json(res, values);
           });
+        }
+        if (url === "/api/v1/notify/status") {
+          return json(res, { enabled: !!values.notify_enable, lastResult: "ok", lastAt: "2026-09-13 10:00:00" });
+        }
+        if (url === "/api/v1/notify/test" && req.method === "POST") {
+          return json(res, { status: "queued" }, 202);
+        }
+        if (url === "/api/v1/schedules/status") {
+          const on = !!values.sched_enable;
+          const now = new Date();
+          const pad = (n) => String(n).padStart(2, "0");
+          return json(res, {
+            enabled: on,
+            clockValid: on,
+            now: on ? `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}` : "",
+            tz: String(values.sched_tz || "UTC0"),
+            count: (() => { try { return JSON.parse(values.schedules_json||"[]").length; } catch { return 0; } })(),
+            lastName: "", lastAction: "", lastAt: "",
+          });
+        }
+        if (url === "/api/v1/schedules/run" && req.method === "POST") {
+          return readBody(req).then((body) => {
+            let name = ""; try { name = JSON.parse(body).name; } catch { name = ""; }
+            let found = false;
+            try { found = JSON.parse(values.schedules_json||"[]").some((s) => s.name === name); } catch { found = false; }
+            if (!found) return json(res, { error: "no schedule of that name" }, 404);
+            return json(res, { status: "fired" }, 202);
+          });
+        }
+        if (url === "/api/v1/runbooks/status") return json(res, runbookStatus());
+        if (url === "/api/v1/runbooks/run" && req.method === "POST") {
+          return readBody(req).then((body) => {
+            let name = "";
+            try { name = JSON.parse(body).name; } catch { name = ""; }
+            const code = runbookStart(name, values);
+            if (code === 404) return json(res, { error: "no runbook of that name" }, 404);
+            if (code === 409) return json(res, { error: "a runbook is already running" }, 409);
+            return json(res, { status: "started" }, 202);
+          });
+        }
+        if (url === "/api/v1/runbooks/stop" && req.method === "POST") {
+          if (runbookStop() !== 200) return json(res, { error: "no runbook is running" }, 409);
+          return json(res, { ok: true });
         }
         if (url === "/api/v1/settings/reset" && req.method === "POST") {
           for (const s of SCHEMA) values[s.key] = s.default;

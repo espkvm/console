@@ -272,7 +272,8 @@ async function runMacro(m: UserMacro) {
       ></textarea>
       <p class="setting-note">
         One command per line: <code>key ctrl+alt+f2</code>, <code>type some text</code>,
-        <code>delay 500</code>. Lines starting with # are ignored.
+        <code>delay 500</code>. Lines starting with # are ignored. Every key name is listed in
+        <a href="https://espkvm.io/scripts/" target="_blank" rel="noopener">espkvm.io/scripts</a>.
       </p>
       <p v-if="scriptError" class="setting-note setting-note-blocked">{{ scriptError }}</p>
       <div class="macro-actions">

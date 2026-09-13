@@ -363,6 +363,101 @@ export async function saveSettings(patch: Values): Promise<Values> {
   return body as Values;
 }
 
+/* ---- runbooks ---------------------------------------------------------- */
+
+export type RunbookState = "idle" | "running" | "done" | "failed" | "stopped";
+
+export interface RunbookStatus {
+  state: RunbookState;
+  name: string;
+  /** 1-based: the step running, or the one the run ended on. */
+  step: number;
+  steps: number;
+  /** That step as written. */
+  line: string;
+  message: string;
+  elapsedMs: number;
+}
+
+export async function loadRunbookStatus(): Promise<RunbookStatus> {
+  return getJson<RunbookStatus>("/api/v1/runbooks/status");
+}
+
+async function postRunbooks(action: string, body?: unknown): Promise<void> {
+  const res = await fetch(`/api/v1/runbooks/${action}`, {
+    method: "POST",
+    headers: { ...CONSOLE_HEADER, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) {
+    const j = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(j.error ?? `runbook ${action} failed (${res.status})`);
+  }
+}
+
+/** Start a saved runbook on the device. Rejects with the device's reason. */
+export async function runRunbook(name: string): Promise<void> {
+  return postRunbooks("run", { name });
+}
+
+export async function stopRunbook(): Promise<void> {
+  return postRunbooks("stop");
+}
+
+/* ---- schedules --------------------------------------------------------- */
+
+export interface ScheduleStatus {
+  enabled: boolean;
+  /** SNTP has set the clock; nothing fires until it has. */
+  clockValid: boolean;
+  /** Local time on the device, or "" before the clock is set. */
+  now: string;
+  tz: string;
+  count: number;
+  lastName: string;
+  lastAction: string;
+  lastAt: string;
+}
+
+export async function loadScheduleStatus(): Promise<ScheduleStatus> {
+  return getJson<ScheduleStatus>("/api/v1/schedules/status");
+}
+
+/** Fire a saved schedule's action now, ignoring its clock and enabled flag. */
+export async function runSchedule(name: string): Promise<void> {
+  const res = await fetch("/api/v1/schedules/run", {
+    method: "POST",
+    headers: { ...CONSOLE_HEADER, "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) {
+    const j = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(j.error ?? `schedule run failed (${res.status})`);
+  }
+}
+
+/* ---- notifications ----------------------------------------------------- */
+
+export interface NotifyStatus {
+  enabled: boolean;
+  /** "ok", or why the last send failed; "nothing sent yet" at first. */
+  lastResult: string;
+  lastAt: string;
+}
+
+export async function loadNotifyStatus(): Promise<NotifyStatus> {
+  return getJson<NotifyStatus>("/api/v1/notify/status");
+}
+
+/** Queue a test notification on the device. */
+export async function testNotify(): Promise<void> {
+  const res = await fetch("/api/v1/notify/test", { method: "POST", headers: CONSOLE_HEADER });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(`test failed (${res.status})`);
+}
+
 export async function resetSettings(): Promise<Values> {
   const res = await fetch(`${SETTINGS_URL}/reset`, { method: "POST", headers: CONSOLE_HEADER });
   if (!res.ok) throw new Error(`reset failed (${res.status})`);
@@ -1001,6 +1096,7 @@ export const SECTION_TITLES: Record<string, string> = {
   network: "Network",
   vpn: "VPN",
   mqtt: "MQTT / Home Assistant",
+  notify: "Notifications",
   security: "Security",
   display: "Display",
   system: "System",
@@ -1015,6 +1111,7 @@ export const SECTION_ORDER = [
   "network",
   "vpn",
   "mqtt",
+  "notify",
   "security",
   "display",
   "system",

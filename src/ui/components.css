@@ -459,6 +459,36 @@
   transition: width 0.15s ease;
 }
 
+/* Where a runbook is: one line of state, the step it is on, and why it ended. */
+.runbook-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
+
+.runbook-status-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.runbook-status-head .btn {
+  margin-left: auto;
+}
+
+.runbook-running {
+  border-color: var(--accent);
+}
+
+.runbook-line {
+  opacity: 0.8;
+}
+
 .macro-editor {
   display: flex;
   flex-direction: column;
@@ -1006,4 +1036,22 @@
 .restart-step-todo {
   color: var(--text-muted);
   opacity: 0.6;
+}
+
+/* A schedule row: name on top, its cron and action under it. */
+.sched-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sched-when {
+  white-space: normal;
+}
+
+/* A faint divider between two blocks of one panel. */
+.panel-rule {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: var(--space-4) 0 var(--space-2);
 }

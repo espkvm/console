@@ -129,6 +129,73 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+
+/*
+ * A pretend runbook engine. It walks the script's lines on a timer and a wait
+ * "matches" after two seconds, so the Automation panel shows a run the way the
+ * device would report one. The demo machine's screen is not consulted.
+ */
+const runbook = {
+  state: "idle",
+  name: "",
+  step: 0,
+  steps: 0,
+  line: "",
+  message: "nothing has run",
+  elapsedMs: 0,
+};
+let runbookTimer: ReturnType<typeof setTimeout> | null = null;
+let runbookStarted = 0;
+
+function runbookStatus() {
+  return {
+    ...runbook,
+    elapsedMs: runbook.state === "running" ? Date.now() - runbookStarted : runbook.elapsedMs,
+  };
+}
+
+function runbookStart(name: string): 202 | 404 | 409 {
+  let list: { name: string; script: string }[] = [];
+  try {
+    list = JSON.parse(String(settings.runbooks_json ?? "[]"));
+  } catch {
+    list = [];
+  }
+  const rb = list.find((r) => r.name === name);
+  if (!rb) return 404;
+  if (runbook.state === "running") return 409;
+  const lines = rb.script
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"));
+  Object.assign(runbook, { state: "running", name, step: 0, steps: lines.length, line: "", message: "running" });
+  runbookStarted = Date.now();
+  const advance = () => {
+    if (runbook.step >= lines.length) {
+      Object.assign(runbook, { state: "done", message: "done", elapsedMs: Date.now() - runbookStarted });
+      runbookTimer = null;
+      return;
+    }
+    runbook.step += 1;
+    runbook.line = lines[runbook.step - 1];
+    runbookTimer = setTimeout(advance, /^(wait|gone)\b/i.test(runbook.line) ? 2000 : 600);
+  };
+  advance();
+  return 202;
+}
+
+function runbookStop(): boolean {
+  if (runbook.state !== "running") return false;
+  if (runbookTimer) clearTimeout(runbookTimer);
+  runbookTimer = null;
+  Object.assign(runbook, {
+    state: "stopped",
+    message: `stopped at step ${runbook.step}`,
+    elapsedMs: Date.now() - runbookStarted,
+  });
+  return true;
+}
+
 async function bodyJson(init?: RequestInit, req?: Request): Promise<Json> {
   try {
     if (init?.body) return JSON.parse(String(init.body));
@@ -220,6 +287,31 @@ async function route(
         return json(authSession);
       case "/api/v1/tls":
         return json({ https: true, custom: tlsCustom });
+      case "/api/v1/runbooks/status":
+        return json(runbookStatus());
+      case "/api/v1/notify/status":
+        return json({
+          enabled: settings.notify_enable === true || settings.notify_enable === 1,
+          lastResult: "ok",
+          lastAt: "2026-09-13 10:00:00",
+        });
+      case "/api/v1/schedules/status": {
+        const on = settings.sched_enable === true || settings.sched_enable === 1;
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, "0");
+        return json({
+          enabled: on,
+          clockValid: on,
+          now: on
+            ? `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+            : "",
+          tz: String(settings.sched_tz ?? "UTC0"),
+          count: (() => { try { return JSON.parse(String(settings.schedules_json ?? "[]")).length; } catch { return 0; } })(),
+          lastName: "",
+          lastAction: "",
+          lastAt: "",
+        });
+      }
       case "/api/v1/screen/text": {
         /* A booting machine is text, and text is what Select and Copy need. Once
            it reaches the pointer demo it is a picture, and 204 is the honest
@@ -276,6 +368,25 @@ async function route(
       case "/api/v1/settings/reset":
         settings = { ...(settingsFixture as Json) };
         return json(settings);
+      case "/api/v1/runbooks/run": {
+        const { name } = (await bodyJson(init, req)) as { name?: string };
+        const code = runbookStart(String(name ?? ""));
+        if (code === 404) return json({ error: "no runbook of that name" }, 404);
+        if (code === 409) return json({ error: "a runbook is already running" }, 409);
+        return json({ status: "started" }, 202);
+      }
+      case "/api/v1/runbooks/stop":
+        if (!runbookStop()) return json({ error: "no runbook is running" }, 409);
+        return json({ ok: true });
+      case "/api/v1/notify/test":
+        return json({ status: "queued" }, 202);
+      case "/api/v1/schedules/run": {
+        const { name } = (await bodyJson(init, req)) as { name?: string };
+        let found = false;
+        try { found = JSON.parse(String(settings.schedules_json ?? "[]")).some((s: { name: string }) => s.name === name); } catch { found = false; }
+        if (!found) return json({ error: "no schedule of that name" }, 404);
+        return json({ status: "fired" }, 202);
+      }
       case "/api/v1/auth/login":
         return json({ mustChange: false });
       case "/api/v1/auth/logout":

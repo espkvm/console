@@ -13,6 +13,18 @@
   "kbd_layout": 0,
   "type_delay": 8,
   "macros_json": "[]",
+  "runbooks_json": "[]",
+  "sched_enable": 0,
+  "sched_ntp": "pool.ntp.org",
+  "sched_tz": "UTC0",
+  "schedules_json": "[]",
+  "notify_enable": 0,
+  "notify_watch": 1,
+  "notify_flat": 0,
+  "notify_snap": 1,
+  "notify_tg_token": "",
+  "notify_tg_chat": "",
+  "notify_url": "",
   "msc_enable": true,
   "msc_mode": 0,
   "msc_image": "",
@@ -65,5 +77,6 @@
   "ts_hostname": "kvm-lab",
   "ts_control_url": "",
   "ts_control_port": 0,
-  "ts_ctrl_tls": true
+  "ts_ctrl_tls": true,
+  "notify_log": 0
 }

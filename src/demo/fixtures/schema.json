@@ -165,6 +165,120 @@
     "requires": "hid"
   },
   {
+    "key": "runbooks_json",
+    "section": "runbooks",
+    "title": "Runbooks",
+    "help": "Saved runbooks, edited from the Automation panel.",
+    "type": "string",
+    "maxLength": 3000,
+    "default": "[]",
+    "requires": "runbooks"
+  },
+  {
+    "key": "sched_enable",
+    "section": "schedules",
+    "title": "Run schedules",
+    "type": "bool",
+    "default": 0,
+    "requires": "scheduler"
+  },
+  {
+    "key": "sched_ntp",
+    "section": "schedules",
+    "title": "Time server (NTP)",
+    "type": "string",
+    "maxLength": 64,
+    "default": "pool.ntp.org",
+    "requires": "scheduler"
+  },
+  {
+    "key": "sched_tz",
+    "section": "schedules",
+    "title": "Time zone (POSIX TZ)",
+    "type": "string",
+    "maxLength": 48,
+    "default": "UTC0",
+    "requires": "scheduler"
+  },
+  {
+    "key": "schedules_json",
+    "section": "schedules",
+    "title": "Schedules",
+    "help": "Saved schedules, edited from the Automation panel.",
+    "type": "string",
+    "maxLength": 3000,
+    "default": "[]",
+    "requires": "scheduler"
+  },
+  {
+    "key": "notify_enable",
+    "section": "notify",
+    "title": "Send notifications",
+    "type": "bool",
+    "default": 0,
+    "requires": "notify"
+  },
+  {
+    "key": "notify_watch",
+    "section": "notify",
+    "title": "On a screen-watch phrase",
+    "type": "bool",
+    "default": 1,
+    "requires": "notify"
+  },
+  {
+    "key": "notify_flat",
+    "section": "notify",
+    "title": "On a blank screen",
+    "type": "bool",
+    "default": 0,
+    "requires": "notify"
+  },
+  {
+    "key": "notify_snap",
+    "section": "notify",
+    "title": "Attach a screenshot",
+    "type": "bool",
+    "default": 1,
+    "requires": "notify"
+  },
+  {
+    "key": "notify_log",
+    "section": "notify",
+    "title": "Attach recent log",
+    "type": "bool",
+    "default": 0,
+    "requires": "notify"
+  },
+  {
+    "key": "notify_tg_token",
+    "section": "notify",
+    "title": "Telegram bot token",
+    "type": "string",
+    "maxLength": 64,
+    "default": "",
+    "requires": "notify",
+    "secret": true
+  },
+  {
+    "key": "notify_tg_chat",
+    "section": "notify",
+    "title": "Telegram chat id",
+    "type": "string",
+    "maxLength": 32,
+    "default": "",
+    "requires": "notify"
+  },
+  {
+    "key": "notify_url",
+    "section": "notify",
+    "title": "Webhook URL",
+    "type": "string",
+    "maxLength": 200,
+    "default": "",
+    "requires": "notify"
+  },
+  {
     "key": "msc_enable",
     "section": "storage",
     "title": "Expose virtual media",

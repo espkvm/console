@@ -83,5 +83,23 @@
     "enabled": true,
     "active": true,
     "setting": "ts_enable"
+  },
+  "runbooks": {
+    "compiled": true,
+    "available": true,
+    "enabled": true,
+    "active": true
+  },
+  "scheduler": {
+    "compiled": true,
+    "available": true,
+    "enabled": true,
+    "active": true
+  },
+  "notify": {
+    "compiled": true,
+    "available": true,
+    "enabled": true,
+    "active": true
   }
 }

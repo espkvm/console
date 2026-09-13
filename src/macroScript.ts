@@ -89,7 +89,7 @@ export interface ParsedStep {
 }
 
 /** Parse a `key` combo like "ctrl+alt+f2" into modifier bits and one usage. */
-function parseCombo(combo: string): { mod: number; code: number } {
+export function parseCombo(combo: string): { mod: number; code: number } {
   let mod = 0;
   let code = 0;
   for (const raw of combo.split("+")) {
@@ -104,8 +104,177 @@ function parseCombo(combo: string): { mod: number; code: number } {
       throw new Error(`unknown key "${tok}"`);
     }
   }
-  if (!code) throw new Error(`no key in "${combo}"`);
+  // A lone modifier is a real keypress (GUI opens the Start menu); the report
+  // path already sends a modifier with no key. Refuse only an empty chord.
+  if (!code && !mod) throw new Error(`no key in "${combo}"`);
   return { mod, code };
+}
+
+/* ------------------------------------------------------------------------ *
+ * DuckyScript
+ *
+ * A second dialect, so the payloads people already have run here. Hak5's
+ * DuckyScript is upper-case verbs, one per line; it has no way to wait for the
+ * screen, so it maps onto the macro half of the language and is translated to
+ * native lines before parsing - the device does the same in C, so the console
+ * and the device accept exactly the same scripts. The full reference is at
+ * https://espkvm.io/scripts/.
+ * ------------------------------------------------------------------------ */
+
+const DUCKY_MODS: Record<string, string> = {
+  CTRL: "ctrl",
+  CONTROL: "ctrl",
+  SHIFT: "shift",
+  ALT: "alt",
+  GUI: "gui",
+  WINDOWS: "gui",
+  COMMAND: "gui",
+};
+
+const DUCKY_KEYS: Record<string, string> = {
+  ENTER: "enter",
+  ESCAPE: "esc",
+  ESC: "esc",
+  TAB: "tab",
+  SPACE: "space",
+  BACKSPACE: "backspace",
+  DELETE: "delete",
+  DEL: "delete",
+  INSERT: "insert",
+  HOME: "home",
+  END: "end",
+  PAGEUP: "pageup",
+  PAGEDOWN: "pagedown",
+  UP: "up",
+  UPARROW: "up",
+  DOWN: "down",
+  DOWNARROW: "down",
+  LEFT: "left",
+  LEFTARROW: "left",
+  RIGHT: "right",
+  RIGHTARROW: "right",
+  CAPSLOCK: "capslock",
+  SCROLLLOCK: "scrolllock",
+  PRINTSCREEN: "printscreen",
+  PAUSE: "pause",
+  BREAK: "pause",
+};
+
+const DUCKY_CMDS = new Set([
+  "REM",
+  "STRING",
+  "STRINGLN",
+  "DELAY",
+  "DEFAULT_DELAY",
+  "DEFAULTDELAY",
+  "REPEAT",
+]);
+
+/** A DuckyScript key token to our native name, or null. Single letters/digits
+ *  and F1..F12 by rule; the rest by table. */
+function duckyKey(word: string): string | null {
+  if (word.length === 1 && /[a-z0-9]/i.test(word)) return word.toLowerCase();
+  const f = /^F([1-9]|1[0-2])$/i.exec(word);
+  if (f) return "f" + f[1];
+  return DUCKY_KEYS[word] ?? null;
+}
+
+/** Whether a script should be read as DuckyScript: its first real line begins
+ *  with a DuckyScript keyword, which is upper case and so never one of our
+ *  own lower-case verbs. */
+export function looksLikeDucky(src: string): boolean {
+  for (const raw of src.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const w = line.split(/\s+/)[0];
+    return (
+      DUCKY_CMDS.has(w) ||
+      w in DUCKY_MODS ||
+      w in DUCKY_KEYS ||
+      /^F([1-9]|1[0-2])$/.test(w)
+    );
+  }
+  return false;
+}
+
+/** One DuckyScript line to native lines, appended to `out`. `defDelay`, when
+ *  set, follows a key or a string, the way DEFAULT_DELAY works. `at` makes the
+ *  "line N:" error. */
+function duckyLine(line: string, out: string[], defDelay: number, at: (m: string) => Error): void {
+  const sp = line.search(/\s/);
+  const verb = sp < 0 ? line : line.slice(0, sp);
+  const rest = sp < 0 ? "" : line.slice(sp + 1).trim();
+
+  if (verb === "STRING" || verb === "STRINGLN") {
+    if (rest) {
+      for (const ch of rest) {
+        const c = ch.charCodeAt(0);
+        if (c < 0x20 || c > 0x7e) throw at("STRING is US layout, ASCII only");
+      }
+      out.push(`type ${rest}`);
+    }
+    if (verb === "STRINGLN") out.push("key enter");
+    if (defDelay) out.push(`delay ${defDelay}`);
+    return;
+  }
+  if (verb === "DELAY") {
+    if (!/^\d+$/.test(rest) || +rest < 1 || +rest > 60000) {
+      throw at("DELAY wants 1..60000 milliseconds");
+    }
+    out.push(`delay ${+rest}`);
+    return;
+  }
+
+  // Anything else is a key or a chord: modifiers and at most one key.
+  const mods: string[] = [];
+  let key = "";
+  for (const tok of line.split(/\s+/)) {
+    if (!tok) continue;
+    if (tok in DUCKY_MODS) {
+      mods.push(DUCKY_MODS[tok]);
+      continue;
+    }
+    if (key) throw at("more than one key in the line");
+    const k = duckyKey(tok);
+    if (!k) throw at(`unknown key "${tok}"`);
+    key = k;
+  }
+  const chord = [...mods, key].filter(Boolean).join("+");
+  out.push(`key ${chord}`);
+  if (defDelay) out.push(`delay ${defDelay}`);
+}
+
+/** Translate a whole DuckyScript into our native script text. Throws
+ *  Error("line N: ...") on the first problem, with the DuckyScript line. */
+export function duckyToNative(src: string): string {
+  const out: string[] = [];
+  let defDelay = 0;
+  let prev = "";
+  const lines = src.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const at = (m: string) => new Error(`line ${i + 1}: ${m}`);
+    const sp = line.search(/\s/);
+    const verb = sp < 0 ? line : line.slice(0, sp);
+    const rest = sp < 0 ? "" : line.slice(sp + 1).trim();
+
+    if (verb === "REM") continue;
+    if (verb === "DEFAULT_DELAY" || verb === "DEFAULTDELAY") {
+      if (!/^\d+$/.test(rest) || +rest > 60000) throw at("DEFAULT_DELAY wants 0..60000 milliseconds");
+      defDelay = +rest;
+      continue;
+    }
+    if (verb === "REPEAT") {
+      if (!/^\d+$/.test(rest) || +rest < 1 || +rest > 1000) throw at("REPEAT wants 1..1000");
+      if (!prev) throw at("REPEAT with nothing before it");
+      for (let r = 0; r < +rest; r++) duckyLine(prev, out, defDelay, at);
+      continue;
+    }
+    duckyLine(line, out, defDelay, at);
+    prev = line;
+  }
+  return out.join("\n");
 }
 
 /**
@@ -113,6 +282,7 @@ function parseCombo(combo: string): { mod: number; code: number } {
  * number on the first problem, so the editor can show it before running.
  */
 export function parseMacroScript(script: string): ParsedStep[] {
+  if (looksLikeDucky(script)) script = duckyToNative(script);
   const steps: ParsedStep[] = [];
   const lines = script.split("\n");
   for (let i = 0; i < lines.length; i++) {

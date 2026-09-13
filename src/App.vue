@@ -7,6 +7,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import Icon from "./components/Icon.vue";
+import AutomationPanel from "./components/AutomationPanel.vue";
 import InputPanel from "./components/InputPanel.vue";
 import LoginView from "./components/LoginView.vue";
 import RestartOverlay from "./components/RestartOverlay.vue";
@@ -56,11 +57,12 @@ import {
 import { loadSession, type SessionState } from "./state/auth";
 import { toast } from "./state/toasts";
 
-type PanelId = "input" | "media" | "settings" | null;
+type PanelId = "input" | "media" | "automation" | "settings" | null;
 
 const PANEL_TITLES: Record<string, string> = {
   input: "Input",
   media: "Virtual media",
+  automation: "Automation",
   settings: "Settings",
 };
 
@@ -1282,6 +1284,16 @@ const LED_BITS: Array<[number, string]> = [
         >
           <Icon name="disc" :size="18" />
         </button>
+        <button
+          type="button"
+          :class="['rail-btn', { 'rail-btn-active': panel === 'automation' }]"
+          aria-label="Automation"
+          :disabled="!caps.runbooks?.available"
+          :title="caps.runbooks?.reason ?? 'Automation'"
+          @click="togglePanel('automation')"
+        >
+          <Icon name="play" :size="18" />
+        </button>
         <div class="rail-spacer" />
         <PowerWidget
           :caps="caps"
@@ -1401,6 +1413,12 @@ const LED_BITS: Array<[number, string]> = [
               @values="values = $event"
             />
             <MediaPanel v-else-if="panel === 'media'" :values="values" @values="values = $event" />
+            <AutomationPanel
+              v-else-if="panel === 'automation'"
+              :values="values"
+              :attached="input.target.value.attached"
+              @values="values = $event"
+            />
           </div>
         </aside>
       </main>
