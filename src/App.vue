@@ -54,7 +54,7 @@ import {
   type UsbProbe,
   Unauthorized,
 } from "./state/device";
-import { loadSession, type SessionState } from "./state/auth";
+import { loadSession, logout, type SessionState } from "./state/auth";
 import { toast } from "./state/toasts";
 
 type PanelId = "input" | "media" | "automation" | "settings" | null;
@@ -88,6 +88,22 @@ const locked = computed(
   () => session.value !== null && session.value.required && !session.value.authenticated,
 );
 const mustChange = computed(() => Boolean(session.value?.mustChange));
+
+/* Sign out from the rail: ends this session on the device and reloads onto the
+   sign-in page. Asked first - the button sits next to Settings, and a stray
+   click would throw the operator out mid-task. */
+const signingOut = ref(false);
+async function signOutFromRail() {
+  if (!confirm(`Sign out${session.value?.user ? ` ${session.value.user}` : ""}?`)) return;
+  signingOut.value = true;
+  try {
+    await logout();
+    location.reload();
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+    signingOut.value = false;
+  }
+}
 
 const panel = ref<PanelId>(null);
 /* Why there is no video at all, in the device's own words - a capture board
@@ -1319,6 +1335,17 @@ const LED_BITS: Array<[number, string]> = [
           @click="togglePanel('settings')"
         >
           <Icon name="settings" :size="18" />
+        </button>
+        <button
+          v-if="session?.required && session.authenticated"
+          type="button"
+          class="rail-btn"
+          aria-label="Sign out"
+          title="Sign out"
+          :disabled="signingOut"
+          @click="signOutFromRail"
+        >
+          <Icon name="logout" :size="18" />
         </button>
       </nav>
 

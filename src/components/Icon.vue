@@ -30,6 +30,8 @@ const PATHS = {
     "M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4",
   ],
   close: ["M6 6l12 12M18 6L6 18"],
+  /* A door frame with an arrow leaving it. */
+  logout: ["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", "M16 17l5-5-5-5", "M21 12H9"],
   /* A drawing pin seen from the side: head, shaft, point. */
   pin: ["M9 4h6M10 4v6l-3 3v2h10v-2l-3-3V4", "M12 15v5"],
   info: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", "M12 11v5M12 8h.01"],

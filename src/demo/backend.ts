@@ -86,7 +86,7 @@ function liveStatus(): Json {
 /* An update in the demo really does install: the version it reports afterwards
    is kept here, so the console's verdict after its reload is the true one. */
 const VERSION_KEY = "espkvm-demo-version";
-const NEXT_VERSION = "v.0.34.0";
+const NEXT_VERSION = "v.0.50.0";
 const installedVersion = () => {
   try {
     return sessionStorage.getItem(VERSION_KEY) || (systemInfo as { version: string }).version;
