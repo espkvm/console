@@ -5,29 +5,32 @@
  * one picked here rather than buried in settings. Choosing writes the msc_image
  * setting; whether the drive is exposed at all, and its type, stay in Settings.
  *
- * The card is read-only on this board (its writes are unreliable), so uploads to
- * it are shown disabled with the reason; the flash rescue slot, whose writes are
- * reliable, can be uploaded to from here.
+ * Uploads go to the card where the device can write it, and to the flash rescue
+ * slot on every board. Where the card is read-only (a pre-3.0 chip without the
+ * slot's IO LDO) the upload is shown disabled with the device's reason.
  */
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import {
   deleteImage,
   formatBytes,
+  formatMhz,
   formatDuration,
   loadImages,
   saveSettings,
   uploadImage,
   uploadRescue,
+  UploadCancelled,
   RESCUE_MEDIUM,
   WHOLE_SD_MEDIUM,
   type StorageInfo,
   type Values,
 } from "../state/device";
 import { toast } from "../state/toasts";
+import UploadChart from "./UploadChart.vue";
 
-const props = defineProps<{ values: Values }>();
-const emit = defineEmits<{ (e: "values", v: Values): void }>();
+const props = defineProps<{ values: Values; streamPaused?: boolean }>();
+const emit = defineEmits<{ (e: "values", v: Values): void; (e: "pause-stream"): void }>();
 
 /* Whether the drive is presented to the target at all. Selecting a medium below
  * only chooses what the drive holds; without this on, the target sees no drive. */
@@ -49,10 +52,57 @@ const uploadingImage = ref(false);
 const uploadPct = ref(0);
 const uploadRate = ref(0);
 const uploadEta = ref(Infinity);
+const uploadFrac = ref(0);
 const uploadingRescue = ref(false);
+
+/* Speed per slice of progress, for the chart. */
+const TRACE_SLICES = 120;
+const uploadTrace = ref<number[]>([]);
+const rescueTrace = ref<number[]>([]);
+/* Each slice holds the mean of the samples that landed in it: the rate comes
+   several times a slice, and the last one alone makes the line jitter. */
+const traceCounts = new WeakMap<number[], number[]>();
+function traceAt(trace: number[], fraction: number, bps: number) {
+  if (bps <= 0) return;
+  let counts = traceCounts.get(trace);
+  if (!counts) {
+    counts = new Array(TRACE_SLICES).fill(0);
+    traceCounts.set(trace, counts);
+  }
+  const i = Math.min(TRACE_SLICES - 1, Math.floor(fraction * TRACE_SLICES));
+  counts[i]++;
+  trace[i] += (bps - trace[i]) / counts[i];
+}
+/* One upload runs at a time, so one controller covers both kinds. */
+let uploadAbort: AbortController | null = null;
+
+/* A reload or a closed tab ends the request, and a long upload with it. The
+   browser shows its own "leave site?" prompt; the text is not ours to set. */
+function holdPage(e: BeforeUnloadEvent) {
+  e.preventDefault();
+  e.returnValue = "";
+}
+watch(
+  () => uploadingImage.value || uploadingRescue.value,
+  (busy) => {
+    if (busy) window.addEventListener("beforeunload", holdPage);
+    else window.removeEventListener("beforeunload", holdPage);
+  },
+);
+onUnmounted(() => window.removeEventListener("beforeunload", holdPage));
+
+function cancelUpload() {
+  uploadAbort?.abort();
+}
+
+function uploadFailed(err: unknown, name: string) {
+  if (err instanceof UploadCancelled) toast.info(`${name}: upload cancelled`);
+  else toast.error(err instanceof Error ? err.message : String(err));
+}
 const rescuePct = ref(0);
 const rescueRate = ref(0);
 const rescueEta = ref(Infinity);
+const rescueFrac = ref(0);
 
 /* A write started here beats a listing that was already in the air: the reply
    may describe the card as it was a moment before, and the choice must not jump
@@ -99,17 +149,27 @@ async function onImageChosen(e: Event) {
   uploadPct.value = 0;
   uploadRate.value = 0;
   uploadEta.value = Infinity;
+  uploadFrac.value = 0;
+  uploadTrace.value = new Array(TRACE_SLICES).fill(0);
+  uploadAbort = new AbortController();
   try {
-    await uploadImage(file, (p) => {
-      uploadPct.value = Math.round(p.fraction * 100);
-      uploadRate.value = p.bytesPerSec;
-      uploadEta.value = p.secondsLeft;
-    });
+    await uploadImage(
+      file,
+      (p) => {
+        uploadPct.value = Math.round(p.fraction * 100);
+        uploadRate.value = p.bytesPerSec;
+        uploadEta.value = p.secondsLeft;
+        uploadFrac.value = p.fraction;
+        traceAt(uploadTrace.value, p.fraction, p.bytesPerSec);
+      },
+      uploadAbort.signal,
+    );
     toast.info(`${file.name} uploaded`);
     await refreshImages();
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    uploadFailed(err, file.name);
   } finally {
+    uploadAbort = null;
     uploadingImage.value = false;
     input.value = "";
   }
@@ -129,16 +189,26 @@ async function onRescueChosen(e: Event) {
   rescuePct.value = 0;
   rescueRate.value = 0;
   rescueEta.value = Infinity;
+  rescueFrac.value = 0;
+  rescueTrace.value = new Array(TRACE_SLICES).fill(0);
+  uploadAbort = new AbortController();
   try {
-    storage.value = await uploadRescue(file, (p) => {
-      rescuePct.value = Math.round(p.fraction * 100);
-      rescueRate.value = p.bytesPerSec;
-      rescueEta.value = p.secondsLeft;
-    });
+    storage.value = await uploadRescue(
+      file,
+      (p) => {
+        rescuePct.value = Math.round(p.fraction * 100);
+        rescueRate.value = p.bytesPerSec;
+        rescueEta.value = p.secondsLeft;
+        rescueFrac.value = p.fraction;
+        traceAt(rescueTrace.value, p.fraction, p.bytesPerSec);
+      },
+      uploadAbort.signal,
+    );
     toast.info(`Rescue image written (${file.name})`);
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    uploadFailed(err, file.name);
   } finally {
+    uploadAbort = null;
     uploadingRescue.value = false;
     input.value = "";
   }
@@ -288,19 +358,21 @@ async function removeImage(name: string) {
         </li>
       </ul>
 
-      <div
+      <UploadChart
         v-if="uploadingRescue"
-        class="progress"
-        role="progressbar"
-        :aria-valuenow="rescuePct"
-        aria-valuemin="0"
-        aria-valuemax="100"
-      >
-        <div class="progress-fill" :style="{ width: rescuePct + '%' }"></div>
-      </div>
+        :trace="rescueTrace"
+        :fraction="rescueFrac"
+        :rate="rescueRate"
+      />
       <p v-if="uploadingRescue" class="setting-note upload-stats">
         {{ rescueRate > 0 ? `${formatBytes(rescueRate)}/s` : "starting..." }}
         <span v-if="rescueRate > 0"> · ~{{ formatDuration(rescueEta) }} left</span>
+        <button type="button" class="btn btn-sm btn-quiet" @click="cancelUpload">Cancel</button>
+      </p>
+      <p v-if="uploadingRescue && !streamPaused" class="setting-note">
+        Video runs at 2 fps meanwhile -
+        <button type="button" class="btn-link" @click="emit('pause-stream')">pause it</button>
+        for full speed.
       </p>
 
       <p v-if="storage.rescue?.supported" class="setting-note">
@@ -324,6 +396,14 @@ async function removeImage(name: string) {
         <p class="setting-note">
           {{ formatBytes(storage.freeBytes) }} free of {{ formatBytes(storage.totalBytes) }} on the
           card.
+          <template v-if="storage.busKhz">
+            Bus {{ formatMhz(storage.busKhz) }}<template v-if="storage.busErrors">
+              - slowed after {{ storage.busErrors }} failed
+              {{ storage.busErrors === 1 ? "transfer" : "transfers" }}</template
+            ><template v-if="storage.busRetryS && storage.busMaxKhz && storage.busKhz < storage.busMaxKhz"
+              >; trying faster again in {{ formatDuration(storage.busRetryS) }}</template
+            >.
+          </template>
         </p>
         <p v-if="!storage.writable" class="setting-note setting-note-blocked">
           {{ storage.writeReason ?? "The card is read-only on this device." }}
@@ -336,19 +416,21 @@ async function removeImage(name: string) {
           {{ uploadingImage ? `Uploading ${uploadPct}%...` : "Upload card image..." }}
           <input type="file" class="sr-only" :disabled="uploadingImage" @change="onImageChosen" />
         </label>
-        <div
+        <UploadChart
           v-if="uploadingImage"
-          class="progress"
-          role="progressbar"
-          :aria-valuenow="uploadPct"
-          aria-valuemin="0"
-          aria-valuemax="100"
-        >
-          <div class="progress-fill" :style="{ width: uploadPct + '%' }"></div>
-        </div>
+          :trace="uploadTrace"
+          :fraction="uploadFrac"
+          :rate="uploadRate"
+        />
         <p v-if="uploadingImage" class="setting-note upload-stats">
           {{ uploadRate > 0 ? `${formatBytes(uploadRate)}/s` : "starting..." }}
           <span v-if="uploadRate > 0"> · ~{{ formatDuration(uploadEta) }} left</span>
+          <button type="button" class="btn btn-sm btn-quiet" @click="cancelUpload">Cancel</button>
+        </p>
+        <p v-if="uploadingImage && !streamPaused" class="setting-note">
+          Video runs at 2 fps meanwhile -
+          <button type="button" class="btn-link" @click="emit('pause-stream')">pause it</button>
+          for full speed.
         </p>
       </template>
     </template>

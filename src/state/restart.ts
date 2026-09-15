@@ -111,6 +111,11 @@ export const restartWatch = reactive({
   slow: false,
   /** Given up on. */
   lost: false,
+  /** A network switch: the device may come back on another address, which
+      this page cannot follow. Shown with a way to get there. */
+  moving: false,
+  /** Where the device can be found by name, when this page is on an address. */
+  byName: "",
 });
 
 /* The clock every step runs on. The step with no percentage - the device writing
@@ -157,6 +162,8 @@ export function beginWatch(label: string, steps: WatchStep[] = []) {
   restartWatch.pct = null;
   restartWatch.expectedMs = EXPECTED_RESTART_MS;
   restartWatch.lost = false;
+  restartWatch.moving = false;
+  restartWatch.byName = "";
   restartWatch.active = true;
   startClock();
 }
@@ -222,9 +229,14 @@ export async function runRestart(
   label: string,
   kick: () => Promise<void>,
   note: RestartNote,
+  opts: { byName?: string } = {},
 ): Promise<boolean> {
   /* No checklist: a list of one step says nothing the headline has not. */
   beginWatch(label);
+  if (note.kind === "network") {
+    restartWatch.moving = true;
+    restartWatch.byName = opts.byName ?? "";
+  }
   try {
     await kick();
   } catch (err) {

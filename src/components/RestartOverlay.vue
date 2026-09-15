@@ -76,7 +76,21 @@ function reload() {
           </li>
         </ol>
 
-        <p class="setting-note">
+        <template v-if="restartWatch.moving">
+          <p class="setting-note">
+            On the other network the device usually gets a new address, and this page cannot
+            follow it. The name can also point at the old address for about a minute.
+            <template v-if="restartWatch.byName">Open it by name, or reload.</template>
+            <template v-else>Reload once it has had time to start.</template>
+          </p>
+          <div class="restart-actions">
+            <a v-if="restartWatch.byName" class="btn btn-primary" :href="restartWatch.byName">
+              Open {{ restartWatch.byName }}
+            </a>
+            <button type="button" class="btn" @click="reload()">Reload</button>
+          </div>
+        </template>
+        <p v-else class="setting-note">
           The target machine is not affected - only this console loses contact. Keep this page
           open; it carries on by itself once the device answers.
         </p>

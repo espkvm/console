@@ -123,6 +123,16 @@
     "requires": "hid"
   },
   {
+    "key": "usb_legacy",
+    "section": "input",
+    "title": "Old BIOS keyboard",
+    "help": "For an old BIOS that does not see the keyboard. The target then gets one plain keyboard at USB 1.1 speed, the way a real keyboard looks. The mouse, media keys and virtual media are off while this is on. Takes effect after a restart.",
+    "type": "bool",
+    "default": 0,
+    "requires": "hid",
+    "reboot": true
+  },
+  {
     "key": "scroll_inv",
     "section": "input",
     "title": "Invert scroll wheel",
@@ -301,6 +311,24 @@
     ],
     "default": 0,
     "requires": "msc"
+  },
+  {
+    "key": "sd_speed",
+    "section": "storage",
+    "title": "microSD speed",
+    "help": "The fastest clock the card is tried at. \"auto\" starts at what the board supports and steps down by itself when the card fails to mount, fails a test read, or fails a transfer later. Pick a lower one for a card that keeps stepping down. Takes effect after a restart.",
+    "type": "enum",
+    "choices": [
+      "auto",
+      "40 MHz",
+      "20 MHz",
+      "10 MHz",
+      "4 MHz",
+      "2 MHz"
+    ],
+    "default": 0,
+    "requires": "msc",
+    "reboot": true
   },
   {
     "key": "msc_image",

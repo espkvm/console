@@ -27,6 +27,9 @@ import {
   revertCert,
   saveSettings,
   settingBlockedReason,
+  findTelegramChats,
+  loadNotifyStatus,
+  type TelegramChats,
 } from "../state/device";
 import { changePassword, createViewToken, loadSession, logout, revokeViewToken } from "../state/auth";
 import {
@@ -366,6 +369,31 @@ async function writeSecret(key: string, el: HTMLInputElement) {
   await write(key, value);
 }
 
+/*
+ * Finding the Telegram chat id. A bot cannot list its chats, but the device
+ * can read who wrote to it lately, so the id is picked rather than looked up.
+ * The device asks Telegram with the saved token; the token never comes here.
+ */
+const tgFind = ref<TelegramChats | null>(null);
+const tgFinding = ref(false);
+async function findChats() {
+  tgFinding.value = true;
+  try {
+    await findTelegramChats();
+    // Two HTTPS requests on the device; give it up to half a minute.
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const st = (await loadNotifyStatus()).telegram;
+      if (!st) break;
+      tgFind.value = st;
+      if (st.state !== "running") break;
+    }
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    tgFinding.value = false;
+  }
+}
 
 /*
  * Signing out ends this session on the device and reloads the page: the
@@ -684,6 +712,39 @@ async function doRevertCert() {
 
         <p v-if="blockedFor(s)" class="setting-note setting-note-blocked">{{ blockedFor(s) }}</p>
         <p v-else-if="s.help" class="setting-note">{{ s.help }}</p>
+
+        <div v-if="s.key === 'notify_tg_chat' && !blockedFor(s)" class="tg-find">
+          <button
+            type="button"
+            class="btn btn-sm"
+            :disabled="busy || tgFinding"
+            @click="findChats"
+          >
+            {{ tgFinding ? "Asking Telegram..." : "Find chats" }}
+          </button>
+          <p v-if="tgFind?.state === 'error'" class="setting-note setting-note-blocked">
+            {{ tgFind.error }}
+          </p>
+          <template v-else-if="tgFind?.state === 'ok'">
+            <p v-if="!tgFind.chats.length" class="setting-note">
+              No chats yet. Send any message to
+              <b>@{{ tgFind.bot }}</b>, or add it to a group, then press Find chats again.
+            </p>
+            <ul v-else class="tg-chats">
+              <li v-for="c in tgFind.chats" :key="c.id">
+                <button
+                  type="button"
+                  :class="['btn', 'btn-sm', { 'btn-on': String(values[s.key] ?? '') === c.id }]"
+                  :disabled="busy"
+                  @click="write(s.key, c.id)"
+                >
+                  {{ c.name || c.id }}
+                </button>
+                <span class="muted">{{ c.type }} &middot; {{ c.id }}</span>
+              </li>
+            </ul>
+          </template>
+        </div>
       </div>
 
       <p v-if="oledI2cNote" class="setting-note">

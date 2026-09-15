@@ -52,6 +52,8 @@ function syncMedia() {
 /* Whether the demo is serving an "operator" certificate, so the TLS panel can be
    tried out (install flips it on, revert flips it off). No real restart happens. */
 let tlsCustom = false;
+/* The demo's answer to "find chats" - nothing until the button is pressed. */
+let tgFind: Json = { state: "idle", error: "", bot: "", chats: [] };
 
 /* The captured status has no HDMI source (signal:false). Present a live picture
    instead, so the demo shows the interface working rather than "No signal". */
@@ -294,6 +296,7 @@ async function route(
           enabled: settings.notify_enable === true || settings.notify_enable === 1,
           lastResult: "ok",
           lastAt: "2026-09-13 10:00:00",
+          telegram: tgFind,
         });
       case "/api/v1/schedules/status": {
         const on = settings.sched_enable === true || settings.sched_enable === 1;
@@ -379,6 +382,12 @@ async function route(
         if (!runbookStop()) return json({ error: "no runbook is running" }, 409);
         return json({ ok: true });
       case "/api/v1/notify/test":
+        return json({ status: "queued" }, 202);
+      case "/api/v1/notify/chats":
+        tgFind = { state: "ok", error: "", bot: "espkvm_demo_bot", chats: [
+          { id: "184467305", type: "private", name: "Alex" },
+          { id: "-1001987654321", type: "supergroup", name: "Homelab alerts" },
+        ] };
         return json({ status: "queued" }, 202);
       case "/api/v1/schedules/run": {
         const { name } = (await bodyJson(init, req)) as { name?: string };

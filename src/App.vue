@@ -633,7 +633,12 @@ async function switchNet(mode: "ethernet" | "wifi" | "ap") {
   try {
     await saveSettings({ net_mode: { ethernet: 0, wifi: 1, ap: 2 }[mode] });
     const label = mode === "ap" ? "Switching to the hotspot" : `Switching to ${mode}`;
-    if (await runRestart(label, restartDevice, { kind: "network" })) {
+    /* A new network usually means a new address. By name it can still be found,
+       unless the page is already open by name. */
+    const host = system.value?.net?.hostname;
+    const byName =
+      host && location.hostname !== `${host}.local` ? `https://${host}.local/` : "";
+    if (await runRestart(label, restartDevice, { kind: "network" }, { byName })) {
       location.reload();
     }
   } catch {
@@ -1412,7 +1417,13 @@ const LED_BITS: Array<[number, string]> = [
               :detected-os="usbProbe?.os ?? 'unknown'"
               @values="values = $event"
             />
-            <MediaPanel v-else-if="panel === 'media'" :values="values" @values="values = $event" />
+            <MediaPanel
+              v-else-if="panel === 'media'"
+              :values="values"
+              :stream-paused="paused"
+              @values="values = $event"
+              @pause-stream="paused = true"
+            />
             <AutomationPanel
               v-else-if="panel === 'automation'"
               :values="values"

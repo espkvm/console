@@ -100,6 +100,10 @@ export interface VideoStatus {
   width: number;
   height: number;
   interlaced: boolean;
+  /** Refresh rate the source sends; 0 or absent when the bridge cannot tell. */
+  inputHz?: number;
+  /** The mode needs more than the capture link carries, so no frames come. */
+  tooFast?: boolean;
   fps: number;
   skippedFps: number;
   kbps: number;
@@ -445,10 +449,35 @@ export interface NotifyStatus {
   /** "ok", or why the last send failed; "nothing sent yet" at first. */
   lastResult: string;
   lastAt: string;
+  /** The last "find chats" run; missing on firmware that predates it. */
+  telegram?: TelegramChats;
+}
+
+export interface TelegramChat {
+  /** A string: group ids do not fit a JS number safely in every case. */
+  id: string;
+  /** private, group, supergroup or channel. */
+  type: string;
+  name: string;
+}
+
+export interface TelegramChats {
+  state: "idle" | "running" | "ok" | "error";
+  error: string;
+  /** The bot's username, without the @. */
+  bot: string;
+  chats: TelegramChat[];
 }
 
 export async function loadNotifyStatus(): Promise<NotifyStatus> {
   return getJson<NotifyStatus>("/api/v1/notify/status");
+}
+
+/** Ask the device to list the chats that wrote to the saved bot. */
+export async function findTelegramChats(): Promise<void> {
+  const res = await fetch("/api/v1/notify/chats", { method: "POST", headers: CONSOLE_HEADER });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(`finding chats failed (${res.status})`);
 }
 
 /** Queue a test notification on the device. */
@@ -924,6 +953,14 @@ export interface StorageInfo {
   handedOver?: boolean;
   /** The on-flash rescue image, present on devices whose table has it. */
   rescue?: RescueInfo;
+  /** Card clock now, kHz. It starts at the fastest that works and only goes down. */
+  busKhz?: number;
+  /** Failed transfers since the mount; each one slowed the bus. */
+  busErrors?: number;
+  /** The clock it started at, and climbs back to. */
+  busMaxKhz?: number;
+  /** Seconds until it tries one step faster again; 0 when not slowed. */
+  busRetryS?: number;
 }
 
 export async function loadImages(): Promise<StorageInfo> {
@@ -935,13 +972,18 @@ export async function loadImages(): Promise<StorageInfo> {
  * an image is measured in gigabytes and the operator needs to see it move.
  * fetch gives no upload progress; XHR does.
  */
-export function uploadImage(file: File, onProgress?: (p: UploadProgress) => void): Promise<void> {
+export function uploadImage(
+  file: File,
+  onProgress?: (p: UploadProgress) => void,
+  signal?: AbortSignal,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/v1/storage/upload?name=${encodeURIComponent(file.name)}`);
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
     xhr.setRequestHeader("X-ESP-KVM", "1");
     trackUpload(xhr, onProgress);
+    cancelWith(xhr, signal, reject);
     xhr.onload = () => {
       if (xhr.status === 401) return reject(new Unauthorized());
       if (xhr.status >= 200 && xhr.status < 300) return resolve();
@@ -958,13 +1000,18 @@ export function uploadImage(file: File, onProgress?: (p: UploadProgress) => void
  * directly - which works here where card writes do not. Returns the refreshed
  * storage state the endpoint echoes back.
  */
-export function uploadRescue(file: File, onProgress?: (p: UploadProgress) => void): Promise<StorageInfo> {
+export function uploadRescue(
+  file: File,
+  onProgress?: (p: UploadProgress) => void,
+  signal?: AbortSignal,
+): Promise<StorageInfo> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/v1/storage/rescue");
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
     xhr.setRequestHeader("X-ESP-KVM", "1");
     trackUpload(xhr, onProgress);
+    cancelWith(xhr, signal, reject);
     xhr.onload = () => {
       if (xhr.status === 401) return reject(new Unauthorized());
       if (xhr.status >= 200 && xhr.status < 300) {
@@ -981,6 +1028,25 @@ export function uploadRescue(file: File, onProgress?: (p: UploadProgress) => voi
   });
 }
 
+/** The operator stopped an upload. Not an error worth a red toast. */
+export class UploadCancelled extends Error {
+  constructor() {
+    super("upload cancelled");
+  }
+}
+
+/* Stopping the request is the whole cancel: the device sees the connection end
+   and throws away what it had (a half-written card file, a rescue write). */
+function cancelWith(xhr: XMLHttpRequest, signal: AbortSignal | undefined, reject: (e: Error) => void) {
+  if (!signal) return;
+  if (signal.aborted) {
+    reject(new UploadCancelled());
+    return;
+  }
+  signal.addEventListener("abort", () => xhr.abort(), { once: true });
+  xhr.onabort = () => reject(new UploadCancelled());
+}
+
 export async function deleteImage(name: string): Promise<StorageInfo> {
   const res = await fetch(`/api/v1/storage/delete?name=${encodeURIComponent(name)}`, {
     method: "POST",
@@ -992,6 +1058,12 @@ export async function deleteImage(name: string): Promise<StorageInfo> {
     throw new Error((body as { error?: string }).error ?? `delete failed (${res.status})`);
   }
   return body as StorageInfo;
+}
+
+/** A card clock as "40 MHz" or "6.7 MHz". */
+export function formatMhz(khz: number): string {
+  const mhz = khz / 1000;
+  return `${Number.isInteger(mhz) ? mhz : mhz.toFixed(1)} MHz`;
 }
 
 export function formatBytes(n: number): string {

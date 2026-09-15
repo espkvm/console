@@ -1188,6 +1188,7 @@ const layerStyle = computed(() => {
 });
 
 const noSignal = computed(() => props.status !== null && !props.status.signal);
+const tooFast = computed(() => !!props.status?.signal && props.status.tooFast === true);
 
 /*
  * Why there is no picture, as far as the bridge can tell.
@@ -1221,6 +1222,7 @@ const showOverlay = computed(
     Boolean(props.videoBlocked) ||
     failed.value ||
     noSignal.value ||
+    tooFast.value ||
     codecError.value !== null ||
     !loaded.value),
 );
@@ -1305,6 +1307,7 @@ const fitClass = computed(() =>
         <h2 v-if="videoBlocked">Video is not available</h2>
         <h2 v-else-if="paused">{{ pauseNote ? "Video paused for the update" : "Video paused" }}</h2>
         <h2 v-else-if="noSignal">No signal</h2>
+        <h2 v-else-if="tooFast">The input mode is too fast</h2>
         <h2 v-else-if="codecError">Cannot play this stream</h2>
         <h2 v-else-if="failed">Stream interrupted</h2>
         <h2 v-else>Waiting for the first frame...</h2>
@@ -1318,6 +1321,11 @@ const fitClass = computed(() =>
           }}
         </p>
         <p v-else-if="noSignal" class="muted">{{ noSignalNote }}</p>
+        <p v-else-if="tooFast" class="muted">
+          The target sends {{ status?.width }}x{{ status?.height }} at {{ status?.inputHz }} Hz, more
+          than the capture link carries, so no frames arrive. Set it to 30 Hz or a smaller mode, or
+          pick the 1080p30 or 720p EDID profile in Settings > Video.
+        </p>
         <p v-else-if="codecError" class="muted">
           {{ codecError }}. Picking MJPEG in the video readout gives a picture this page can
           always show.
