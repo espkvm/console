@@ -61,7 +61,9 @@ export async function loadSession(): Promise<SessionState> {
 
 /** @returns true when the password in use is the default and must be changed */
 export async function login(user: string, password: string): Promise<boolean> {
-  const body = await postJson("/api/v1/auth/login", { user, password });
+  /* The browser's time sets a device clock that has none (no NTP). */
+  const now = Math.floor(Date.now() / 1000);
+  const body = await postJson("/api/v1/auth/login", { user, password, now });
   return Boolean(body.mustChange);
 }
 

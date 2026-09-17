@@ -448,7 +448,10 @@ async function sendTest() {
         milliseconds. <code>wait Press F2</code> holds until a row of the screen contains the
         phrase, <code>gone Loading</code> until none does, and <code>timeout 120</code> sets how
         many seconds the waits below it may take (60 if unsaid). A wait that runs out stops the
-        runbook there. Lines starting with # are ignored. Every key name is listed in
+        runbook there. <code>record</code> starts recording the screen to the microSD card and
+        goes on (<code>record 300</code> for five minutes), <code>timelapse 10</code> records one frame every
+        10 seconds (<code>timelapse 10 28800</code> for eight hours), <code>record stop</code> ends
+        either, and <code>screenshot</code> saves one picture. Lines starting with # are ignored. Every key name is listed in
         <a href="https://espkvm.io/scripts/" target="_blank" rel="noopener">espkvm.io/scripts</a>.
       </p>
       <p v-if="scriptError" class="setting-note setting-note-blocked">{{ scriptError }}</p>
@@ -467,7 +470,7 @@ async function sendTest() {
     <p class="setting-note">
       Fire an action on a timetable - Wake-on-LAN in the morning, a runbook overnight, a reset on
       a schedule. The device runs these, so nothing has to be open. They need the clock, which it
-      sets over the network.
+      sets over the network; the time server and the time zone are in Settings, System.
     </p>
 
     <label class="switch">
@@ -485,7 +488,8 @@ async function sendTest() {
         </template>
       </template>
       <span v-else class="setting-note-blocked">
-        The clock is not set yet. Nothing fires until it is - check the time server under Settings.
+        The clock is not set yet. Nothing fires until it is - check the time server under Settings,
+        System.
       </span>
     </p>
 

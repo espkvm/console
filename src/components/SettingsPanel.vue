@@ -41,6 +41,7 @@ import {
   type ImportPlan,
 } from "../state/settingsFile";
 import { runRestart } from "../state/restart";
+import { TIME_ZONES, browserZone, zoneName, zoneOptions } from "../state/timezones";
 import { toast } from "../state/toasts";
 
 const props = defineProps<{
@@ -106,6 +107,27 @@ async function dropViewToken() {
   } finally {
     tokenBusy.value = false;
   }
+}
+
+/* ---- time zone ---------------------------------------------------------- */
+const tzOptions = zoneOptions();
+const browserTz = browserZone();
+/* Cities share strings (Berlin and Paris are both CET), so the one picked here,
+   or the browser's own, is shown rather than the first in the list. */
+const tzPicked = ref("");
+/* The list entry for a stored string, or "" when it is not one of the list. */
+function tzChoice(posix: string): string {
+  if (tzPicked.value && TIME_ZONES[tzPicked.value] === posix) return tzPicked.value;
+  if (browserTz.exact && browserTz.posix === posix) return browserTz.name;
+  return zoneName(posix) ?? "";
+}
+function tzLabel(name: string): string {
+  return tzOptions.find((z) => z.name === name)?.label ?? name;
+}
+function onTzPick(key: string, name: string) {
+  if (!name) return;
+  tzPicked.value = name;
+  void write(key, TIME_ZONES[name]);
 }
 
 const sections = computed(() => {
@@ -698,6 +720,27 @@ async function doRevertCert() {
             :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
             @change="writeSecret(s.key, $event.target as HTMLInputElement)"
           />
+
+          <!-- The time zone: one list of cities over the POSIX string the device takes. -->
+          <select
+            v-else-if="s.key === 'sched_tz'"
+            :id="`set-${s.key}`"
+            :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
+            :value="tzChoice(String(values[s.key] ?? ''))"
+            @change="onTzPick(s.key, ($event.target as HTMLSelectElement).value)"
+            @wheel="guardWheel"
+          >
+            <option v-if="browserTz.exact" :value="browserTz.name">
+              This browser: {{ tzLabel(browserTz.name) }}
+            </option>
+            <option
+              v-if="!tzChoice(String(values[s.key] ?? ''))"
+              :value="''"
+            >
+              {{ String(values[s.key] ?? '') || 'Not set' }} (set another way)
+            </option>
+            <option v-for="z in tzOptions" :key="z.name" :value="z.name">{{ z.label }}</option>
+          </select>
 
           <input
             v-else

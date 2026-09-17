@@ -2,7 +2,9 @@
  * The runbook script, parsed the way the device parses it.
  *
  * A runbook is a macro that can wait: the macro grammar (key, type, delay)
- * plus `wait <phrase>`, `gone <phrase>` and `timeout <seconds>`. The device
+ * plus `wait <phrase>`, `gone <phrase>` and `timeout <seconds>`, and `record`,
+ * `record <seconds>`, `record stop`, `timelapse <every> [<seconds>]` and `screenshot`
+ * to the microSD card. The device
  * runs it, not the browser, so this parser exists only to tell the operator
  * about a bad line before the run - the rules and the messages mirror
  * components/kvm_runbook/runbook_script.c, and a script this accepts, the
@@ -20,7 +22,13 @@ export type RunbookStep =
   | { kind: "type"; text: string }
   | { kind: "delay"; ms: number }
   | { kind: "timeout"; seconds: number }
-  | { kind: "wait" | "gone"; phrase: string };
+  | { kind: "wait" | "gone"; phrase: string }
+  /** seconds 0 = as long as the recording length setting allows */
+  | { kind: "record"; seconds: number }
+  | { kind: "record-stop" }
+  | { kind: "screenshot" }
+  /** every: seconds between frames; seconds 0 = until stopped */
+  | { kind: "timelapse"; every: number; seconds: number };
 
 export const RUNBOOK_MAX_STEPS = 64;
 const PHRASE_MAX = 63;
@@ -77,6 +85,27 @@ export function parseRunbookScript(script: string): RunbookStep[] {
       const seconds = number(arg, 1, 3600);
       if (seconds === null) throw at("timeout wants 1..3600 seconds");
       steps.push({ kind: "timeout", seconds });
+    } else if (cmd === "record") {
+      if (!arg) {
+        steps.push({ kind: "record", seconds: 0 });
+      } else if (arg === "stop") {
+        steps.push({ kind: "record-stop" });
+      } else {
+        const seconds = number(arg, 1, 86400);
+        if (seconds === null) throw at('record wants nothing, "stop" or 1..86400 seconds');
+        steps.push({ kind: "record", seconds });
+      }
+    } else if (cmd === "timelapse") {
+      const space = arg.indexOf(" ");
+      const every = number(space < 0 ? arg : arg.slice(0, space), 1, 3600);
+      const seconds = space < 0 ? 0 : number(arg.slice(space + 1), 1, 604800);
+      if (every === null || seconds === null) {
+        throw at("timelapse wants 1..3600 seconds between frames, then how long it runs");
+      }
+      steps.push({ kind: "timelapse", every, seconds });
+    } else if (cmd === "screenshot") {
+      if (arg) throw at("screenshot takes nothing after it");
+      steps.push({ kind: "screenshot" });
     } else if (cmd === "wait" || cmd === "gone") {
       if (!arg) throw at("which phrase?");
       if (arg.length > PHRASE_MAX) throw at(`a phrase is at most ${PHRASE_MAX} characters`);

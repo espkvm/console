@@ -74,7 +74,7 @@ interface Handlers {
  * can be decoded on its own, and the sequence parameter set that says which
  * H.264 profile and level the decoder must support.
  */
-function inspectAnnexB(data: Uint8Array): { keyframe: boolean; sps: Uint8Array | null } {
+export function inspectAnnexB(data: Uint8Array): { keyframe: boolean; sps: Uint8Array | null } {
   let keyframe = false;
   let sps: Uint8Array | null = null;
   let zeros = 0;
@@ -101,7 +101,7 @@ function inspectAnnexB(data: Uint8Array): { keyframe: boolean; sps: Uint8Array |
  * encoder emitted rather than assumed: profile and level change with the frame
  * size, and a wrong guess is rejected at configure() time.
  */
-function codecFromSps(sps: Uint8Array): string | null {
+export function codecFromSps(sps: Uint8Array): string | null {
   if (sps.length < 4) return null;
   const hex = (v: number) => v.toString(16).padStart(2, "0").toUpperCase();
   return `avc1.${hex(sps[1])}${hex(sps[2])}${hex(sps[3])}`;

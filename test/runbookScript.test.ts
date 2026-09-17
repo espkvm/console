@@ -24,6 +24,19 @@ test("every verb parses, with comments, blanks and odd spacing", () => {
   ]);
 });
 
+test("recording and screenshots", () => {
+  assert.deepEqual(parseRunbookScript("record\nrecord 300\nscreenshot\nrecord stop"), [
+    { kind: "record", seconds: 0 },
+    { kind: "record", seconds: 300 },
+    { kind: "screenshot" },
+    { kind: "record-stop" },
+  ]);
+  assert.deepEqual(parseRunbookScript("timelapse 10\ntimelapse 30 7200"), [
+    { kind: "timelapse", every: 10, seconds: 0 },
+    { kind: "timelapse", every: 30, seconds: 7200 },
+  ]);
+});
+
 test("refusals name the line, in the device's words", () => {
   const refuses = (script: string, message: string) =>
     assert.throws(() => parseRunbookScript(script), (e: Error) => e.message === message);
@@ -33,6 +46,13 @@ test("refusals name the line, in the device's words", () => {
   refuses("delay 0", "line 1: delay wants 1..60000 milliseconds");
   refuses("delay soon", "line 1: delay wants 1..60000 milliseconds");
   refuses("timeout 3601", "line 1: timeout wants 1..3600 seconds");
+  refuses("record soon", 'line 1: record wants nothing, "stop" or 1..86400 seconds');
+  refuses("record 0", 'line 1: record wants nothing, "stop" or 1..86400 seconds');
+  const tl = "line 1: timelapse wants 1..3600 seconds between frames, then how long it runs";
+  refuses("timelapse", tl);
+  refuses("timelapse 0", tl);
+  refuses("timelapse 10 soon", tl);
+  refuses("screenshot now", "line 1: screenshot takes nothing after it");
   refuses("wait", "line 1: which phrase?");
   refuses("wait " + "x".repeat(64), "line 1: a phrase is at most 63 characters");
   refuses("\n\nfrobnicate now", 'line 3: unknown command "frobnicate"');

@@ -92,6 +92,18 @@ const PATHS = {
   /* Media transport for the stream Pause/Resume control. */
   pause: ["M9 4v16", "M15 4v16"],
   play: ["M7 4l13 8-13 8z"],
+  /* Recording and screenshots. */
+  camera: ["M4 8h3l2-3h6l2 3h3v11H4z", "M12 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"],
+  record: ["M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12z"],
+  stop: ["M7 7h10v10H7z"],
+  film: ["M4 5h16v14H4z", "M8 5v14M16 5v14", "M4 9h4M4 15h4M16 9h4M16 15h4"],
+  /* Recordings panel: a camcorder for a video, a picture for a screenshot. */
+  video: ["M3 7h12v10H3z", "M15 10.5l6-3.5v10l-6-3.5"],
+  image: ["M3 5h18v14H3z", "M8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z", "M21 15l-5-5-11 9"],
+  download: ["M12 4v11", "M7 10l5 5 5-5", "M5 20h14"],
+  trash: ["M4 7h16", "M10 11v6M14 11v6", "M6 7l1 13h10l1-13", "M9 7V4h6v3"],
+  captions: ["M3 5h18v14H3z", "M7 15h4M13 15h4M7 11h2M11 11h6"],
+  external: ["M14 4h6v6", "M20 4l-9 9", "M18 14v6H4V6h6"],
   /* Mouse cursor: the "who has control" indicator. */
   pointer: ["M4 3l7.1 17 2.5-7.4 7.4-2.5z"],
 } as const;

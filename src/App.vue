@@ -8,6 +8,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import Icon from "./components/Icon.vue";
 import AutomationPanel from "./components/AutomationPanel.vue";
+import CaptureList from "./components/CaptureList.vue";
 import InputPanel from "./components/InputPanel.vue";
 import LoginView from "./components/LoginView.vue";
 import RestartOverlay from "./components/RestartOverlay.vue";
@@ -53,16 +54,21 @@ import {
   replugUsb,
   type UsbProbe,
   Unauthorized,
+  saveClip,
+  startRecording,
+  stopRecording,
+  takeScreenshot,
 } from "./state/device";
 import { loadSession, logout, type SessionState } from "./state/auth";
 import { toast } from "./state/toasts";
 
-type PanelId = "input" | "media" | "automation" | "settings" | null;
+type PanelId = "input" | "media" | "automation" | "captures" | "settings" | null;
 
 const PANEL_TITLES: Record<string, string> = {
   input: "Input",
   media: "Virtual media",
   automation: "Automation",
+  captures: "Recordings and screenshots",
   settings: "Settings",
 };
 
@@ -572,6 +578,139 @@ const h264Blocked = computed(() => {
   if (blocked) return blocked;
   return setting.choices?.includes("h264") ? null : "this board has no H.264 encoder";
 });
+
+/*
+ * Recording and screenshots go to the microSD card on the device, so they carry
+ * on without this tab - the buttons only start, stop and show what is running.
+ * Both read their state from the video status the console polls anyway.
+ */
+const record = computed(() => status.value?.record ?? null);
+/* Bumped whenever a file lands on the card, so an open list refreshes itself. */
+const capturesChanged = ref(0);
+const recordBusy = ref(false);
+const shotBusy = ref(false);
+
+function clock(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+async function toggleRecording() {
+  if (recordBusy.value) return;
+  recordBusy.value = true;
+  try {
+    if (record.value?.on) {
+      const r = await stopRecording();
+      toast.info(`${r.timelapse ? "Timelapse" : "Recording"} saved to ${r.file}`);
+    } else {
+      await startRecording();
+    }
+    status.value = await loadVideoStatus();
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    recordBusy.value = false;
+  }
+}
+
+/* A recording can also end on its own - the card filled up or was pulled out.
+   The operator did not ask for that, so say it. */
+watch(
+  () => record.value?.on,
+  (on, was) => {
+    const r = record.value;
+    if (was && !on) capturesChanged.value++;
+    if (was && !on && r && r.stopped && r.stopped !== "stopped by the operator" &&
+        r.stopped !== "the clip is complete") {
+      toast.error(`Recording stopped: ${r.stopped}. Saved to ${r.file}`);
+    }
+  },
+);
+
+async function refreshStatus() {
+  try {
+    status.value = await loadVideoStatus();
+  } catch {
+    /* the next poll gets it */
+  }
+}
+
+const clipBusy = ref(false);
+
+/* "2:00", "45 s": how the clip button speaks about lengths. */
+function span(seconds: number): string {
+  return seconds >= 60 ? clock(seconds) : `${seconds} s`;
+}
+
+/* What the dashcam button says: what a press will do, what it is doing, or that
+   the file is being made - so a first press is not a mystery. */
+const clipState = computed(() => {
+  const r = record.value;
+  if (!r?.dashcam) return null;
+  if (r.event) {
+    return {
+      label: `Saving ${clock(r.clipSecondsLeft ?? 0)}`,
+      title: `Saving a clip: recording ${r.clipSecondsLeft ?? 0} s more of the screen. Press again if something else happens - the clip gets longer and a chapter marks the moment.`,
+      on: true,
+    };
+  }
+  if (r.clipsConverting) {
+    return {
+      label: "Preparing",
+      title: "The clip is recorded and is being turned into an MP4. It appears in Recordings when ready.",
+      on: true,
+    };
+  }
+  return {
+    label: "Save clip",
+    title: `Dashcam: the device keeps the last ${span(r.prerollSeconds ?? 0)} of the screen. Press to save them, and a little of what comes next, as a video in Recordings.`,
+    on: false,
+  };
+});
+
+/* A clip finished: say where it went. */
+watch(
+  () => record.value?.lastClip,
+  (now, before) => {
+    if (now && before !== undefined && now !== before) {
+      toast.info(`Clip saved: ${now.slice(now.lastIndexOf("/") + 1)} - open it in Recordings`);
+      capturesChanged.value++;
+    }
+  },
+);
+
+async function clip() {
+  if (clipBusy.value) return;
+  clipBusy.value = true;
+  try {
+    const was = record.value?.event;
+    const r = await saveClip();
+    toast.info(
+      was
+        ? "Marked in the clip being saved; it will run a little longer"
+        : `Saving a clip: the last ${span(r.prerollSeconds ?? 0)} and the next ${span(r.clipSecondsLeft ?? 0)}. It appears in Recordings when ready.`,
+    );
+    status.value = await loadVideoStatus();
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    clipBusy.value = false;
+  }
+}
+
+async function screenshot() {
+  if (shotBusy.value) return;
+  shotBusy.value = true;
+  try {
+    toast.info(`Screenshot saved to ${await takeScreenshot()}`);
+    capturesChanged.value++;
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    shotBusy.value = false;
+  }
+}
 
 /*
  * Choosing a codec from the status bar writes the same setting the form does.
@@ -1315,6 +1454,17 @@ const LED_BITS: Array<[number, string]> = [
         >
           <Icon name="play" :size="18" />
         </button>
+        <!-- Absent on firmware with no recorder. -->
+        <button
+          v-if="record"
+          type="button"
+          :class="['rail-btn', { 'rail-btn-active': panel === 'captures' }]"
+          aria-label="Recordings and screenshots"
+          title="Recordings and screenshots"
+          @click="togglePanel('captures')"
+        >
+          <Icon name="film" :size="18" />
+        </button>
         <div class="rail-spacer" />
         <PowerWidget
           :caps="caps"
@@ -1457,6 +1607,12 @@ const LED_BITS: Array<[number, string]> = [
               :attached="input.target.value.attached"
               @values="values = $event"
             />
+            <CaptureList
+              v-else-if="panel === 'captures'"
+              :changed="capturesChanged"
+              :record="record"
+              @started="refreshStatus"
+            />
           </div>
         </aside>
       </main>
@@ -1598,6 +1754,47 @@ const LED_BITS: Array<[number, string]> = [
           @click="paused = !paused"
         >
           <Icon :name="paused ? 'play' : 'pause'" :size="15" />
+        </button>
+        <!-- Absent on firmware with no recorder. -->
+        <button
+          v-if="status && status.screenshotBlocked !== undefined"
+          type="button"
+          class="btn btn-sm btn-icon"
+          aria-label="Save a screenshot to the microSD card"
+          :title="status.screenshotBlocked ?? 'Save a screenshot to the microSD card (SCREENSHOTS)'"
+          :disabled="!!status.screenshotBlocked || shotBusy"
+          @click="screenshot"
+        >
+          <Icon name="camera" :size="15" />
+        </button>
+        <!-- The dashcam's button: shown while it keeps the past. -->
+        <button
+          v-if="record && clipState"
+          type="button"
+          :class="['btn', 'btn-sm', 'rec-btn', { 'rec-on': clipState.on }]"
+          :aria-label="clipState.title"
+          :title="record.on && !record.event ? 'The dashcam waits while a recording runs' : clipState.title"
+          :disabled="clipBusy || (record.on && !record.event)"
+          @click="clip"
+        >
+          <Icon name="film" :size="15" />
+          <span>{{ clipState.label }}</span>
+        </button>
+        <button
+          v-if="record"
+          type="button"
+          :class="['btn', 'btn-sm', 'rec-btn', { 'rec-on': record.on }]"
+          :aria-label="record.on ? 'Stop recording' : 'Record to the microSD card'"
+          :title="
+            record.on
+              ? `${record.timelapse ? 'Timelapse' : 'Recording'} to ${record.file} - click to stop`
+              : (record.blocked ?? 'Record the screen to the microSD card (VIDEO)')
+          "
+          :disabled="(!record.on && !!record.blocked) || recordBusy"
+          @click="toggleRecording"
+        >
+          <Icon :name="record.on ? 'stop' : 'record'" :size="15" />
+          <span v-if="record.on" class="mono">{{ clock(record.seconds) }}</span>
         </button>
         <button
           type="button"

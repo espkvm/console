@@ -424,6 +424,28 @@
   opacity: 1;
 }
 
+/* The record button: a plain icon until it records, then red with the running time. */
+.rec-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rec-btn .mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-on {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.rec-on:hover:not(:disabled) {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
+
 .input-panel,
 .media-panel {
   display: flex;
@@ -1196,4 +1218,146 @@
 
 .upload-chart-tip-left {
   transform: translateX(calc(-100% - 12px));
+}
+
+/* Recordings and screenshots: their own panel on the rail. */
+.capture-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.capture-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* Timelapse: a label, the interval and Start on one line. */
+.capture-timelapse {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The recording player: over the whole page, the video as large as fits. */
+.player-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgb(0 0 0 / 70%);
+}
+
+.player {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(1200px, 100%);
+  max-height: 100%;
+  padding: var(--space-3);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+}
+
+.player-head,
+.player-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.player-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-screen {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  background: #000;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.player-screen canvas,
+.player-screen video {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 160px);
+  object-fit: contain;
+}
+
+.player-wait {
+  position: absolute;
+}
+
+/* Keystroke subtitles: large enough to read over a 1080p screen shrunk into the
+   page, and see-through, so the screen behind them still shows. */
+.player-sub {
+  position: absolute;
+  bottom: 7%;
+  max-width: 90%;
+  padding: 4px 14px;
+  color: rgb(255 255 255 / 92%);
+  font-size: clamp(18px, 2.6vw, 34px);
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: pre-line;
+  text-align: center;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 80%);
+  background: rgb(0 0 0 / 40%);
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+
+/* The same look for an MP4's track in the browser's own player. */
+.player-screen video::cue {
+  color: rgb(255 255 255 / 92%);
+  font-size: clamp(18px, 2.6vw, 34px);
+  font-weight: 600;
+  background: rgb(0 0 0 / 40%);
+  text-shadow: 0 1px 3px rgb(0 0 0 / 80%);
+}
+
+.player-seek {
+  flex: 1;
+  min-width: 0;
+}
+
+.player-time {
+  white-space: nowrap;
+}
+
+.capture-kind {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.capture-list .image-text {
+  flex: 1;
+}
+
+.capture-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.capture-actions .btn-icon {
+  width: 30px;
+  min-height: 30px;
 }

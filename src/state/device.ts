@@ -127,6 +127,40 @@ export interface VideoStatus {
   textMode?: boolean;
   /** How long the picture has been one flat colour, in ms; 0 when it is not. */
   flatMs?: number;
+  /** The recorder. Absent on firmware without one. */
+  record?: RecordStatus;
+  /** Why a screenshot cannot be saved now, or null when it can. */
+  screenshotBlocked?: string | null;
+}
+
+export interface RecordStatus {
+  on: boolean;
+  /** Path on the card, e.g. "VIDEO/20260917-140322.ts". */
+  file: string;
+  seconds: number;
+  bytes: number;
+  /** Frames left out because the card fell behind. */
+  dropped: number;
+  /** Why the last recording ended, or "". */
+  stopped: string;
+  /** Why a recording cannot start now, or null when it can. */
+  blocked: string | null;
+  /** The recording is a dashcam clip being saved. */
+  event?: boolean;
+  /** The dashcam keeps the last minutes in memory. */
+  dashcam?: boolean;
+  /** The dashcam is switched on, but this board has too little memory for it. */
+  dashcamNoMemory?: boolean;
+  /** How far back it reaches right now, in seconds. */
+  prerollSeconds?: number;
+  /** A timelapse keeps one frame every this many seconds; 0 otherwise. */
+  timelapse?: number;
+  /** While a clip is being saved: seconds of screen still to come. */
+  clipSecondsLeft?: number;
+  /** Clips written and still being turned into MP4. */
+  clipsConverting?: number;
+  /** The last clip that became an MP4. */
+  lastClip?: string;
 }
 
 /**
@@ -1188,3 +1222,73 @@ export const SECTION_ORDER = [
   "display",
   "system",
 ];
+
+/* ---- recording and screenshots ------------------------------------------ */
+
+/*
+ * The device names files by its clock, and a device that never synced one would
+ * call them "up-000123". The browser always knows the time, so every request
+ * carries it; the device only takes it when its own clock was never set.
+ */
+function withClock(url: string): string {
+  return `${url}?t=${Math.floor(Date.now() / 1000)}`;
+}
+
+async function postCapture<T>(url: string, fallback: string): Promise<T> {
+  const res = await fetch(url, { method: "POST", headers: CONSOLE_HEADER });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(await errorFromResponse(res, fallback));
+  return (await res.json()) as T;
+}
+
+export function startRecording(): Promise<RecordStatus> {
+  return postCapture(withClock("/api/v1/record/start"), "the recording did not start");
+}
+
+/** One frame every @p every seconds, played back at 25 fps, until stopped. */
+export function startTimelapse(every: number): Promise<RecordStatus> {
+  return postCapture(`${withClock("/api/v1/record/start")}&every=${every}`, "the timelapse did not start");
+}
+
+/** Save what the dashcam holds, and a little after, as a clip. */
+export function saveClip(): Promise<RecordStatus> {
+  return postCapture(withClock("/api/v1/record/event"), "no clip was saved");
+}
+
+export function stopRecording(): Promise<RecordStatus> {
+  return postCapture("/api/v1/record/stop", "the recording did not stop");
+}
+
+/** Save a screenshot to the card; resolves to its path there. */
+export async function takeScreenshot(): Promise<string> {
+  const r = await postCapture<{ file: string }>(withClock("/api/v1/screenshot"), "no screenshot");
+  return r.file;
+}
+
+export interface CaptureFile {
+  path: string;
+  size: number;
+  /** A recording's keystroke subtitles (.srt), when it has them. */
+  subtitles?: string;
+}
+
+export interface Captures {
+  /** Why the files cannot be listed, or null. */
+  blocked: string | null;
+  video?: CaptureFile[];
+  screenshots?: CaptureFile[];
+  /** False while a recording runs or the card is not writable. */
+  canDelete: boolean;
+}
+
+export function loadCaptures(): Promise<Captures> {
+  return getJson<Captures>("/api/v1/captures");
+}
+
+export function captureUrl(path: string): string {
+  return `/api/v1/captures/file?path=${encodeURIComponent(path)}`;
+}
+
+export function deleteCapture(path: string): Promise<Captures> {
+  return postCapture(`/api/v1/captures/delete?path=${encodeURIComponent(path)}`, "could not delete");
+}
