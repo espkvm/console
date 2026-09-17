@@ -15,10 +15,12 @@ import {
   deleteCapture,
   formatBytes,
   loadCaptures,
+  searchCaptures,
   startTimelapse,
   type CaptureFile,
   type Captures,
   type RecordStatus,
+  type TextHit,
 } from "../state/device";
 import { toast } from "../state/toasts";
 import Icon from "./Icon.vue";
@@ -29,6 +31,39 @@ const emit = defineEmits<{ started: [] }>();
 
 const captures = ref<Captures | null>(null);
 const playing = ref<CaptureFile | null>(null);
+const playFrom = ref(0);
+
+/* Searching what the screen said during a recording. */
+const phrase = ref("");
+const hits = ref<TextHit[] | null>(null);
+const searching = ref(false);
+const more = ref(false);
+
+async function search() {
+  const q = phrase.value.trim();
+  if (!q || searching.value) return;
+  searching.value = true;
+  try {
+    const r = await searchCaptures(q);
+    hits.value = r.hits;
+    more.value = r.more;
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    searching.value = false;
+  }
+}
+
+function openHit(hit: TextHit) {
+  const file = [...videos.value, ...shots.value].find((f) => f.path === hit.path);
+  playFrom.value = hit.seconds;
+  playing.value = file ?? { path: hit.path, size: 0 };
+}
+
+function play(f: CaptureFile) {
+  playFrom.value = 0;
+  playing.value = f;
+}
 const tab = ref<"video" | "screenshots">("video");
 const loading = ref(false);
 
@@ -58,6 +93,12 @@ function kind(path: string): string {
   if (path.includes("-event")) return "dashcam clip";
   if (path.includes("-timelapse")) return "timelapse";
   return "video";
+}
+
+/* "1:05" - where a hit sits in its recording. */
+function clock(seconds: number): string {
+  const t = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 }
 
 function base(path: string): string {
@@ -166,6 +207,47 @@ async function remove(path: string) {
       </div>
 
       <template v-if="tab === 'video'">
+        <!-- What the screen said: only screens drawn as text were saved. -->
+        <form class="capture-search" @submit.prevent="search">
+          <input
+            v-model="phrase"
+            type="search"
+            placeholder="Find words that were on the screen"
+            aria-label="Find words that were on the screen"
+          />
+          <button type="submit" class="btn btn-sm" :disabled="searching || !phrase.trim()">
+            {{ searching ? "Looking..." : "Find" }}
+          </button>
+        </form>
+
+        <template v-if="hits">
+          <p v-if="!hits.length" class="setting-note">
+            Nothing found. Only screens the device could read as text are saved, and only with
+            "Save the screen's text with a recording" on (Settings, Video).
+          </p>
+          <ul v-else class="image-list">
+            <li v-for="(h, i) in hits" :key="i" class="image-row">
+              <Icon name="search" :size="18" class="capture-kind" />
+              <span class="image-text">
+                <span class="image-name">{{ when(h.path) }} · {{ clock(h.seconds) }}</span>
+                <span class="muted image-sub">{{ h.text }}</span>
+              </span>
+              <span class="capture-actions">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-icon btn-quiet"
+                  aria-label="Play from here"
+                  title="Play from here"
+                  @click="openHit(h)"
+                >
+                  <Icon name="play" :size="15" />
+                </button>
+              </span>
+            </li>
+          </ul>
+          <p v-if="more" class="setting-note">Only the first {{ hits.length }} are shown.</p>
+        </template>
+
         <p v-if="!videos.length" class="muted image-empty">
           No videos yet. The record button under the picture saves them to the VIDEO folder on
           the card.
@@ -184,7 +266,7 @@ async function remove(path: string) {
                 class="btn btn-sm btn-icon btn-quiet"
                 aria-label="Play"
                 title="Play"
-                @click="playing = f"
+                @click="play(f)"
               >
                 <Icon name="play" :size="15" />
               </button>
@@ -280,6 +362,6 @@ async function remove(path: string) {
         Files cannot be deleted while a recording runs.
       </p>
     </template>
-    <RecordingPlayer v-if="playing" :file="playing" @close="playing = null" />
+    <RecordingPlayer v-if="playing" :file="playing" :start="playFrom" @close="playing = null" />
   </section>
 </template>

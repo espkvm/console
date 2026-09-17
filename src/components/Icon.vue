@@ -104,6 +104,7 @@ const PATHS = {
   trash: ["M4 7h16", "M10 11v6M14 11v6", "M6 7l1 13h10l1-13", "M9 7V4h6v3"],
   captions: ["M3 5h18v14H3z", "M7 15h4M13 15h4M7 11h2M11 11h6"],
   external: ["M14 4h6v6", "M20 4l-9 9", "M18 14v6H4V6h6"],
+  search: ["M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z", "M20 20l-4-4"],
   /* Mouse cursor: the "who has control" indicator. */
   pointer: ["M4 3l7.1 17 2.5-7.4 7.4-2.5z"],
 } as const;

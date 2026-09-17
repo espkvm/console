@@ -1270,6 +1270,24 @@ export interface CaptureFile {
   size: number;
   /** A recording's keystroke subtitles (.srt), when it has them. */
   subtitles?: string;
+  /** The screen's text saved with the recording (.txt), when it has it. */
+  text?: string;
+}
+
+/** One place a phrase was on the target's screen during a recording. */
+export interface TextHit {
+  path: string;
+  seconds: number;
+  text: string;
+}
+
+export async function searchCaptures(phrase: string): Promise<{ hits: TextHit[]; more: boolean }> {
+  const res = await fetch(`/api/v1/captures/search?q=${encodeURIComponent(phrase)}`, {
+    headers: CONSOLE_HEADER,
+  });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(await errorFromResponse(res, "the search failed"));
+  return (await res.json()) as { hits: TextHit[]; more: boolean };
 }
 
 export interface Captures {

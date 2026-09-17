@@ -10,7 +10,7 @@ import { captureUrl, type CaptureFile } from "../state/device";
 import { cueAt, parseSrt, toVtt, type Cue } from "../video/srt";
 import { TsPlayer } from "../video/tsPlayer";
 
-const props = defineProps<{ file: CaptureFile }>();
+const props = defineProps<{ file: CaptureFile; start?: number }>();
 const emit = defineEmits<{ close: [] }>();
 
 const mp4 = computed(() => props.file.path.endsWith(".mp4"));
@@ -18,6 +18,7 @@ const url = computed(() => captureUrl(props.file.path));
 const name = computed(() => props.file.path.slice(props.file.path.lastIndexOf("/") + 1));
 
 const canvas = ref<HTMLCanvasElement | null>(null);
+const video = ref<HTMLVideoElement | null>(null);
 const time = ref(0);
 const duration = ref(0);
 const playing = ref(false);
@@ -55,6 +56,9 @@ onMounted(async () => {
     }
   }
   if (mp4.value || !canvas.value) return;
+  video.value?.addEventListener("loadedmetadata", () => {
+    if (props.start && video.value) video.value.currentTime = props.start;
+  });
   player = new TsPlayer(url.value, props.file.size, canvas.value, {
     onTime: (s) => (time.value = s),
     onDuration: (s) => (duration.value = s),
@@ -64,6 +68,7 @@ onMounted(async () => {
     onError: (m) => (error.value = m),
   });
   await player.open();
+  if (props.start) player.seek(props.start);
 });
 
 onBeforeUnmount(() => {
@@ -105,7 +110,7 @@ function onVideoTime(e: Event) {
           </button>
         </div>
         <div class="player-screen">
-          <video v-if="mp4" :src="url" controls autoplay playsinline @timeupdate="onVideoTime">
+          <video v-if="mp4" ref="video" :src="url" controls autoplay playsinline @timeupdate="onVideoTime">
             <track v-if="vttUrl" kind="subtitles" srclang="en" label="Keys pressed" :src="vttUrl" default />
           </video>
           <template v-else>

@@ -1361,3 +1361,14 @@
   width: 30px;
   min-height: 30px;
 }
+
+/* Searching what the screen said, above the list of recordings. */
+.capture-search {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.capture-search input {
+  flex: 1;
+  min-width: 0;
+}
