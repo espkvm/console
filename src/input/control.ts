@@ -30,6 +30,7 @@ const MSG_PING = 0x06;
 const MSG_TAKEOVER = 0x07;
 const MSG_STATUS = 0x81;
 const MSG_CONTROL = 0x83;
+const MSG_UPDATE = 0x84;
 
 /* How often to poll control/target state, so a viewer notices the session was
    freed or taken without needing to interact. */
@@ -56,10 +57,17 @@ export type ConnectionState = "connecting" | "open" | "closed";
 /** Who holds the single control session: this client, nobody, or someone else. */
 export type ControlState = "you" | "free" | "held";
 
+/** What the device is doing to itself, told to every console at once. */
+export interface UpdateState {
+  phase: "receiving" | "verifying" | "restarting" | "failed";
+  percent: number;
+}
+
 interface Handlers {
   onTarget(state: TargetState): void;
   onConnection(state: ConnectionState): void;
   onControl(state: ControlState): void;
+  onUpdate(state: UpdateState): void;
 }
 
 export class Control {
@@ -119,6 +127,10 @@ export class Control {
         });
       } else if (b[0] === MSG_CONTROL && b.length >= 2) {
         this.#handlers.onControl(b[1] === 1 ? "you" : b[1] === 2 ? "free" : "held");
+      } else if (b[0] === MSG_UPDATE && b.length >= 3) {
+        const phases = ["receiving", "verifying", "restarting", "failed"] as const;
+        const phase = phases[b[1]] ?? "receiving";
+        this.#handlers.onUpdate({ phase, percent: b[2] });
       }
     };
 

@@ -51,11 +51,39 @@ const mismatch = computed(
 );
 const tooShort = computed(() => nextPassword.value.length > 0 && nextPassword.value.length < 8);
 
+/* The eye: a password typed on a phone, or into a device in a rack, is worth
+   being able to read back. */
+const showPassword = ref(false);
+
+/*
+ * Ask the browser to remember it.
+ *
+ * A single page never navigates, and this form is removed the moment the
+ * password is accepted, which is exactly when a browser decides whether to
+ * offer saving - so the offer was hit and miss. The credential manager asks
+ * outright, on the browsers that have it, and the form keeps its name and id
+ * attributes for the ones that do not.
+ */
+async function rememberCredentials() {
+  const withCred = window as unknown as {
+    PasswordCredential?: new (data: { id: string; password: string }) => Credential;
+  };
+  if (!withCred.PasswordCredential || !navigator.credentials?.store) return;
+  try {
+    await navigator.credentials.store(
+      new withCred.PasswordCredential({ id: username.value, password: password.value }),
+    );
+  } catch {
+    /* refused or unsupported: the browser's own prompt may still appear */
+  }
+}
+
 async function submitLogin() {
   busy.value = true;
   error.value = null;
   try {
     const mustChange = await login(username.value, password.value);
+    await rememberCredentials();
     if (!mustChange) password.value = "";
     emit("authenticated");
   } catch (err) {
@@ -176,21 +204,54 @@ async function submitChange() {
         <p v-if="restartLine" class="login-hint">{{ restartLine }}</p>
         <label class="field">
           <span>Username</span>
-          <input v-model="username" type="text" autocomplete="username" autocapitalize="off" />
+          <input
+            id="espkvm-username"
+            v-model="username"
+            name="username"
+            type="text"
+            autocomplete="username"
+            autocapitalize="off"
+          />
         </label>
         <label class="field">
           <span>Password</span>
-          <input
-            v-model="password"
-            type="password"
-            autocomplete="current-password"
-            autofocus
-          />
+          <span class="field-with-eye">
+            <input
+              id="espkvm-password"
+              v-model="password"
+              name="password"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="current-password"
+              autofocus
+            />
+            <button
+              type="button"
+              class="eye-btn"
+              :aria-label="showPassword ? 'Hide the password' : 'Show the password'"
+              :title="showPassword ? 'Hide the password' : 'Show the password'"
+              :aria-pressed="showPassword"
+              @click="showPassword = !showPassword"
+            >
+              <Icon :name="showPassword ? 'eye-off' : 'eye'" :size="16" />
+            </button>
+          </span>
         </label>
       </template>
 
       <template v-else>
         <h1>Choose a password</h1>
+        <!-- The browser needs to know which account the new password belongs
+             to, or it saves it against nothing. -->
+        <input
+          :value="username"
+          type="text"
+          name="username"
+          autocomplete="username"
+          class="offscreen"
+          tabindex="-1"
+          aria-hidden="true"
+          readonly
+        />
         <p class="muted">
           This device is still using the password it shipped with. Everything else waits until
           that changes.

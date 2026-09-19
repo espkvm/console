@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Icon from "./Icon.vue";
 /*
  * Live diagnostics as a rail button above Settings: the button carries the chip
  * temperature at a glance (the one number that says "healthy" or "in trouble"),
@@ -68,7 +69,15 @@ async function eraseDump() {
       <div class="dw-popup">
         <div class="dw-head">
           <h3>Diagnostics</h3>
-          <button type="button" class="btn btn-sm btn-quiet" @click="open = false">Close</button>
+          <button
+            type="button"
+            class="btn btn-sm btn-icon btn-quiet"
+            aria-label="Close"
+            title="Close"
+            @click="open = false"
+          >
+            <Icon name="close" :size="15" />
+          </button>
         </div>
         <dl class="facts">
           <div v-if="system.tempC > 0" class="fact">

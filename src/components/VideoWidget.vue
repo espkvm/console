@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Icon from "./Icon.vue";
 /*
  * The capture's figures in the status bar, and the rest of them one click down.
  *
@@ -134,7 +135,15 @@ function rate(kbps: number): string {
       >
         <div class="vw-head">
           <h3>Video</h3>
-          <button type="button" class="btn btn-sm btn-quiet" @click="open = false">Close</button>
+          <button
+            type="button"
+            class="btn btn-sm btn-icon btn-quiet"
+            aria-label="Close"
+            title="Close"
+            @click="open = false"
+          >
+            <Icon name="close" :size="15" />
+          </button>
         </div>
 
         <div class="vw-modes" role="group" aria-label="How the screen is shown">

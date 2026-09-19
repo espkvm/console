@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Icon from "./Icon.vue";
 /*
  * The version, as a small widget in the status bar: an outlined badge showing
  * what is running, a dot when a newer build is published, and - while an update
@@ -528,7 +529,15 @@ onUnmounted(stopInstallPoll);
       <div class="uw-popup">
         <div class="uw-head">
           <h3>Firmware</h3>
-          <button type="button" class="btn btn-sm btn-quiet" @click="open = false">Close</button>
+          <button
+            type="button"
+            class="btn btn-sm btn-icon btn-quiet"
+            aria-label="Close"
+            title="Close"
+            @click="open = false"
+          >
+            <Icon name="close" :size="15" />
+          </button>
         </div>
 
         <dl class="facts">

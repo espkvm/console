@@ -16,7 +16,7 @@ import { installNoPagePull } from "./input/noPagePull";
 import { installPagePin } from "./input/keepPagePinned";
 import { installKeyboardInset } from "./input/keyboardInset";
 import { ScreenTextStream } from "./screen/textStream";
-import { runRestart, takeRestart } from "./state/restart";
+import { restartWatch, runRestart, takeRestart } from "./state/restart";
 import ScreenView from "./components/ScreenView.vue";
 import DiagWidget from "./components/DiagWidget.vue";
 import OsWidget from "./components/OsWidget.vue";
@@ -25,6 +25,7 @@ import PowerWidget from "./components/PowerWidget.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import VideoWidget from "./components/VideoWidget.vue";
 import ToastHost from "./components/ToastHost.vue";
+import KeyboardPanel from "./components/KeyboardPanel.vue";
 import TouchControls from "./components/TouchControls.vue";
 import UpdateWidget from "./components/UpdateWidget.vue";
 import { useInput } from "./input/useInput";
@@ -512,6 +513,16 @@ const uiRight = computed(() => enumName(schema.value, values.value, "ui_side") =
  * want either. The keyboard uses the target's own layout, like paste does.
  */
 const touchMode = ref(false);
+/* The keyboard drawn on the page: closed until asked for, remembered per
+   browser because someone who needs it usually needs it every time. */
+const oskOpen = ref(localStorage.getItem("espkvm.osk") === "1");
+watch(oskOpen, (open) => {
+  try {
+    localStorage.setItem("espkvm.osk", open ? "1" : "0");
+  } catch {
+    /* a private window; it just will not be remembered */
+  }
+});
 /* Touch trackpad speed, driven by the same "Relative sensitivity" slider as the
    desktop relative pointer. A finger crosses a small phone screen but has to
    move the cursor across a large target, so 100% maps to a healthy 4x base (the
@@ -635,6 +646,34 @@ async function refreshStatus() {
     /* the next poll gets it */
   }
 }
+
+/*
+ * The device is updating itself, and this console did not ask for it. The one
+ * that did has its own splash; this is for everybody else, who would otherwise
+ * watch the picture stop for no visible reason.
+ */
+const othersUpdate = computed(() => {
+  const u = input.updateState.value;
+  /* Not while this console is doing the updating itself: it has its own splash.
+     And not once the session has ended - the sign-in page is the answer then,
+     not a notice about a restart that already happened. */
+  if (!u || restartWatch.active) return null;
+  if (session.value?.required && !session.value.authenticated) return null;
+  if (u.phase === "failed") {
+    return { title: "The update failed", line: "The device kept the firmware it was running.", percent: null };
+  }
+  if (u.phase === "restarting") {
+    return { title: "The device is restarting", line: "It was updated from another session. This page comes back on its own.", percent: null };
+  }
+  if (u.phase === "verifying") {
+    return { title: "Updating the device", line: "The image has arrived and is being checked.", percent: 100 };
+  }
+  return {
+    title: "Updating the device",
+    line: "Someone is installing firmware from another session.",
+    percent: u.percent,
+  };
+});
 
 const clipBusy = ref(false);
 
@@ -1553,6 +1592,7 @@ const LED_BITS: Array<[number, string]> = [
           />
         </div>
 
+
         <aside v-if="panel" class="panel" :aria-label="PANEL_TITLES[panel]">
           <header class="panel-head">
             <h2>{{ PANEL_TITLES[panel] }}</h2>
@@ -1617,6 +1657,16 @@ const LED_BITS: Array<[number, string]> = [
         </aside>
       </main>
     </div>
+
+    <!-- Never the main way in: the real keyboard is, once the picture is
+         engaged. This opens on request, under the picture and across the whole
+         width, or floating if that suits better. -->
+    <KeyboardPanel
+      v-if="oskOpen"
+      :control="input.control"
+      :leds="input.target.value.leds"
+      @close="oskOpen = false"
+    />
 
     <footer class="actionbar">
       <div class="actionbar-left">
@@ -1730,6 +1780,16 @@ const LED_BITS: Array<[number, string]> = [
         </span>
       </div>
       <div class="actionbar-right">
+        <button
+          type="button"
+          class="btn btn-sm btn-icon"
+          :class="{ 'btn-on': oskOpen }"
+          aria-label="On-screen keyboard"
+          :title="oskOpen ? 'Hide the on-screen keyboard' : 'Show a keyboard on the page - for keys this computer cannot send'"
+          @click="oskOpen = !oskOpen"
+        >
+          <Icon name="keyboard" :size="15" />
+        </button>
         <button
           type="button"
           class="btn btn-sm"
@@ -1851,5 +1911,17 @@ const LED_BITS: Array<[number, string]> = [
     <ToastHost />
   </div>
 
-  <RestartOverlay />
+  <!-- Somebody else is updating this device: the picture is about to stop for
+       everyone, so everyone is told, not only whoever pressed the button. -->
+    <div v-if="othersUpdate" class="update-veil" role="status">
+      <div class="update-card">
+        <h2>{{ othersUpdate.title }}</h2>
+        <p class="setting-note">{{ othersUpdate.line }}</p>
+        <div v-if="othersUpdate.percent !== null" class="update-bar">
+          <span :style="{ width: othersUpdate.percent + '%' }" />
+        </div>
+      </div>
+    </div>
+
+    <RestartOverlay />
 </template>

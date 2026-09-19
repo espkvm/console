@@ -7,6 +7,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 import { captureUrl, type CaptureFile } from "../state/device";
+import Icon from "./Icon.vue";
 import { cueAt, parseSrt, toVtt, type Cue } from "../video/srt";
 import { TsPlayer } from "../video/tsPlayer";
 
@@ -105,8 +106,14 @@ function onVideoTime(e: Event) {
       <div class="player">
         <div class="player-head">
           <span class="mono player-name">{{ name }}</span>
-          <button type="button" class="btn btn-sm btn-quiet" aria-label="Close" @click="emit('close')">
-            Close
+          <button
+            type="button"
+            class="btn btn-sm btn-icon btn-quiet"
+            aria-label="Close"
+            title="Close"
+            @click="emit('close')"
+          >
+            <Icon name="close" :size="15" />
           </button>
         </div>
         <div class="player-screen">
@@ -123,12 +130,13 @@ function onVideoTime(e: Event) {
         <div v-if="!mp4" class="player-bar">
           <button
             type="button"
-            class="btn btn-sm"
+            class="btn btn-sm btn-icon"
             :aria-label="playing ? 'Pause' : 'Play'"
+            :title="playing ? 'Pause' : 'Play'"
             :disabled="!!error"
             @click="toggle"
           >
-            {{ playing ? "Pause" : "Play" }}
+            <Icon :name="playing ? 'pause' : 'play'" :size="15" />
           </button>
           <input
             type="range"
@@ -145,12 +153,13 @@ function onVideoTime(e: Event) {
           <button
             v-if="cues.length"
             type="button"
-            :class="['btn', 'btn-sm', { 'btn-on': showSubs }]"
+            :class="['btn', 'btn-sm', 'btn-icon', { 'btn-on': showSubs }]"
             :aria-pressed="showSubs"
+            aria-label="Subtitles"
             title="Show what was pressed during the recording"
             @click="showSubs = !showSubs"
           >
-            Subtitles
+            <Icon name="captions" :size="15" />
           </button>
           <span class="mono muted player-time">
             {{ clock(dragging ?? time) }} / {{ clock(duration) }}

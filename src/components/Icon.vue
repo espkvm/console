@@ -105,6 +105,25 @@ const PATHS = {
   captions: ["M3 5h18v14H3z", "M7 15h4M13 15h4M7 11h2M11 11h6"],
   external: ["M14 4h6v6", "M20 4l-9 9", "M18 14v6H4V6h6"],
   search: ["M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z", "M20 20l-4-4"],
+  /* The on-screen keyboard's own controls: dock it under the picture, let it
+     float, or drop to the few rows a browser tends to swallow. */
+  dock: ["M3 4h18v16H3z", "M3 14h18"],
+  float: ["M7 8h14v11H7z", "M3 5h14v3", "M3 5v11h4"],
+  compact: ["M3 6h18", "M3 12h18", "M7 18h10"],
+  /* Show or hide a password. */
+  eye: ["M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z", "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"],
+  "eye-off": [
+    "M4 4l16 16",
+    "M9.9 5.2A9.9 9.9 0 0 1 12 5c6.4 0 10 6 10 6a17 17 0 0 1-3.2 3.7",
+    "M6.3 7.6A16.6 16.6 0 0 0 2 11s3.6 6 10 6a9.8 9.8 0 0 0 3.7-.7",
+    "M9.9 9.9a3 3 0 0 0 4.2 4.2",
+  ],
+  /* The symbols layout: what is printed above the numbers. */
+  symbols: ["M6 4L4 20", "M14 4l-2 16", "M3 9h16", "M2 15h16", "M20 15h2"],
+  palette: [
+    "M12 3a9 9 0 1 0 0 18 2 2 0 0 0 1.6-3.2 2 2 0 0 1 1.6-3.2H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3z",
+    "M7.5 11.5h.01M10 8h.01M14 8h.01M16.5 11h.01",
+  ],
   /* Mouse cursor: the "who has control" indicator. */
   pointer: ["M4 3l7.1 17 2.5-7.4 7.4-2.5z"],
 } as const;

@@ -1372,3 +1372,314 @@
   flex: 1;
   min-width: 0;
 }
+
+/* ---- the keyboard drawn on the page ------------------------------------- */
+
+.vk {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+}
+
+.vk-head,
+.vk-combos {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.vk-head {
+  justify-content: space-between;
+}
+
+.vk-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vk-row {
+  display: flex;
+  gap: 4px;
+}
+
+/* Keys share the row's width, so the whole keyboard fits a phone as it fits a
+   desktop - the letters just get narrower. */
+.vk-key {
+  flex: 1 1 2.2rem;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 2px;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.vk-key:hover {
+  background: var(--bg-hover);
+}
+
+.vk-key:active {
+  background: var(--bg-active);
+}
+
+/* Armed for the next key; locked until pressed again; lit by the target's own
+   lock light. */
+.vk-armed {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.vk-locked {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.vk-lit {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.vk-extra {
+  flex-wrap: wrap;
+}
+
+.vk-hint {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+
+.vk-head-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+/* Floating: a window over the page, dragged by its header, never wider than
+   the screen it has to fit on. */
+.vk-floating {
+  position: fixed;
+  z-index: 55;
+  width: min(96vw, 860px);
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+}
+
+.vk-grab {
+  cursor: grab;
+  touch-action: none;
+}
+
+/* Touch: bigger keys, and no long-press menu on a key. */
+@media (pointer: coarse) {
+  .vk-key {
+    min-height: 42px;
+    -webkit-touch-callout: none;
+  }
+}
+
+/* Narrow screens: the rows keep their shape and the keys get slimmer, so the
+   layout a hand knows is still the layout on the glass. */
+@media (max-width: 700px) {
+  .vk {
+    padding: var(--space-2);
+  }
+
+  .vk-key {
+    flex-basis: 1.6rem;
+    font-size: clamp(9px, 2.6vw, var(--text-sm));
+  }
+
+  .vk-hint {
+    display: none;
+  }
+}
+
+/*
+ * The tinted skin: every key that does not print a character gets a colour of
+ * its own, so a modifier, the function row and the navigation block are found
+ * by shape rather than by reading. The plain skin leaves them all alike.
+ */
+.vk-skin-tinted .vk-k-mod {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-overlay));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.vk-skin-tinted .vk-k-fn {
+  background: color-mix(in srgb, var(--warn) 16%, var(--bg-overlay));
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
+}
+
+.vk-skin-tinted .vk-k-nav {
+  background: color-mix(in srgb, var(--ok) 16%, var(--bg-overlay));
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--border));
+}
+
+.vk-skin-tinted .vk-k-edit {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.vk-skin-tinted .vk-k-lock,
+.vk-skin-tinted .vk-k-sys {
+  background: color-mix(in srgb, var(--text-faint) 18%, var(--bg-overlay));
+  border-color: var(--border-strong);
+}
+
+/* An armed or locked modifier still wins: it is state, not decoration. */
+.vk-skin-tinted .vk-armed,
+.vk-skin-tinted .vk-locked,
+.vk-skin-tinted .vk-lit {
+  background: var(--bg-active);
+}
+
+.vk-skin-tinted .vk-locked {
+  background: var(--accent);
+}
+
+/* A password field with the eye inside it. */
+.field-with-eye {
+  position: relative;
+  display: block;
+}
+
+.field-with-eye input {
+  width: 100%;
+  padding-right: 38px;
+}
+
+.eye-btn {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.eye-btn:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+/* Off the screen but still a real field, so a password manager can read it. */
+.offscreen {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* An update started from another session: the same news the one who started it
+   already has, for everyone else watching. */
+.update-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgb(0 0 0 / 60%);
+}
+
+.update-card {
+  width: min(420px, 100%);
+  padding: var(--space-4);
+  text-align: center;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+}
+
+.update-bar {
+  height: 6px;
+  margin-top: var(--space-3);
+  background: var(--bg-overlay);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.update-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 200ms ease;
+}
+
+/* The navigation block: the arrows in their inverted T, the editing keys
+   beside them, the way a keyboard has it. */
+.vk-nav {
+  display: grid;
+  grid-template-areas:
+    "ins home pgup . up ."
+    "del end pgdn left down right";
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+  max-width: 420px;
+}
+
+/* The number pad, also in its own shape. */
+.vk-pad {
+  display: grid;
+  grid-template-areas:
+    "num div mul sub"
+    "n7 n8 n9 add"
+    "n4 n5 n6 add"
+    "n1 n2 n3 enter"
+    "n0 n0 dot enter";
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+  max-width: 320px;
+}
+
+.vk-nav .vk-key,
+.vk-pad .vk-key {
+  flex: none;
+}
+
+/* The blocks that keep a keyboard's shape sit side by side, and wrap when the
+   screen is too narrow for both. */
+.vk-blocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: 4px;
+}
+
+.vk-extra {
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.vk-extra .vk-key {
+  flex: 0 0 3.4rem;
+}

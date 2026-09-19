@@ -15,6 +15,7 @@ import {
   type ConnectionState,
   type ControlState,
   type TargetState,
+  type UpdateState,
 } from "./control";
 import { isModifierCode, modifierMask, usageForCode } from "./keymap";
 import { pictureRect } from "../video/picture";
@@ -43,6 +44,8 @@ export function useInput(opts: InputOptions) {
   /* Who holds the single control session. Assume it is ours until the device
      says otherwise, so a lone operator is never told to "take control". */
   const controlState = ref<ControlState>("you");
+  /* What the device is doing to itself, as told to every console at once. */
+  const updateState = ref<UpdateState | null>(null);
   const held = new Set<number>();
   const lastPos = { x: 0, y: 0 };
   /* Mouse buttons currently pressed on the target, so a lost up can be undone. */
@@ -50,8 +53,24 @@ export function useInput(opts: InputOptions) {
 
   const control = new Control({
     onTarget: (t) => (target.value = t),
-    onConnection: (c) => (connection.value = c),
+    onConnection: (c) => {
+      connection.value = c;
+      /* A fresh connection means the device is back: whatever it was last heard
+         saying about updating itself is over. Without this the restart notice
+         outlived the restart and sat over the sign-in page for good. */
+      if (c === "open") updateState.value = null;
+    },
     onControl: (s) => (controlState.value = s),
+    onUpdate: (u) => {
+      updateState.value = u;
+      /* A failure is news, not a state: say it, then let the page go back to
+         being a console. A restart that never reports back clears itself too,
+         so nothing can sit over the page for ever. */
+      const after = u.phase === "failed" ? 8000 : 120000;
+      window.setTimeout(() => {
+        if (updateState.value === u) updateState.value = null;
+      }, after);
+    },
   });
   onScopeDispose(() => control.dispose());
 
@@ -280,5 +299,5 @@ export function useInput(opts: InputOptions) {
     control.mouseAbsolute(0, p.x, p.y);
   }
 
-  return { target, connection, controlState, control, engageFromPointer };
+  return { target, connection, controlState, updateState, control, engageFromPointer };
 }
