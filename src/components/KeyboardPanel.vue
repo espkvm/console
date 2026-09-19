@@ -60,15 +60,19 @@ const floating = ref(remembered("espkvm.osk.floating", "0") === "1");
 const compact = ref(
   remembered("espkvm.osk.compact", window.innerWidth < 700 ? "1" : "0") === "1",
 );
+/* The ready-made combinations are a strip of their own, and on a small screen
+   a whole row of the keyboard's height. They stay folded until asked for. */
+const combosOpen = ref(remembered("espkvm.osk.combos", "0") === "1");
 const pos = ref({
   x: Number(remembered("espkvm.osk.x", "24")),
   y: Number(remembered("espkvm.osk.y", "80")),
 });
-watch([floating, compact, skin], () => {
+watch([floating, compact, skin, combosOpen], () => {
   try {
     localStorage.setItem("espkvm.osk.floating", floating.value ? "1" : "0");
     localStorage.setItem("espkvm.osk.compact", compact.value ? "1" : "0");
     localStorage.setItem("espkvm.osk.skin", skin.value);
+    localStorage.setItem("espkvm.osk.combos", combosOpen.value ? "1" : "0");
   } catch {
     /* a private window; it just will not be remembered */
   }
@@ -212,9 +216,18 @@ const ROWS: Key[][] = [
   ],
 ];
 
-/* The three keys that belong to no block, kept beside the navigation one. */
-const EXTRA: Key[] = [
+/*
+ * The block that stands beside the keys. What goes in it depends on what the
+ * rows already have, so no key is drawn twice: the full rows carry the arrows
+ * and Delete, so its block is only the editing and system keys.
+ */
+const EDIT_KEYS: Key[] = [
+  { code: "Insert", text: "Ins" },
+  { code: "Home", text: "Home" },
+  { code: "PageUp", text: "PgUp" },
   { code: "PrintScreen", text: "PrtSc" },
+  { code: "End", text: "End" },
+  { code: "PageDown", text: "PgDn" },
   { code: "ScrollLock", text: "ScrLk", led: 4 },
   { code: "Pause", text: "Pause" },
 ];
@@ -245,7 +258,6 @@ const NAV_GRID: (Key & { area: string })[] = [
   { code: "Insert", text: "Ins", area: "ins" },
   { code: "Home", text: "Home", area: "home" },
   { code: "PageUp", text: "PgUp", area: "pgup" },
-  { code: "Delete", text: "Del", area: "del" },
   { code: "End", text: "End", area: "end" },
   { code: "PageDown", text: "PgDn", area: "pgdn" },
   { code: "ArrowUp", text: "\u2191", area: "up" },
@@ -340,6 +352,41 @@ const rows = computed(() =>
   layout.value === "compact" ? COMPACT_ROWS : layout.value === "symbols" ? SYMBOL_ROWS : ROWS,
 );
 
+/*
+ * The block beside the keys: the number pad with the symbols, the arrows and
+ * editing keys with the compact rows, and only the editing keys with the full
+ * ones - which already have arrows of their own.
+ */
+const side = computed(() =>
+  layout.value === "symbols"
+    ? { kind: "pad", keys: PAD_GRID as Key[] }
+    : layout.value === "compact"
+      ? { kind: "nav", keys: NAV_GRID as Key[] }
+      : { kind: "edit", keys: EDIT_KEYS },
+);
+
+const SIDE_NAMES: Record<string, string> = {
+  pad: "the number pad",
+  nav: "the arrows and editing keys",
+  edit: "the editing keys",
+};
+
+/* A narrow screen has no room for both, so it shows one at a time. A wide one
+   puts the block beside the keys rather than under them, where it would push
+   the keyboard up over the picture. */
+const narrow = ref(false);
+const pane = ref<"keys" | "side">("keys");
+const mq = window.matchMedia ? window.matchMedia("(max-width: 760px)") : null;
+if (mq) {
+  narrow.value = mq.matches;
+  mq.addEventListener("change", onMediaQuery);
+}
+
+function onMediaQuery(e: MediaQueryListEvent) {
+  narrow.value = e.matches;
+  if (!e.matches) pane.value = "keys";
+}
+
 /* The combinations an operating system or a browser takes for itself. */
 const COMBOS: { label: string; mods: number; code: string }[] = [
   { label: "Ctrl+Alt+Del", mods: HID_MOD_LCTRL | HID_MOD_LALT, code: "Delete" },
@@ -404,7 +451,10 @@ function release() {
   repeatTimer = 0;
 }
 
-onUnmounted(release);
+onUnmounted(() => {
+  release();
+  mq?.removeEventListener("change", onMediaQuery);
+});
 
 function combo(c: { mods: number; code: string }) {
   const usage = usageForCode(c.code);
@@ -482,6 +532,29 @@ function state(key: Key): Record<string, boolean> {
         </span>
         <span class="vk-head-actions">
           <button
+            v-if="narrow"
+            type="button"
+            class="btn btn-sm btn-icon btn-quiet"
+            :class="{ 'btn-on': pane === 'side' }"
+            :aria-pressed="pane === 'side'"
+            :aria-label="pane === 'keys' ? `Show ${SIDE_NAMES[side.kind]}` : 'Show the keys'"
+            :title="pane === 'keys' ? `Show ${SIDE_NAMES[side.kind]}` : 'Show the keys'"
+            @click="pane = pane === 'keys' ? 'side' : 'keys'"
+          >
+            <Icon :name="pane === 'keys' ? 'pointer' : 'keyboard'" :size="15" />
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-icon btn-quiet"
+            :class="{ 'btn-on': combosOpen }"
+            :aria-pressed="combosOpen"
+            aria-label="Ready-made combinations"
+            :title="combosOpen ? 'Hide Ctrl+Alt+Del and the rest' : 'Ctrl+Alt+Del and the rest'"
+            @click="combosOpen = !combosOpen"
+          >
+            <Icon name="combo" :size="15" />
+          </button>
+          <button
             type="button"
             class="btn btn-sm btn-icon btn-quiet"
             aria-label="Change how the keys are coloured"
@@ -529,7 +602,7 @@ function state(key: Key): Record<string, boolean> {
         </span>
       </div>
 
-    <div class="vk-combos">
+    <div v-if="combosOpen" class="vk-combos">
       <button
         v-for="c in COMBOS"
         :key="c.label"
@@ -541,80 +614,48 @@ function state(key: Key): Record<string, boolean> {
       </button>
     </div>
 
-    <div class="vk-keys">
-      <div v-for="(row, i) in rows" :key="i" class="vk-row">
-        <button
-          v-for="key in row"
-          :key="key.code + key.text"
-          type="button"
-          class="vk-key"
-          :class="state(key)"
-          :style="{ flexGrow: key.w ?? 1, flexBasis: `${(key.w ?? 1) * 2.2}rem` }"
-          :aria-label="key.text"
-          @pointerdown.prevent="press(key)"
-          @pointerup="release"
-          @pointercancel="release"
-          @pointerleave="release"
-        >
-          {{ label(key) }}
-        </button>
-      </div>
-
-      <!-- The navigation block and the number pad keep a keyboard's shape
-           rather than becoming another line of buttons. -->
-      <div class="vk-blocks">
-      <div v-if="layout !== 'symbols'" class="vk-nav">
-        <button
-          v-for="key in NAV_GRID"
-          :key="key.code"
-          type="button"
-          class="vk-key"
-          :class="state(key)"
-          :style="{ gridArea: key.area }"
-          :aria-label="key.text"
-          @pointerdown.prevent="press(key)"
-          @pointerup="release"
-          @pointercancel="release"
-          @pointerleave="release"
-        >
-          {{ key.text }}
-        </button>
-      </div>
-
-      <div v-if="layout === 'symbols'" class="vk-pad">
-        <button
-          v-for="key in PAD_GRID"
-          :key="key.code"
-          type="button"
-          class="vk-key"
-          :class="state(key)"
-          :style="{ gridArea: key.area }"
-          :aria-label="key.text"
-          @pointerdown.prevent="press(key)"
-          @pointerup="release"
-          @pointercancel="release"
-          @pointerleave="release"
-        >
-          {{ key.text }}
-        </button>
-      </div>
-
-        <div v-if="layout === 'full'" class="vk-extra">
-        <button
-          v-for="key in EXTRA"
-          :key="key.code"
-          type="button"
-          class="vk-key"
-          :class="state(key)"
-          :aria-label="key.text"
-          @pointerdown.prevent="press(key)"
-          @pointerup="release"
-          @pointercancel="release"
-          @pointerleave="release"
-        >
-          {{ key.text }}
-        </button>
+    <div class="vk-body">
+      <div v-if="!narrow || pane === 'keys'" class="vk-keys">
+        <div v-for="(row, i) in rows" :key="i" class="vk-row">
+          <button
+            v-for="key in row"
+            :key="key.code + key.text"
+            type="button"
+            class="vk-key"
+            :class="state(key)"
+            :style="{ flexGrow: key.w ?? 1, flexBasis: `${(key.w ?? 1) * 2.2}rem` }"
+            :aria-label="key.text"
+            @pointerdown.prevent="press(key)"
+            @pointerup="release"
+            @pointercancel="release"
+            @pointerleave="release"
+          >
+            {{ label(key) }}
+          </button>
         </div>
+      </div>
+
+      <!-- Beside the keys, not under them: the arrows, the editing keys or the
+           number pad, in the shape they have on a keyboard. -->
+      <div
+        v-if="!narrow || pane === 'side'"
+        :class="['vk-side', `vk-${side.kind}`]"
+      >
+        <button
+          v-for="key in side.keys"
+          :key="key.code"
+          type="button"
+          class="vk-key"
+          :class="state(key)"
+          :style="(key as any).area ? { gridArea: (key as any).area } : undefined"
+          :aria-label="key.text"
+          @pointerdown.prevent="press(key)"
+          @pointerup="release"
+          @pointercancel="release"
+          @pointerleave="release"
+        >
+          {{ key.text }}
+        </button>
       </div>
     </div>
     </section>

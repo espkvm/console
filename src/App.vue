@@ -34,6 +34,7 @@ import { DEFAULT_LAYOUT } from "./layouts";
 import {
   type Capability,
   type Setting,
+  type SettingSection,
   type Values,
   type SystemInfo,
   type VideoStatus,
@@ -63,17 +64,24 @@ import {
 import { loadSession, logout, type SessionState } from "./state/auth";
 import { toast } from "./state/toasts";
 
-type PanelId = "input" | "media" | "automation" | "captures" | "settings" | null;
+type PanelId = "input" | "media" | "automation" | "captures" | null;
 
 const PANEL_TITLES: Record<string, string> = {
   input: "Input",
   media: "Virtual media",
   automation: "Automation",
   captures: "Recordings and screenshots",
-  settings: "Settings",
 };
 
+/* Settings are a window, not a rail panel: a hundred of them in a 340 px column
+   is a scroll with no shape, and a window has room for the sections beside the
+   settings themselves. */
+const settingsOpen = ref(false);
+
 const schema = ref<Setting[]>([]);
+/* The sections the device describes: their titles, their order, what they are
+   for. Nothing here decides that. */
+const sections = ref<SettingSection[]>([]);
 const values = ref<Values>({});
 const caps = ref<Record<string, Capability>>({});
 const status = ref<VideoStatus | null>(null);
@@ -1051,7 +1059,8 @@ async function startConsole() {
       loadCapabilities(),
       loadSystemInfo(),
     ]);
-    schema.value = s;
+    schema.value = s.settings;
+    sections.value = s.sections;
     values.value = v;
     caps.value = c;
     system.value = sys;
@@ -1519,9 +1528,10 @@ const LED_BITS: Array<[number, string]> = [
         <DiagWidget :system="system" :side="uiRight ? 'right' : 'left'" />
         <button
           type="button"
-          :class="['rail-btn', { 'rail-btn-active': panel === 'settings' }]"
+          :class="['rail-btn', { 'rail-btn-active': settingsOpen }]"
           aria-label="Settings"
-          @click="togglePanel('settings')"
+          title="Settings"
+          @click="settingsOpen = !settingsOpen"
         >
           <Icon name="settings" :size="18" />
         </button>
@@ -1614,19 +1624,8 @@ const LED_BITS: Array<[number, string]> = [
             <button type="button" class="btn btn-sm" @click="panel = null">Close</button>
           </header>
           <div class="panel-body">
-            <SettingsPanel
-              v-if="panel === 'settings' && ready"
-              :schema="schema"
-              :values="values"
-              :caps="caps"
-              :wg-public-key="system?.wg?.publicKey ?? ''"
-              :firmware="system?.version"
-              @values="values = $event"
-              @password-changed="onPasswordChanged"
-            />
-
             <InputPanel
-              v-else-if="panel === 'input'"
+              v-if="panel === 'input'"
               :control="input.control"
               :schema="schema"
               :values="values"
@@ -1909,6 +1908,43 @@ const LED_BITS: Array<[number, string]> = [
     </footer>
 
     <ToastHost />
+  </div>
+
+  <!-- Settings, in a window of their own: the sections down one side and the
+       settings beside them, full screen on a phone. -->
+  <div
+    v-if="settingsOpen && ready"
+    class="settings-veil"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Settings"
+    @click.self="settingsOpen = false"
+  >
+    <div class="settings-window">
+      <header class="settings-window-head">
+        <h2>Settings</h2>
+        <button
+          type="button"
+          class="icon-btn"
+          aria-label="Close settings"
+          title="Close"
+          @click="settingsOpen = false"
+        >
+          <Icon name="close" :size="15" />
+        </button>
+      </header>
+      <SettingsPanel
+        :schema="schema"
+        :sections="sections"
+        :values="values"
+        :caps="caps"
+        :wg-public-key="system?.wg?.publicKey ?? ''"
+        :ts="system?.ts"
+        :firmware="system?.version"
+        @values="values = $event"
+        @password-changed="onPasswordChanged"
+      />
+    </div>
   </div>
 
   <!-- Somebody else is updating this device: the picture is about to stop for

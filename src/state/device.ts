@@ -24,6 +24,8 @@ export type SettingType = "bool" | "int" | "enum" | "string";
 export interface Setting {
   key: string;
   section: string;
+  /** A heading within the section, as the device groups them. */
+  group?: string;
   title: string;
   help?: string;
   type: SettingType;
@@ -251,7 +253,15 @@ export interface SystemInfo {
    * and ready. `address` is the device's tailnet IP (100.x); `peers` is how many
    * tailnet peers are known.
    */
-  ts?: { enabled: boolean; up: boolean; address: string; peers: number };
+  ts?: {
+    enabled: boolean;
+    up: boolean;
+    address: string;
+    peers: number;
+    /** When the node key runs out, Unix epoch seconds; 0 when there is none. */
+    keyExpiry?: number;
+    keyExpired?: boolean;
+  };
 }
 
 export type Values = Record<string, number | string | boolean>;
@@ -308,8 +318,31 @@ async function getJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function loadSchema(): Promise<Setting[]> {
-  return getJson<Setting[]>(SCHEMA_URL);
+/** A section as the device describes it: the tab, its order, what it is for. */
+export interface SettingSection {
+  id: string;
+  title: string;
+  blurb?: string;
+}
+
+export interface Schema {
+  settings: Setting[];
+  sections: SettingSection[];
+}
+
+/*
+ * The device describes its own settings - the sections, their order, the
+ * headings inside them - so nothing here has to keep a list that goes stale
+ * whenever a setting is added to the firmware.
+ */
+export async function loadSchema(): Promise<Schema> {
+  const body = await getJson<Schema | Setting[]>(SCHEMA_URL);
+  if (Array.isArray(body)) {
+    /* An older device: settings only, sections named after their ids. */
+    const ids = [...new Set(body.map((s) => s.section))];
+    return { settings: body, sections: ids.map((id) => ({ id, title: id })) };
+  }
+  return body;
 }
 
 export async function loadValues(): Promise<Values> {

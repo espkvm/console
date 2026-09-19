@@ -120,6 +120,13 @@ const PATHS = {
   ],
   /* The symbols layout: what is printed above the numbers. */
   symbols: ["M6 4L4 20", "M14 4l-2 16", "M3 9h16", "M2 15h16", "M20 15h2"],
+  /* Two keys pressed at once: the ready-made combinations. */
+  combo: [
+    "M4 5h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z",
+    "M10 9h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2z",
+  ],
+  /* Put a setting back to the value it shipped with. */
+  undo: ["M3 8h11a5 5 0 0 1 0 10h-6", "M7 4L3 8l4 4"],
   palette: [
     "M12 3a9 9 0 1 0 0 18 2 2 0 0 0 1.6-3.2 2 2 0 0 1 1.6-3.2H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3z",
     "M7.5 11.5h.01M10 8h.01M14 8h.01M16.5 11h.01",

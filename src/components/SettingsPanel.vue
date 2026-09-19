@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Icon from "./Icon.vue";
 /*
  * The settings panel renders itself from the schema the device serves, so a
  * setting added to the firmware table appears here with its title, range and
@@ -11,8 +12,7 @@
 import { computed, onMounted, ref } from "vue";
 
 import {
-  SECTION_ORDER,
-  SECTION_TITLES,
+  type SettingSection,
   type Capability,
   type PinInfo,
   type Setting,
@@ -46,10 +46,14 @@ import { toast } from "../state/toasts";
 
 const props = defineProps<{
   schema: Setting[];
+  /** Sections as the device describes them: id, title, what it is for. */
+  sections: SettingSection[];
   values: Values;
   caps: Record<string, Capability>;
   /** The device's own WireGuard public key (from system info), to add to the hub. */
   wgPublicKey?: string;
+  /** Tailnet state from system info, for the key's expiry date. */
+  ts?: { keyExpiry?: number; keyExpired?: boolean };
   /** Firmware version, written into an exported file so it can be read later. */
   firmware?: string;
 }>();
@@ -132,10 +136,58 @@ function onTzPick(key: string, name: string) {
 
 const sections = computed(() => {
   const present = new Set(props.schema.map((s) => s.section));
-  const list = SECTION_ORDER.filter((s) => present.has(s));
-  list.push("pins"); // always-present virtual tab: the GPIO map
-  return list;
+  const list = props.sections.filter((s) => present.has(s.id));
+  /* The pin map is drawn from the board, not from a setting, so it is the one
+     tab the device does not describe. */
+  return [...list, { id: "pins", title: "Pins" }];
 });
+
+function sectionTitle(id: string): string {
+  return sections.value.find((s) => s.id === id)?.title ?? id;
+}
+
+const sectionBlurb = computed(
+  () => props.sections.find((s) => s.id === currentSection.value)?.blurb ?? "",
+);
+
+/* ---- finding one setting among a hundred ---------------------------------
+ * The search runs over what the device published - title, help text and the
+ * key itself - so it needs no list of its own and covers settings added to the
+ * firmware later. */
+const query = ref("");
+const changedOnly = ref(false);
+
+function isChanged(setting: Setting): boolean {
+  const now = props.values[setting.key];
+  if (now === undefined) return false;
+  if (setting.secret) return false; /* never read back, so never comparable */
+  return String(now) !== String(setting.default);
+}
+
+const searchHits = computed(() => {
+  const q = query.value.trim().toLowerCase();
+  if (!q) return [];
+  return props.schema.filter((entry) => {
+    if (entry.section === "storage_hidden") return false;
+    const haystack =
+      `${entry.title} ${entry.help ?? ""} ${entry.key}`.toLowerCase();
+    return haystack.includes(q) && (!changedOnly.value || isChanged(entry));
+  });
+});
+
+/* Which help texts are open. Help is a sentence or three, and a hundred of them
+   at once is a wall - so it lives behind a question mark. */
+const helpOpen = ref(new Set<string>());
+
+function toggleHelp(key: string) {
+  const next = new Set(helpOpen.value);
+  if (!next.delete(key)) next.add(key);
+  helpOpen.value = next;
+}
+
+async function resetSetting(setting: Setting) {
+  await write(setting.key, setting.default);
+}
 
 /* ---- GPIO pin map --------------------------------------------------------
  * The device reports which pins its fixed peripherals reserve; the rest of the
@@ -290,6 +342,20 @@ const vpnMode = computed<VpnMode>(() =>
   props.values.wg_enable ? "wg" : props.values.ts_enable ? "ts" : "off",
 );
 
+/* Tailscale gives a node key six months at most; the device learns the date
+   from the control plane and this is where an operator would look for it. */
+const tsKeyNote = computed(() => {
+  const ts = props.ts;
+  if (!ts) return "";
+  if (ts.keyExpired) {
+    return "The tailnet key has run out - the device is off the tailnet until a fresh auth key is saved here.";
+  }
+  if (!ts.keyExpiry) return "";
+  const when = new Date(ts.keyExpiry * 1000);
+  const days = Math.ceil((when.getTime() - Date.now()) / 86400000);
+  return `The tailnet key runs out on ${when.toLocaleString()} - in ${days} day${days === 1 ? "" : "s"}.`;
+});
+
 const displayRows = computed(() => {
   let list = rows.value;
   if (currentSection.value === "vpn") {
@@ -305,7 +371,30 @@ const displayRows = computed(() => {
    * the setting it names holds the given value. The GC9A01's SPI pins use this to
    * stay hidden unless the round LCD is the selected display type - an I2C OLED
    * has no pins to configure, so showing them would only mislead. */
-  return list.filter((r) => !r.showIf || Number(props.values[r.showIf.key]) === r.showIf.eq);
+  if (changedOnly.value) {
+    list = list.filter(isChanged);
+  }
+  return list.filter(
+    (r) => !r.showIf || Number(props.values[r.showIf.key]) === r.showIf.eq,
+  );
+});
+
+/*
+ * The rows as the device groups them: a heading, then its settings. A setting
+ * with no group of its own comes first, under no heading at all.
+ */
+const grouped = computed(() => {
+  const rowsNow = query.value.trim() ? searchHits.value : displayRows.value;
+  const out: { name: string; rows: Setting[] }[] = [];
+  for (const row of rowsNow) {
+    const name = query.value.trim()
+      ? sectionTitle(row.section)
+      : (row.group ?? "");
+    const last = out[out.length - 1];
+    if (last && last.name === name) last.rows.push(row);
+    else out.push({ name, rows: [row] });
+  }
+  return out;
 });
 
 /* The I2C OLEDs (SSD1306/SH1106) ride the capture chip's I2C bus rather than pins
@@ -615,426 +704,684 @@ async function doRevertCert() {
     <div class="tabs" role="tablist">
       <button
         v-for="s in sections"
-        :key="s"
+        :key="s.id"
         type="button"
         role="tab"
-        :aria-selected="s === currentSection"
-        :class="['tab', { 'tab-active': s === currentSection }]"
-        @click="active = s"
+        :aria-selected="s.id === currentSection"
+        :class="['tab', { 'tab-active': s.id === currentSection }]"
+        @click="active = s.id"
       >
-        {{ SECTION_TITLES[s] ?? s }}
+        {{ s.title }}
       </button>
     </div>
 
-    <p v-if="sectionBlocked" class="section-blocked">{{ sectionBlocked }}</p>
-
-    <div class="settings-list">
-      <div v-if="currentSection === 'vpn'" class="setting">
-        <div class="setting-head">
-          <label class="setting-title" for="vpn-mode">VPN backend</label>
-        </div>
-        <div class="setting-control">
-          <select
-            id="vpn-mode"
-            :value="vpnMode"
-            :disabled="busy"
-            @change="setVpnMode(($event.target as HTMLSelectElement).value as VpnMode)"
-            @wheel="guardWheel"
-          >
-            <option value="off">Off</option>
-            <option value="wg">WireGuard</option>
-            <option value="ts">Tailscale</option>
-          </select>
-        </div>
-        <p class="setting-note">
-          Only one VPN runs at a time; choosing one shows just its settings.
-        </p>
-      </div>
-
-      <div
-        v-for="s in displayRows"
-        :key="s.key"
-        :class="['setting', { 'setting-blocked': busy || sectionBlocked || blockedFor(s) }]"
-      >
-        <div class="setting-head">
-          <label class="setting-title" :for="`set-${s.key}`">{{ s.title }}</label>
-          <span v-if="s.reboot" class="badge" title="Applies after a restart">restart</span>
-        </div>
-
-        <div class="setting-control">
-          <label v-if="s.type === 'bool'" class="switch">
-            <input
-              :id="`set-${s.key}`"
-              type="checkbox"
-              :checked="Boolean(values[s.key])"
-              :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
-              @change="write(s.key, ($event.target as HTMLInputElement).checked)"
-            />
-            <span class="muted">{{ values[s.key] ? "On" : "Off" }}</span>
-          </label>
-
-          <select
-            v-else-if="s.type === 'enum'"
-            :id="`set-${s.key}`"
-            :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
-            :value="String(Number(values[s.key] ?? 0))"
-            @change="write(s.key, Number(($event.target as HTMLSelectElement).value))"
-            @wheel="guardWheel"
-          >
-            <option v-for="(c, i) in s.choices ?? []" :key="c" :value="String(i)">{{ c }}</option>
-          </select>
-
-          <select
-            v-else-if="s.pin"
-            :id="`set-${s.key}`"
-            class="num-input"
-            :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
-            :value="String(Number(values[s.key] ?? -1))"
-            @change="write(s.key, Number(($event.target as HTMLSelectElement).value))"
-            @wheel="guardWheel"
-          >
-            <option value="-1">None</option>
-            <option v-for="p in freePinsFor(s.key)" :key="p" :value="String(p)">GPIO {{ p }}</option>
-          </select>
-
+    <!-- Beside the section list: the settings, and the buttons that act on
+         all of them pinned under the scroll. -->
+    <div class="settings-right">
+      <!-- Everything but the section list: its own column in the window, the
+           whole width in the panel. -->
+      <div class="settings-main">
+        <div class="settings-find">
+          <!-- Named and marked off, or a browser takes the box above a password
+               field for a username box and fills in the saved login. -->
           <input
-            v-else-if="s.type === 'int'"
-            :id="`set-${s.key}`"
-            type="number"
-            class="num-input"
-            :min="s.min"
-            :max="s.max"
-            :value="Number(values[s.key] ?? 0)"
-            :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
-            @change="write(s.key, Number(($event.target as HTMLInputElement).value))"
-            @wheel="guardWheel"
-          />
-
-          <input
-            v-else-if="s.secret"
-            :id="`set-${s.key}`"
-            type="password"
+            v-model="query"
+            type="search"
+            class="settings-search"
+            name="setting-filter"
             autocomplete="off"
-            :maxlength="s.maxLength"
-            placeholder="Leave blank to keep the current value"
-            :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
-            @change="writeSecret(s.key, $event.target as HTMLInputElement)"
+            data-1p-ignore
+            data-lpignore="true"
+            placeholder="Find a setting"
+            aria-label="Find a setting"
           />
-
-          <!-- The time zone: one list of cities over the POSIX string the device takes. -->
-          <select
-            v-else-if="s.key === 'sched_tz'"
-            :id="`set-${s.key}`"
-            :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
-            :value="tzChoice(String(values[s.key] ?? ''))"
-            @change="onTzPick(s.key, ($event.target as HTMLSelectElement).value)"
-            @wheel="guardWheel"
+          <button
+            type="button"
+            :class="['btn', 'btn-sm', { 'btn-on': changedOnly }]"
+            :aria-pressed="changedOnly"
+            title="Only the settings that differ from the factory values"
+            @click="changedOnly = !changedOnly"
           >
-            <option v-if="browserTz.exact" :value="browserTz.name">
-              This browser: {{ tzLabel(browserTz.name) }}
-            </option>
-            <option
-              v-if="!tzChoice(String(values[s.key] ?? ''))"
-              :value="''"
-            >
-              {{ String(values[s.key] ?? '') || 'Not set' }} (set another way)
-            </option>
-            <option v-for="z in tzOptions" :key="z.name" :value="z.name">{{ z.label }}</option>
-          </select>
-
-          <input
-            v-else
-            :id="`set-${s.key}`"
-            type="text"
-            :maxlength="s.maxLength"
-            :value="String(values[s.key] ?? '')"
-            :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
-            @change="write(s.key, ($event.target as HTMLInputElement).value)"
-          />
+            Changed
+          </button>
         </div>
 
-        <p v-if="blockedFor(s)" class="setting-note setting-note-blocked">{{ blockedFor(s) }}</p>
-        <p v-else-if="s.help" class="setting-note">{{ s.help }}</p>
+        <p v-if="query.trim()" class="setting-note">
+          {{ searchHits.length }} of {{ schema.length }} settings match.
+        </p>
+        <p v-else-if="sectionBlurb" class="setting-note">{{ sectionBlurb }}</p>
 
-        <div v-if="s.key === 'notify_tg_chat' && !blockedFor(s)" class="tg-find">
+        <p v-if="sectionBlocked && !query.trim()" class="section-blocked">
+          {{ sectionBlocked }}
+        </p>
+
+        <div class="settings-list">
+          <div v-if="currentSection === 'vpn'" class="setting">
+            <div class="setting-head">
+              <label class="setting-title" for="vpn-mode">VPN backend</label>
+            </div>
+            <div class="setting-control">
+              <select
+                id="vpn-mode"
+                :value="vpnMode"
+                :disabled="busy"
+                @change="
+                  setVpnMode(
+                    ($event.target as HTMLSelectElement).value as VpnMode,
+                  )
+                "
+                @wheel="guardWheel"
+              >
+                <option value="off">Off</option>
+                <option value="wg">WireGuard</option>
+                <option value="ts">Tailscale</option>
+              </select>
+            </div>
+            <p class="setting-note">
+              Only one VPN runs at a time; choosing one shows just its settings.
+            </p>
+          </div>
+
+          <template v-for="block in grouped" :key="block.name || 'first'">
+            <h3 v-if="block.name" class="settings-group">{{ block.name }}</h3>
+            <div
+              v-for="s in block.rows"
+              :key="s.key"
+              :class="[
+                'setting',
+                { 'setting-blocked': busy || sectionBlocked || blockedFor(s) },
+              ]"
+            >
+              <div class="setting-head">
+                <label class="setting-title" :for="`set-${s.key}`">{{
+                  s.title
+                }}</label>
+                <span
+                  v-if="s.reboot"
+                  class="badge"
+                  title="Applies after a restart"
+                  >restart</span
+                >
+                <span class="setting-head-actions">
+                  <button
+                    v-if="s.help"
+                    type="button"
+                    class="icon-btn"
+                    :aria-label="`What ${s.title} does`"
+                    :aria-expanded="helpOpen.has(s.key)"
+                    title="What this does"
+                    @click="toggleHelp(s.key)"
+                  >
+                    <Icon name="info" :size="14" />
+                  </button>
+                  <button
+                    v-if="isChanged(s) && !blockedFor(s)"
+                    type="button"
+                    class="icon-btn"
+                    :aria-label="`Put ${s.title} back to the factory value`"
+                    title="Back to the factory value"
+                    :disabled="busy"
+                    @click="resetSetting(s)"
+                  >
+                    <Icon name="undo" :size="14" />
+                  </button>
+                </span>
+              </div>
+
+              <div class="setting-control">
+                <label v-if="s.type === 'bool'" class="switch">
+                  <input
+                    :id="`set-${s.key}`"
+                    type="checkbox"
+                    :checked="Boolean(values[s.key])"
+                    :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
+                    @change="
+                      write(s.key, ($event.target as HTMLInputElement).checked)
+                    "
+                  />
+                  <span class="muted">{{ values[s.key] ? "On" : "Off" }}</span>
+                </label>
+
+                <select
+                  v-else-if="s.type === 'enum'"
+                  :id="`set-${s.key}`"
+                  :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
+                  :value="String(Number(values[s.key] ?? 0))"
+                  @change="
+                    write(
+                      s.key,
+                      Number(($event.target as HTMLSelectElement).value),
+                    )
+                  "
+                  @wheel="guardWheel"
+                >
+                  <option
+                    v-for="(c, i) in s.choices ?? []"
+                    :key="c"
+                    :value="String(i)"
+                  >
+                    {{ c }}
+                  </option>
+                </select>
+
+                <select
+                  v-else-if="s.pin"
+                  :id="`set-${s.key}`"
+                  class="num-input"
+                  :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
+                  :value="String(Number(values[s.key] ?? -1))"
+                  @change="
+                    write(
+                      s.key,
+                      Number(($event.target as HTMLSelectElement).value),
+                    )
+                  "
+                  @wheel="guardWheel"
+                >
+                  <option value="-1">None</option>
+                  <option
+                    v-for="p in freePinsFor(s.key)"
+                    :key="p"
+                    :value="String(p)"
+                  >
+                    GPIO {{ p }}
+                  </option>
+                </select>
+
+                <input
+                  v-else-if="s.type === 'int'"
+                  :id="`set-${s.key}`"
+                  type="number"
+                  class="num-input"
+                  :min="s.min"
+                  :max="s.max"
+                  :value="Number(values[s.key] ?? 0)"
+                  :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
+                  @change="
+                    write(
+                      s.key,
+                      Number(($event.target as HTMLInputElement).value),
+                    )
+                  "
+                  @wheel="guardWheel"
+                />
+
+                <input
+                  v-else-if="s.secret"
+                  :id="`set-${s.key}`"
+                  type="password"
+                  :name="`secret-${s.key}`"
+                  autocomplete="new-password"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  :maxlength="s.maxLength"
+                  placeholder="Leave blank to keep the current value"
+                  :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
+                  @change="writeSecret(s.key, $event.target as HTMLInputElement)"
+                />
+
+                <!-- The time zone: one list of cities over the POSIX string the device takes. -->
+                <select
+                  v-else-if="s.key === 'sched_tz'"
+                  :id="`set-${s.key}`"
+                  :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
+                  :value="tzChoice(String(values[s.key] ?? ''))"
+                  @change="
+                    onTzPick(s.key, ($event.target as HTMLSelectElement).value)
+                  "
+                  @wheel="guardWheel"
+                >
+                  <option v-if="browserTz.exact" :value="browserTz.name">
+                    This browser: {{ tzLabel(browserTz.name) }}
+                  </option>
+                  <option
+                    v-if="!tzChoice(String(values[s.key] ?? ''))"
+                    :value="''"
+                  >
+                    {{ String(values[s.key] ?? "") || "Not set" }} (set another
+                    way)
+                  </option>
+                  <option v-for="z in tzOptions" :key="z.name" :value="z.name">
+                    {{ z.label }}
+                  </option>
+                </select>
+
+                <input
+                  v-else
+                  :id="`set-${s.key}`"
+                  type="text"
+                  :maxlength="s.maxLength"
+                  :value="String(values[s.key] ?? '')"
+                  :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
+                  @change="
+                    write(s.key, ($event.target as HTMLInputElement).value)
+                  "
+                />
+              </div>
+
+              <p v-if="blockedFor(s)" class="setting-note setting-note-blocked">
+                {{ blockedFor(s) }}
+              </p>
+              <p v-else-if="s.help && helpOpen.has(s.key)" class="setting-note">
+                {{ s.help }}
+              </p>
+
+              <div
+                v-if="s.key === 'notify_tg_chat' && !blockedFor(s)"
+                class="tg-find"
+              >
+                <button
+                  type="button"
+                  class="btn btn-sm"
+                  :disabled="busy || tgFinding"
+                  @click="findChats"
+                >
+                  {{ tgFinding ? "Asking Telegram..." : "Find chats" }}
+                </button>
+                <p
+                  v-if="tgFind?.state === 'error'"
+                  class="setting-note setting-note-blocked"
+                >
+                  {{ tgFind.error }}
+                </p>
+                <template v-else-if="tgFind?.state === 'ok'">
+                  <p v-if="!tgFind.chats.length" class="setting-note">
+                    No chats yet. Send any message to
+                    <b>@{{ tgFind.bot }}</b
+                    >, or add it to a group, then press Find chats again.
+                  </p>
+                  <ul v-else class="tg-chats">
+                    <li v-for="c in tgFind.chats" :key="c.id">
+                      <button
+                        type="button"
+                        :class="[
+                          'btn',
+                          'btn-sm',
+                          { 'btn-on': String(values[s.key] ?? '') === c.id },
+                        ]"
+                        :disabled="busy"
+                        @click="write(s.key, c.id)"
+                      >
+                        {{ c.name || c.id }}
+                      </button>
+                      <span class="muted">{{ c.type }} &middot; {{ c.id }}</span>
+                    </li>
+                  </ul>
+                </template>
+              </div>
+            </div>
+          </template>
+
+          <p v-if="oledI2cNote" class="setting-note">
+            This I²C OLED shares the capture chip's I²C bus — wire it to
+            <b>SDA {{ oledI2cNote.sda }}</b> ·
+            <b>SCL {{ oledI2cNote.scl }}</b> (plus 3V3 and GND). Those are the
+            board's capture pins, so there's nothing to set here; the panel is
+            auto-detected at 0x3C/0x3D.
+          </p>
+
+          <div v-if="currentSection === 'pins'" class="pinmap">
+            <div v-if="hasHeaders" class="pin-views">
+              <button
+                type="button"
+                :class="['pin-view-btn', { on: pinView === 'header' }]"
+                @click="pinView = 'header'"
+              >
+                Header
+              </button>
+              <button
+                type="button"
+                :class="['pin-view-btn', { on: pinView === 'gpio' }]"
+                @click="pinView = 'gpio'"
+              >
+                All GPIO
+              </button>
+            </div>
+
+            <template v-if="hasHeaders && pinView === 'header'">
+              <p class="setting-note">
+                The expansion header of the {{ pinInfo?.board }}, laid out as it
+                is on the board - so a pin here is a place to put a wire.
+                <b>Reserved</b> pins are the board's fixed peripherals;
+                <b>assigned</b> are set by the pin pickers on the other tabs;
+                <b>free</b> pins are what those pickers offer.
+              </p>
+              <p
+                v-if="pinInfo?.headerVerified === false"
+                class="setting-note pin-caveat"
+              >
+                This pinout comes from the vendor's diagram and has not been
+                checked against a board in hand. Confirm against the silkscreen
+                before you wire anything.
+              </p>
+              <div v-for="h in headerRows" :key="h.name" class="pin-header">
+                <h4 v-if="h.name" class="pin-header-name">{{ h.name }}</h4>
+                <ul class="pin-rows">
+                  <li
+                    v-for="(row, i) in h.rows"
+                    :key="i"
+                    :class="['pin-row', { numbered: h.numbered }]"
+                  >
+                    <span
+                      :class="['pin-side', 'pin-left', `pin-${row.left.kind}`]"
+                      :title="row.left.note"
+                    >
+                      <span class="pin-name">{{ row.left.label }}</span>
+                      <span v-if="row.left.kind !== 'free'" class="pin-use">{{
+                        row.left.use
+                      }}</span>
+                    </span>
+                    <span v-if="h.numbered" class="pin-n">{{ row.left.n }}</span>
+                    <span v-if="h.numbered" class="pin-n">{{
+                      row.right?.n
+                    }}</span>
+                    <span
+                      v-if="row.right"
+                      :class="['pin-side', 'pin-right', `pin-${row.right.kind}`]"
+                      :title="row.right.note"
+                    >
+                      <span class="pin-name">{{ row.right.label }}</span>
+                      <span v-if="row.right.kind !== 'free'" class="pin-use">{{
+                        row.right.use
+                      }}</span>
+                    </span>
+                  </li>
+                </ul>
+              </div>
+            </template>
+
+            <template v-else>
+              <p class="setting-note">
+                Every usable GPIO and what holds it. <b>Reserved</b> pins are the
+                board's fixed peripherals; <b>assigned</b> are set by the pin
+                pickers on the other tabs; <b>free</b>
+                pins are what those pickers offer. Change a pin on its own tab.
+              </p>
+              <p v-if="!hasHeaders && pinInfo?.board" class="setting-note">
+                No pinout is known for the {{ pinInfo.board }}, so there is no
+                header to draw.
+              </p>
+              <ul class="pin-comb">
+                <li
+                  v-for="p in pinMap"
+                  :key="p.pin"
+                  :class="['pin-cell', `pin-${p.kind}`]"
+                >
+                  <span class="pin-num">{{ p.pin }}</span>
+                  <span class="pin-use">{{ p.use }}</span>
+                </li>
+              </ul>
+            </template>
+            <p v-if="pinMap.length === 0" class="setting-note">
+              Reading the pin map...
+            </p>
+          </div>
+
+          <!-- A tailnet key lasts six months at most, so the date is worth
+               saying out loud rather than leaving in the admin console. -->
+          <div
+            v-if="currentSection === 'vpn' && vpnMode === 'ts' && tsKeyNote"
+            class="setting"
+          >
+            <div class="setting-head">
+              <label class="setting-title">Key</label>
+            </div>
+            <p class="setting-note">{{ tsKeyNote }}</p>
+          </div>
+
+          <div
+            v-if="currentSection === 'vpn' && vpnMode === 'wg' && wgPublicKey"
+            class="setting"
+          >
+            <div class="setting-head">
+              <label class="setting-title">Device public key</label>
+            </div>
+            <div class="setting-control pubkey-row">
+              <input
+                class="pubkey-field mono"
+                type="text"
+                :value="wgPublicKey"
+                readonly
+              />
+              <button
+                type="button"
+                class="btn btn-sm"
+                @click="copyText(wgPublicKey!)"
+              >
+                Copy
+              </button>
+            </div>
+            <p class="setting-note">
+              Add this to your WireGuard hub as this device's peer public key.
+            </p>
+          </div>
+        </div>
+
+        <div v-if="currentSection === 'security' && signedIn" class="firmware">
+          <h3>Session</h3>
+          <p class="setting-note">
+            Signed in as <strong>{{ sessionUser }}</strong
+            >. Signing out ends this session only; other open consoles keep
+            theirs.
+          </p>
           <button
             type="button"
             class="btn btn-sm"
-            :disabled="busy || tgFinding"
-            @click="findChats"
+            :disabled="signingOut"
+            @click="signOut"
           >
-            {{ tgFinding ? "Asking Telegram..." : "Find chats" }}
-          </button>
-          <p v-if="tgFind?.state === 'error'" class="setting-note setting-note-blocked">
-            {{ tgFind.error }}
-          </p>
-          <template v-else-if="tgFind?.state === 'ok'">
-            <p v-if="!tgFind.chats.length" class="setting-note">
-              No chats yet. Send any message to
-              <b>@{{ tgFind.bot }}</b>, or add it to a group, then press Find chats again.
-            </p>
-            <ul v-else class="tg-chats">
-              <li v-for="c in tgFind.chats" :key="c.id">
-                <button
-                  type="button"
-                  :class="['btn', 'btn-sm', { 'btn-on': String(values[s.key] ?? '') === c.id }]"
-                  :disabled="busy"
-                  @click="write(s.key, c.id)"
-                >
-                  {{ c.name || c.id }}
-                </button>
-                <span class="muted">{{ c.type }} &middot; {{ c.id }}</span>
-              </li>
-            </ul>
-          </template>
-        </div>
-      </div>
-
-      <p v-if="oledI2cNote" class="setting-note">
-        This I²C OLED shares the capture chip's I²C bus — wire it to
-        <b>SDA {{ oledI2cNote.sda }}</b> · <b>SCL {{ oledI2cNote.scl }}</b> (plus 3V3 and GND).
-        Those are the board's capture pins, so there's nothing to set here; the panel is
-        auto-detected at 0x3C/0x3D.
-      </p>
-
-      <div v-if="currentSection === 'pins'" class="pinmap">
-        <div v-if="hasHeaders" class="pin-views">
-          <button
-            type="button"
-            :class="['pin-view-btn', { on: pinView === 'header' }]"
-            @click="pinView = 'header'"
-          >
-            Header
-          </button>
-          <button
-            type="button"
-            :class="['pin-view-btn', { on: pinView === 'gpio' }]"
-            @click="pinView = 'gpio'"
-          >
-            All GPIO
+            {{ signingOut ? "Signing out..." : "Sign out" }}
           </button>
         </div>
 
-        <template v-if="hasHeaders && pinView === 'header'">
-          <p class="setting-note">
-            The expansion header of the {{ pinInfo?.board }}, laid out as it is on the board -
-            so a pin here is a place to put a wire. <b>Reserved</b> pins are the board's fixed
-            peripherals; <b>assigned</b> are set by the pin pickers on the other tabs;
-            <b>free</b> pins are what those pickers offer.
-          </p>
-          <p v-if="pinInfo?.headerVerified === false" class="setting-note pin-caveat">
-            This pinout comes from the vendor's diagram and has not been checked against a
-            board in hand. Confirm against the silkscreen before you wire anything.
-          </p>
-          <div v-for="h in headerRows" :key="h.name" class="pin-header">
-            <h4 v-if="h.name" class="pin-header-name">{{ h.name }}</h4>
-            <ul class="pin-rows">
-              <li v-for="(row, i) in h.rows" :key="i" :class="['pin-row', { numbered: h.numbered }]">
-                <span :class="['pin-side', 'pin-left', `pin-${row.left.kind}`]" :title="row.left.note">
-                  <span class="pin-name">{{ row.left.label }}</span>
-                  <span v-if="row.left.kind !== 'free'" class="pin-use">{{ row.left.use }}</span>
-                </span>
-                <span v-if="h.numbered" class="pin-n">{{ row.left.n }}</span>
-                <span v-if="h.numbered" class="pin-n">{{ row.right?.n }}</span>
-                <span
-                  v-if="row.right"
-                  :class="['pin-side', 'pin-right', `pin-${row.right.kind}`]"
-                  :title="row.right.note"
-                >
-                  <span class="pin-name">{{ row.right.label }}</span>
-                  <span v-if="row.right.kind !== 'free'" class="pin-use">{{ row.right.use }}</span>
-                </span>
-              </li>
-            </ul>
-          </div>
-        </template>
-
-        <template v-else>
-          <p class="setting-note">
-            Every usable GPIO and what holds it. <b>Reserved</b> pins are the board's fixed
-            peripherals; <b>assigned</b> are set by the pin pickers on the other tabs; <b>free</b>
-            pins are what those pickers offer. Change a pin on its own tab.
-          </p>
-          <p v-if="!hasHeaders && pinInfo?.board" class="setting-note">
-            No pinout is known for the {{ pinInfo.board }}, so there is no header to draw.
-          </p>
-          <ul class="pin-comb">
-            <li v-for="p in pinMap" :key="p.pin" :class="['pin-cell', `pin-${p.kind}`]">
-              <span class="pin-num">{{ p.pin }}</span>
-              <span class="pin-use">{{ p.use }}</span>
-            </li>
-          </ul>
-        </template>
-        <p v-if="pinMap.length === 0" class="setting-note">Reading the pin map...</p>
-      </div>
-
-      <div
-        v-if="currentSection === 'vpn' && vpnMode === 'wg' && wgPublicKey"
-        class="setting"
-      >
-        <div class="setting-head">
-          <label class="setting-title">Device public key</label>
-        </div>
-        <div class="setting-control pubkey-row">
-          <input class="pubkey-field mono" type="text" :value="wgPublicKey" readonly />
-          <button type="button" class="btn btn-sm" @click="copyText(wgPublicKey!)">Copy</button>
-        </div>
-        <p class="setting-note">
-          Add this to your WireGuard hub as this device's peer public key.
-        </p>
-      </div>
-    </div>
-
-    <div v-if="currentSection === 'security' && signedIn" class="firmware">
-      <h3>Session</h3>
-      <p class="setting-note">
-        Signed in as <strong>{{ sessionUser }}</strong>. Signing out ends this session only;
-        other open consoles keep theirs.
-      </p>
-      <button type="button" class="btn btn-sm" :disabled="signingOut" @click="signOut">
-        {{ signingOut ? "Signing out..." : "Sign out" }}
-      </button>
-    </div>
-
-    <form
-      v-if="currentSection === 'security'"
-      class="firmware"
-      @submit.prevent="submitPassword"
-    >
-      <h3>Password</h3>
-      <p class="setting-note">
-        Not listed above with the other settings: those can be read back, and a password that
-        can be read back is not one. Changing it signs out every open console.
-      </p>
-      <label class="field">
-        <span>Current password</span>
-        <input v-model="currentPassword" type="password" autocomplete="current-password" />
-      </label>
-      <label class="field">
-        <span>New password</span>
-        <input v-model="newPassword" type="password" autocomplete="new-password" />
-      </label>
-      <label class="field">
-        <span>Repeat it</span>
-        <input v-model="repeatPassword" type="password" autocomplete="new-password" />
-      </label>
-      <p v-if="passwordTooShort" class="setting-note">At least 8 characters.</p>
-      <p v-else-if="passwordMismatch" class="setting-note">The two do not match.</p>
-      <button
-        type="submit"
-        class="btn btn-sm"
-        :disabled="changingPassword || passwordTooShort || passwordMismatch || !newPassword"
-      >
-        {{ changingPassword ? "Changing..." : "Change password" }}
-      </button>
-    </form>
-
-    <div v-if="currentSection === 'security'" class="firmware">
-      <h3>Viewing token</h3>
-      <p class="setting-note">
-        One long string that opens the picture and nothing else - the MJPEG stream, a single
-        frame, and the capture's figures. It is for a dashboard that can only be handed a URL,
-        such as a camera card in Home Assistant. It cannot press a key, touch the power, or
-        change a setting, and the device keeps only a hash of it, so it is shown once.
-      </p>
-      <p v-if="tokenShown" class="setting-note mono token-shown">{{ tokenShown }}</p>
-      <p v-if="tokenShown" class="setting-note">
-        Copy it now. Use it as <span class="mono">?token=...</span> on
-        <span class="mono">/stream</span>, or as an
-        <span class="mono">Authorization: Bearer</span> header.
-      </p>
-      <p v-else-if="tokenExists" class="setting-note">
-        A token exists. Making a new one replaces it; whatever used the old one stops working.
-      </p>
-      <div class="token-buttons">
-        <button type="button" class="btn btn-sm" :disabled="tokenBusy" @click="makeViewToken">
-          {{ tokenExists ? "Replace the token" : "Create a token" }}
-        </button>
-        <button
-          v-if="tokenExists"
-          type="button"
-          class="btn btn-sm btn-danger"
-          :disabled="tokenBusy"
-          @click="dropViewToken"
+        <form
+          v-if="currentSection === 'security'"
+          class="firmware"
+          @submit.prevent="submitPassword"
         >
-          Revoke
-        </button>
-      </div>
-    </div>
-
-    <div v-if="currentSection === 'security'" class="firmware">
-      <h3>Device certificate</h3>
-
-      <template v-if="tls?.custom">
-        <p class="setting-note">
-          The device is serving your own certificate. Whatever issued it is trusted elsewhere, so
-          there is no CA to import here. Remove it to go back to the self-signed certificate.
-        </p>
-        <button type="button" class="btn btn-sm" :disabled="tlsBusy" @click="doRevertCert">
-          {{ tlsBusy ? "Reverting..." : "Revert to the self-signed certificate" }}
-        </button>
-      </template>
-
-      <template v-else>
-        <p class="setting-note">
-          The device is its own certificate authority, so a browser warns until you trust it - and
-          refuses the WebSocket and the H.264 decoder until you do. Download the CA and add it to
-          your operating system or browser's trusted authorities (not "your certificates"), then
-          reach the device by its name. That clears the warning and enables H.264.
-        </p>
-        <a class="btn btn-sm" href="/cert.pem" download="espkvm-ca.pem">Download CA certificate</a>
-
-        <template v-if="tls">
-          <p class="setting-note" style="margin-top: 16px">
-            Or install your own certificate - from an internal CA, or a real one for a name that
-            resolves to the device - so the browser trusts it without importing anything. Paste the
-            certificate (chain, leaf first) followed by its private key, or pick a combined PEM
-            file. The device restarts to apply it.
+          <h3>Password</h3>
+          <p class="setting-note">
+            Not listed above with the other settings: those can be read back, and
+            a password that can be read back is not one. Changing it signs out
+            every open console.
           </p>
-          <textarea
-            v-model="certText"
-            class="cert-input"
-            rows="6"
-            spellcheck="false"
-            autocapitalize="off"
-            autocomplete="off"
-            placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----&#10;-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
-          ></textarea>
-          <div class="cert-actions">
-            <input type="file" accept=".pem,.crt,.cer,.key,.txt" @change="loadCertFile" />
+          <label class="field">
+            <span>Current password</span>
+            <input
+              v-model="currentPassword"
+              type="password"
+              autocomplete="current-password"
+            />
+          </label>
+          <label class="field">
+            <span>New password</span>
+            <input
+              v-model="newPassword"
+              type="password"
+              autocomplete="new-password"
+            />
+          </label>
+          <label class="field">
+            <span>Repeat it</span>
+            <input
+              v-model="repeatPassword"
+              type="password"
+              autocomplete="new-password"
+            />
+          </label>
+          <p v-if="passwordTooShort" class="setting-note">
+            At least 8 characters.
+          </p>
+          <p v-else-if="passwordMismatch" class="setting-note">
+            The two do not match.
+          </p>
+          <button
+            type="submit"
+            class="btn btn-sm"
+            :disabled="
+              changingPassword ||
+              passwordTooShort ||
+              passwordMismatch ||
+              !newPassword
+            "
+          >
+            {{ changingPassword ? "Changing..." : "Change password" }}
+          </button>
+        </form>
+
+        <div v-if="currentSection === 'security'" class="firmware">
+          <h3>Viewing token</h3>
+          <p class="setting-note">
+            One long string that opens the picture and nothing else - the MJPEG
+            stream, a single frame, and the capture's figures. It is for a
+            dashboard that can only be handed a URL, such as a camera card in Home
+            Assistant. It cannot press a key, touch the power, or change a
+            setting, and the device keeps only a hash of it, so it is shown once.
+          </p>
+          <p v-if="tokenShown" class="setting-note mono token-shown">
+            {{ tokenShown }}
+          </p>
+          <p v-if="tokenShown" class="setting-note">
+            Copy it now. Use it as <span class="mono">?token=...</span> on
+            <span class="mono">/stream</span>, or as an
+            <span class="mono">Authorization: Bearer</span> header.
+          </p>
+          <p v-else-if="tokenExists" class="setting-note">
+            A token exists. Making a new one replaces it; whatever used the old
+            one stops working.
+          </p>
+          <div class="token-buttons">
             <button
               type="button"
               class="btn btn-sm"
-              :disabled="tlsBusy || !certText.trim()"
-              @click="doInstallCert"
+              :disabled="tokenBusy"
+              @click="makeViewToken"
             >
-              {{ tlsBusy ? "Installing..." : "Install certificate" }}
+              {{ tokenExists ? "Replace the token" : "Create a token" }}
+            </button>
+            <button
+              v-if="tokenExists"
+              type="button"
+              class="btn btn-sm btn-danger"
+              :disabled="tokenBusy"
+              @click="dropViewToken"
+            >
+              Revoke
             </button>
           </div>
-        </template>
-      </template>
-    </div>
+        </div>
 
-    <p v-for="(line, i) in importReport" :key="i" class="setting-note">{{ line }}</p>
+        <div v-if="currentSection === 'security'" class="firmware">
+          <h3>Device certificate</h3>
 
-    <div class="settings-footer">
-      <button type="button" class="btn btn-sm" :disabled="busy" @click="doExport">
-        Save settings to a file
-      </button>
-      <button type="button" class="btn btn-sm" :disabled="busy" @click="fileInput?.click()">
-        Load from a file
-      </button>
-      <input
-        ref="fileInput"
-        type="file"
-        accept=".json,application/json"
-        hidden
-        @change="onSettingsFile"
-      />
-      <button type="button" class="btn btn-sm" @click="doRestart">Restart device</button>
-      <button type="button" class="btn btn-sm btn-danger" :disabled="busy" @click="doReset">
-        Restore defaults
-      </button>
+          <template v-if="tls?.custom">
+            <p class="setting-note">
+              The device is serving your own certificate. Whatever issued it is
+              trusted elsewhere, so there is no CA to import here. Remove it to go
+              back to the self-signed certificate.
+            </p>
+            <button
+              type="button"
+              class="btn btn-sm"
+              :disabled="tlsBusy"
+              @click="doRevertCert"
+            >
+              {{
+                tlsBusy ? "Reverting..." : "Revert to the self-signed certificate"
+              }}
+            </button>
+          </template>
+
+          <template v-else>
+            <p class="setting-note">
+              The device is its own certificate authority, so a browser warns
+              until you trust it - and refuses the WebSocket and the H.264 decoder
+              until you do. Download the CA and add it to your operating system or
+              browser's trusted authorities (not "your certificates"), then reach
+              the device by its name. That clears the warning and enables H.264.
+            </p>
+            <a class="btn btn-sm" href="/cert.pem" download="espkvm-ca.pem"
+              >Download CA certificate</a
+            >
+
+            <template v-if="tls">
+              <p class="setting-note" style="margin-top: 16px">
+                Or install your own certificate - from an internal CA, or a real
+                one for a name that resolves to the device - so the browser trusts
+                it without importing anything. Paste the certificate (chain, leaf
+                first) followed by its private key, or pick a combined PEM file.
+                The device restarts to apply it.
+              </p>
+              <textarea
+                v-model="certText"
+                class="cert-input"
+                rows="6"
+                spellcheck="false"
+                autocapitalize="off"
+                autocomplete="off"
+                placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----&#10;-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+              ></textarea>
+              <div class="cert-actions">
+                <input
+                  type="file"
+                  accept=".pem,.crt,.cer,.key,.txt"
+                  @change="loadCertFile"
+                />
+                <button
+                  type="button"
+                  class="btn btn-sm"
+                  :disabled="tlsBusy || !certText.trim()"
+                  @click="doInstallCert"
+                >
+                  {{ tlsBusy ? "Installing..." : "Install certificate" }}
+                </button>
+              </div>
+            </template>
+          </template>
+        </div>
+
+        <p v-for="(line, i) in importReport" :key="i" class="setting-note">
+          {{ line }}
+        </p>
+
+      </div>
+
+      <div class="settings-footer">
+        <button
+          type="button"
+          class="btn btn-sm"
+          :disabled="busy"
+          @click="doExport"
+        >
+          Save settings to a file
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm"
+          :disabled="busy"
+          @click="fileInput?.click()"
+        >
+          Load from a file
+        </button>
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".json,application/json"
+          hidden
+          @change="onSettingsFile"
+        />
+        <button type="button" class="btn btn-sm" @click="doRestart">
+          Restart device
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm btn-danger"
+          :disabled="busy"
+          @click="doReset"
+        >
+          Restore defaults
+        </button>
+      </div>
     </div>
   </div>
 </template>
