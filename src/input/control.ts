@@ -88,7 +88,20 @@ export class Control {
    * seconds - noise about a page that is only showing a password form.
    */
   start() {
-    if (this.#ws || this.#retry !== null || this.#closed) return;
+    if (this.#ws || this.#closed) return;
+    /*
+     * A pending retry is not a reason to wait. This is called at the sign-in,
+     * which is the event that removes what the socket was being refused for -
+     * and by then a console left open overnight has backed off to the 30 s
+     * ceiling. Waiting that out means no keyboard, no mouse and no target
+     * status for half a minute after signing in, and whatever the device last
+     * said about itself stays on screen because nothing arrives to replace it.
+     */
+    if (this.#retry !== null) {
+      clearTimeout(this.#retry);
+      this.#retry = null;
+    }
+    this.#backoff = 500;
     this.#connect();
   }
 

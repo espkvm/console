@@ -1049,6 +1049,14 @@ function reloadConsole() {
 
 async function startConsole() {
   let bootVersion: string | undefined;
+  /*
+   * Whatever the device last said about updating itself belongs to the session
+   * that has just ended. It is only hidden while signed out, not dropped, and
+   * the timer that would drop it does not run in a tab the browser has frozen -
+   * so a console left open overnight signed back in under "The device is
+   * restarting", over a picture that was plainly live. Reported 2026-09-21.
+   */
+  input.updateState.value = null;
   /* The keyboard socket waits for this point rather than opening with the page:
      before the sign-in the device refuses it, over and over. */
   input.control.start();
