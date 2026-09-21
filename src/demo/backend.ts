@@ -30,6 +30,17 @@ import {
   demoSceneMs,
   demoScreenText,
 } from "./machine";
+import {
+  demoCaptureDelete,
+  demoCaptures,
+  demoCaptureSearch,
+  demoFile,
+  demoRecordEvent,
+  demoRecordStart,
+  demoRecordStatus,
+  demoRecordStop,
+  demoScreenshot,
+} from "./captures";
 
 type Json = Record<string, unknown>;
 
@@ -80,20 +91,35 @@ function liveStatus(): Json {
     textMode: m.textMode,
     fps: Math.round(drift(24, 1.6, 11) * 10) / 10,
     kbps: Math.round(drift(8500, 900, 9)),
+    record: { ...((videoStatus as Json).record as Json), ...demoRecordStatus() },
   };
 }
 
 /* An update in the demo really does install: the version it reports afterwards
    is kept here, so the console's verdict after its reload is the true one. */
 const VERSION_KEY = "espkvm-demo-version";
-const NEXT_VERSION = "v.0.50.0";
-const installedVersion = () => {
+const OTHER_KEY = "espkvm-demo-other";
+const NEXT_VERSION = "v.0.52.3";
+const fixtureOta = (systemInfo as { ota: { version: string }[] }).ota;
+function stored(key: string, fallback: string): string {
   try {
-    return sessionStorage.getItem(VERSION_KEY) || (systemInfo as { version: string }).version;
+    return sessionStorage.getItem(key) || fallback;
   } catch {
-    return (systemInfo as { version: string }).version;
+    return fallback;
   }
-};
+}
+const installedVersion = () => stored(VERSION_KEY, fixtureOta[0].version);
+const otherVersion = () => stored(OTHER_KEY, fixtureOta[1].version);
+/* A new image goes to the spare slot, and the running one becomes the spare. */
+function bootInto(version: string, other: string) {
+  try {
+    sessionStorage.setItem(VERSION_KEY, version);
+    sessionStorage.setItem(OTHER_KEY, other);
+  } catch {
+    /* a private window: the verdict will simply say the old version */
+  }
+  awayUntil = performance.now() + 7000;
+}
 /* Set while the device is "away" after an update: reads fail, exactly as they
    would against a device that is restarting. */
 let awayUntil = 0;
@@ -114,7 +140,7 @@ function liveInfo(): Json {
     version,
     ota: [
       { label: "ota_0", version, state: "valid", running: true, boot: true },
-      { label: "ota_1", version: (systemInfo as { version: string }).version, state: "valid", running: false, boot: false },
+      { label: "ota_1", version: otherVersion(), state: "valid", running: false, boot: false },
     ],
     atx: { enabled: true, known: true, on: m.powerOn },
     uptimeSeconds: Math.round(performance.now() / 1000) + 3600,
@@ -122,6 +148,31 @@ function liveInfo(): Json {
     heapFree: Math.round(drift(268000, 9000, 17)),
     psramFree: Math.round(drift(24_900_000, 320_000, 31)),
   };
+}
+
+/* Installing a published release: the device downloads it itself. Here the
+   progress climbs over a few seconds and then the device goes away. */
+const install = { state: "idle", percent: 0, version: "", message: "" };
+function installStart(version: string): string | null {
+  if (install.state === "running") return "an install is already running";
+  if (!/^v\.\d/.test(version)) return "not a release tag";
+  Object.assign(install, { state: "running", percent: -1, version, message: "connecting" });
+  let pct = 0;
+  const step = () => {
+    pct += 9;
+    if (pct < 100) {
+      Object.assign(install, { percent: pct, message: `downloading ${pct}%` });
+      setTimeout(step, 350);
+      return;
+    }
+    Object.assign(install, { state: "done", percent: 100, message: "installed; restarting" });
+    setTimeout(() => {
+      bootInto(version, installedVersion());
+      Object.assign(install, { state: "idle", percent: 0, version: "", message: "" });
+    }, 800);
+  };
+  setTimeout(step, 600);
+  return null;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -287,6 +338,17 @@ async function route(
         return json(usbprobe);
       case "/api/v1/auth/session":
         return json(authSession);
+      case "/api/v1/captures":
+        return json(demoCaptures());
+      case "/api/v1/captures/search":
+        return json(demoCaptureSearch(new URLSearchParams(search).get("q") ?? ""));
+      case "/api/v1/record/status":
+        return json(demoRecordStatus());
+      case "/api/v1/system/install":
+        return json(install);
+      /* No crash has been kept - crashDumpBytes is 0 - so there is none to give. */
+      case "/api/v1/system/coredump":
+        return json({ error: "no crash dump" }, 404);
       case "/api/v1/tls":
         return json({ https: true, custom: tlsCustom });
       case "/api/v1/runbooks/status":
@@ -362,6 +424,9 @@ async function route(
     tlsCustom = true;
     return json({ status: "stored", restarting: true });
   }
+  if (method === "DELETE" && (path === "/api/v1/auth/token" || path === "/api/v1/system/coredump")) {
+    return json({ status: "ok" });
+  }
   if (method === "DELETE" && path === "/api/v1/tls/cert") {
     tlsCustom = false;
     return json({ status: "cleared", restarting: true });
@@ -404,6 +469,41 @@ async function route(
         return json({ status: "changed" });
       case "/api/v1/system/restart":
         return json({ status: "restarting" });
+      case "/api/v1/system/install": {
+        const { version } = (await bodyJson(init, req)) as { version?: string };
+        const err = installStart(String(version ?? ""));
+        return err ? json({ error: err }, 409) : json({ status: "started" }, 202);
+      }
+      case "/api/v1/system/boot-slot": {
+        const { label } = (await bodyJson(init, req)) as { label?: string };
+        if (label !== "ota_1") return json({ error: "already running from that slot" }, 409);
+        bootInto(otherVersion(), installedVersion());
+        return json({ status: "restarting" });
+      }
+      case "/api/v1/record/start": {
+        const every = Number(new URLSearchParams(search).get("every") ?? 0);
+        const r = demoRecordStart(every);
+        return typeof r === "string" ? json({ error: r }, 409) : json(r);
+      }
+      case "/api/v1/record/stop":
+        return json(demoRecordStop());
+      case "/api/v1/record/event": {
+        const r = demoRecordEvent();
+        return typeof r === "string" ? json({ error: r }, 409) : json(r);
+      }
+      case "/api/v1/screenshot": {
+        const r = await demoScreenshot();
+        return typeof r === "string" ? json({ error: r }, 409) : json(r);
+      }
+      case "/api/v1/captures/delete":
+        return json(demoCaptureDelete(new URLSearchParams(search).get("path") ?? ""));
+      /* A viewing token: shown once, as on the device. */
+      case "/api/v1/auth/token":
+        return json({
+          token: Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
+            b.toString(16).padStart(2, "0"),
+          ).join(""),
+        });
       case "/api/v1/power/wake":
         demoPower("wake");
         return json({ status: "sent" });
@@ -471,12 +571,7 @@ class DemoXhr {
     if (this.path.startsWith("/api/v1/system/update")) {
       /* Written, restarting - and the device really does go away, so the
          console's waiting screen and its verdict afterwards are the real ones. */
-      try {
-        sessionStorage.setItem(VERSION_KEY, NEXT_VERSION);
-      } catch {
-        /* a private window: the verdict will simply say the old version */
-      }
-      awayUntil = performance.now() + 7000;
+      bootInto(NEXT_VERSION, installedVersion());
       this.status = 200;
       this.responseText = JSON.stringify({ status: "written", restarting: true });
     } else if (this.path.startsWith("/api/v1/storage/upload")) {
@@ -600,6 +695,9 @@ export function installDemoBackend(): void {
   /* Which control the visitor is being asked for. The console points at it - a
      newcomer cannot find "Media" or "Select" from a sentence alone. */
   w.__espkvmDemoAsk = demoAsk;
+  /* Recordings, screenshots and the log live in the browser: captureUrl() and
+     logUrl() ask here for a blob: URL before they build a device one. */
+  (window as unknown as { __espkvmDemoFile?: unknown }).__espkvmDemoFile = demoFile;
 
   window.XMLHttpRequest = DemoXhr as unknown as typeof XMLHttpRequest;
 

@@ -1336,8 +1336,21 @@ export function loadCaptures(): Promise<Captures> {
   return getJson<Captures>("/api/v1/captures");
 }
 
+/* The static demo keeps its files in the browser, not on a card, and hands back
+   a blob: URL for them. Compiled out of the firmware build. */
+function demoUrl(key: string): string | undefined {
+  if (import.meta.env.MODE !== "demo") return undefined;
+  return (window as unknown as { __espkvmDemoFile?: (k: string) => string | undefined })
+    .__espkvmDemoFile?.(key);
+}
+
 export function captureUrl(path: string): string {
-  return `/api/v1/captures/file?path=${encodeURIComponent(path)}`;
+  return demoUrl(path) ?? `/api/v1/captures/file?path=${encodeURIComponent(path)}`;
+}
+
+/** The device's own log, as a file. */
+export function logUrl(): string {
+  return demoUrl("log") ?? "/api/v1/system/log";
 }
 
 export function deleteCapture(path: string): Promise<Captures> {

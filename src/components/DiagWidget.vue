@@ -9,7 +9,7 @@ import Icon from "./Icon.vue";
  */
 import { computed, ref } from "vue";
 
-import { CONSOLE_HEADER, type SystemInfo } from "../state/device";
+import { CONSOLE_HEADER, logUrl, type SystemInfo } from "../state/device";
 
 const props = defineProps<{ system: SystemInfo | null; side: "left" | "right" }>();
 
@@ -103,7 +103,7 @@ async function eraseDump() {
           a file because where it is going is a bug report.
         -->
         <p class="dw-log">
-          <a href="/api/v1/system/log" download="espkvm-log.txt" class="btn btn-sm">
+          <a :href="logUrl()" download="espkvm-log.txt" class="btn btn-sm">
             Download the log
           </a>
           <span class="muted">

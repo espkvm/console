@@ -906,6 +906,9 @@ async function doRevertCert() {
                   @wheel="guardWheel"
                 />
 
+                <!-- Read-only until focused: browsers do not autofill a read-only
+                     field, and some ignore "new-password" and fill the console's
+                     own password into the MQTT one. -->
                 <input
                   v-else-if="s.secret"
                   :id="`set-${s.key}`"
@@ -914,6 +917,9 @@ async function doRevertCert() {
                   autocomplete="new-password"
                   data-1p-ignore
                   data-lpignore="true"
+                  data-form-type="other"
+                  readonly
+                  @focus="($event.target as HTMLInputElement).readOnly = false"
                   :maxlength="s.maxLength"
                   placeholder="Leave blank to keep the current value"
                   :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
@@ -946,10 +952,17 @@ async function doRevertCert() {
                   </option>
                 </select>
 
+                <!-- Not a login form: without these a browser puts the console's own
+                     saved user name into fields like the MQTT user. -->
                 <input
                   v-else
                   :id="`set-${s.key}`"
                   type="text"
+                  :name="`field-${s.key}`"
+                  autocomplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  data-form-type="other"
                   :maxlength="s.maxLength"
                   :value="String(values[s.key] ?? '')"
                   :disabled="busy || !!sectionBlocked || !!blockedFor(s)"

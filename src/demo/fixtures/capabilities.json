@@ -84,6 +84,21 @@
     "active": true,
     "setting": "ts_enable"
   },
+  "wifi": {
+    "compiled": false,
+    "available": false,
+    "enabled": false,
+    "active": false,
+    "reason": "not built into this firmware"
+  },
+  "display": {
+    "compiled": false,
+    "available": false,
+    "enabled": false,
+    "active": false,
+    "setting": "disp_enable",
+    "reason": "not built into this firmware"
+  },
   "runbooks": {
     "compiled": true,
     "available": true,

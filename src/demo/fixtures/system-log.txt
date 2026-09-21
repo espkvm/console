@@ -1,0 +1,59 @@
+--- boot: v.0.52.2 ---
+W (1437) espkvm: boot: after software restart (rst 0x0c); running ota_0 (confirmed)
+I (1467) kvm_cfg: 120 settings loaded
+I (1467) temperature_sensor: Range [20°C ~ 100°C], error < 2°C
+I (1547) video: H.264 available: 640x480 costs PPA 6234 us + encode 4738 us; predicted ceiling 13 fps at 1080p, 30 fps at 720p
+I (1547) video: h264 encoder 1920x1080 @30 fps, 12000 kbit/s, gop 60, 151 KB internal
+W (1567) auth: hold the button now (2 s) to clear the password and restore the network
+I (9567) espkvm: boot: storage (SDMMC slot 0)
+I (9567) storage: rescue partition: 4096 KB, image present
+I (9747) storage: mounted ESPKVM: 30436 MB total, 19073 MB free, bus 40000 kHz
+I (9747) espkvm: boot: ethernet
+I (10277) esp_eth.netif.netif_glue: 30:ae:a4:1b:9c:07
+I (10277) esp_eth.netif.netif_glue: ethernet attached to netif
+I (11977) net: Ethernet link up (100 Mbps)
+I (11977) net: mDNS: https://espkvm.local/
+I (12207) auth: PBKDF2 self-test passed (4096 iterations in 231 ms)
+I (12207) espkvm: boot: web server
+I (12217) tls: certificate for espkvm.local loaded
+I (12217) web: serving on https://, port 80 redirects
+I (12217) espkvm: boot: usb
+I (12217) usb_hid: USB functions: HID + mass storage
+I (12217) TinyUSB: TinyUSB Driver installed on port 1
+I (12317) usb_hid: re-attached to the target so it enumerates this boot
+I (12317) espkvm: boot: capture
+I (12317) storage: media ejected
+I (12317) mqtt: connecting to mqtt://homeassistant.local:1883 (tls=0, verify=0)
+I (12317) kvm_caps: video  unavailable: not probed yet
+I (12317) kvm_caps: mjpeg  active
+I (12317) kvm_caps: h264   active
+I (12317) kvm_caps: hid    active
+I (12317) kvm_caps: msc    available, switched off in settings
+I (12317) kvm_caps: atx    active
+I (12317) kvm_caps: wol    active
+I (12317) kvm_caps: audio  unavailable: not built into this firmware
+I (12317) kvm_caps: https  active
+I (12317) kvm_caps: ota    active
+I (12317) kvm_caps: net_static active
+I (12317) kvm_caps: wireguard active
+I (12317) kvm_caps: tailscale active
+I (12317) kvm_caps: runbooks active
+I (12317) kvm_caps: scheduler active
+I (12317) kvm_caps: notify active
+I (12317) espkvm: ready
+I (12527) video: capture board reset released on GPIO 23 (active low)
+I (12527) bridge: TC358743 found
+I (12577) tc358743: EDID profile: full mode list
+I (13027) tc358743: SYS_STATUS=0x01 (TMDS=0 HDMI=0 SYNC=0 DDC5V=1)
+I (13747) net6: IPv6 link-local address FE80::32AE:A4FF:FE1B:9C07
+I (14997) video: HDMI ready SYS_STATUS=0x9f after 1950 ms
+I (15007) video: input 1280x720p60 (htotal 1650 vtotal 750)
+I (15047) video: capture running at 1280x720
+I (15077) video: codec: mjpeg
+I (15127) record: frame ring: 5120 KB
+I (15987) esp_netif_handlers: eth ip: 192.168.1.42, mask: 255.255.255.0, gw: 192.168.1.1
+I (15987) net: Got IP: 192.168.1.42
+I (15987) net: Open https://192.168.1.42/ or https://espkvm.local/
+I (16207) mqtt: connected; discovery and state published
+I (54607) web: clock set from the console
+I (54607) auth: logged in as 'admin'

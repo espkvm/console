@@ -1,877 +1,1468 @@
-[
-  {
-    "key": "vid_codec",
-    "section": "video",
-    "title": "Stream codec",
-    "help": "H.264 costs a fraction of the bandwidth of MJPEG on a screen that barely changes, and about a third of the frame rate. Browsers decode it through WebCodecs, which they offer on HTTPS pages only, so it is unusable over plain HTTP until TLS is in place.",
-    "type": "enum",
-    "choices": [
-      "mjpeg",
-      "h264"
-    ],
-    "default": 0,
-    "requires": "h264"
-  },
-  {
-    "key": "jpg_quality",
-    "section": "video",
-    "title": "JPEG quality",
-    "help": "Higher is sharper and larger. Only affects the MJPEG codec.",
-    "type": "int",
-    "min": 1,
-    "max": 100,
-    "default": 70,
-    "requires": "mjpeg"
-  },
-  {
-    "key": "h264_kbps",
-    "section": "video",
-    "title": "H.264 bitrate (kbit/s)",
-    "help": "Target bitrate for the hardware encoder.",
-    "type": "int",
-    "min": 500,
-    "max": 20000,
-    "default": 4000,
-    "requires": "h264"
-  },
-  {
-    "key": "vid_fps_max",
-    "section": "video",
-    "title": "Frame rate limit",
-    "help": "Upper bound on encoded frames per second. Lower it to save bandwidth on a slow link.",
-    "type": "int",
-    "min": 1,
-    "max": 60,
-    "default": 30,
-    "requires": "video"
-  },
-  {
-    "key": "vid_adapt",
-    "section": "video",
-    "title": "Skip unchanged frames",
-    "help": "Stop sending while the target's screen is static. Drops the bitrate to nearly zero on an idle desktop. MJPEG only: H.264 already codes an unchanged screen as a frame of a few hundred bytes.",
-    "type": "bool",
-    "default": 1,
-    "requires": "video"
-  },
-  {
-    "key": "edid_prof",
-    "section": "video",
-    "title": "EDID profile",
-    "help": "What the capture card claims to be. \"full\" advertises the common modes from 640x480 up; switch to \"1080p30\" if a source refuses to output a picture.",
-    "type": "enum",
-    "choices": [
-      "full",
-      "1080p30",
-      "custom"
-    ],
-    "default": 0,
-    "requires": "video",
-    "reboot": true
-  },
-  {
-    "key": "target_os",
-    "section": "input",
-    "title": "Target OS",
-    "help": "Which machine's conventions the console follows - the label on the Meta key, and which OS-specific key combinations it offers. \"auto\" trusts the guess made from how the target enumerates USB, shown next to the USB status; set it by hand if that guess is wrong or unknown.",
-    "type": "enum",
-    "choices": [
-      "auto",
-      "windows",
-      "macos",
-      "linux",
-      "android"
-    ],
-    "default": 0,
-    "requires": "hid"
-  },
-  {
-    "key": "mouse_mode",
-    "section": "input",
-    "title": "Pointer mode",
-    "help": "Absolute puts the target's cursor exactly where you click and is the right choice almost always. Relative is for software that captures the pointer, such as games and 3D viewers.",
-    "type": "enum",
-    "choices": [
-      "absolute",
-      "relative"
-    ],
-    "default": 0,
-    "requires": "hid"
-  },
-  {
-    "key": "ptr_engage",
-    "section": "input",
-    "title": "Start controlling on",
-    "help": "\"click\" waits for a click on the video before input reaches the target, and stops again on Esc or a click outside; the engaging click is still delivered. \"hover\" tracks the pointer as soon as it is over the video, the way a remote desktop behaves. Keyboard input always requires a click first.",
-    "type": "enum",
-    "choices": [
-      "click",
-      "hover"
-    ],
-    "default": 0,
-    "requires": "hid"
-  },
-  {
-    "key": "mouse_sens",
-    "section": "input",
-    "title": "Relative sensitivity (%)",
-    "help": "Scales pointer movement in relative mode only.",
-    "type": "int",
-    "min": 10,
-    "max": 400,
-    "default": 100,
-    "requires": "hid"
-  },
-  {
-    "key": "usb_legacy",
-    "section": "input",
-    "title": "Old BIOS keyboard",
-    "help": "For an old BIOS that does not see the keyboard. The target then gets one plain keyboard at USB 1.1 speed, the way a real keyboard looks. The mouse, media keys and virtual media are off while this is on. Takes effect after a restart.",
-    "type": "bool",
-    "default": 0,
-    "requires": "hid",
-    "reboot": true
-  },
-  {
-    "key": "scroll_inv",
-    "section": "input",
-    "title": "Invert scroll wheel",
-    "type": "bool",
-    "default": 0,
-    "requires": "hid"
-  },
-  {
-    "key": "kbd_layout",
-    "section": "input",
-    "title": "Target keyboard layout",
-    "help": "Used when pasting text, so the characters sent match what the target actually types. A KVM sends key positions, not characters.",
-    "type": "enum",
-    "choices": [
-      "en_us",
-      "ru_ru"
-    ],
-    "default": 0,
-    "requires": "hid"
-  },
-  {
-    "key": "type_delay",
-    "section": "input",
-    "title": "Paste keystroke delay (ms)",
-    "help": "Raise it if the target drops characters while text is being pasted.",
-    "type": "int",
-    "min": 1,
-    "max": 200,
-    "default": 8,
-    "requires": "hid"
-  },
-  {
-    "key": "macros_json",
-    "section": "macros",
-    "title": "User key macros",
-    "help": "Saved macros, edited from the Input panel.",
-    "type": "string",
-    "maxLength": 2000,
-    "default": "[]",
-    "requires": "hid"
-  },
-  {
-    "key": "runbooks_json",
-    "section": "runbooks",
-    "title": "Runbooks",
-    "help": "Saved runbooks, edited from the Automation panel.",
-    "type": "string",
-    "maxLength": 3000,
-    "default": "[]",
-    "requires": "runbooks"
-  },
-  {
-    "key": "sched_enable",
-    "section": "schedules",
-    "title": "Run schedules",
-    "type": "bool",
-    "default": 0,
-    "requires": "scheduler"
-  },
-  {
-    "key": "sched_ntp",
-    "section": "schedules",
-    "title": "Time server (NTP)",
-    "type": "string",
-    "maxLength": 64,
-    "default": "pool.ntp.org",
-    "requires": "scheduler"
-  },
-  {
-    "key": "sched_tz",
-    "section": "schedules",
-    "title": "Time zone (POSIX TZ)",
-    "type": "string",
-    "maxLength": 48,
-    "default": "UTC0",
-    "requires": "scheduler"
-  },
-  {
-    "key": "schedules_json",
-    "section": "schedules",
-    "title": "Schedules",
-    "help": "Saved schedules, edited from the Automation panel.",
-    "type": "string",
-    "maxLength": 3000,
-    "default": "[]",
-    "requires": "scheduler"
-  },
-  {
-    "key": "notify_enable",
-    "section": "notify",
-    "title": "Send notifications",
-    "type": "bool",
-    "default": 0,
-    "requires": "notify"
-  },
-  {
-    "key": "notify_watch",
-    "section": "notify",
-    "title": "On a screen-watch phrase",
-    "type": "bool",
-    "default": 1,
-    "requires": "notify"
-  },
-  {
-    "key": "notify_flat",
-    "section": "notify",
-    "title": "On a blank screen",
-    "type": "bool",
-    "default": 0,
-    "requires": "notify"
-  },
-  {
-    "key": "notify_snap",
-    "section": "notify",
-    "title": "Attach a screenshot",
-    "type": "bool",
-    "default": 1,
-    "requires": "notify"
-  },
-  {
-    "key": "notify_log",
-    "section": "notify",
-    "title": "Attach recent log",
-    "type": "bool",
-    "default": 0,
-    "requires": "notify"
-  },
-  {
-    "key": "notify_tg_token",
-    "section": "notify",
-    "title": "Telegram bot token",
-    "type": "string",
-    "maxLength": 64,
-    "default": "",
-    "requires": "notify",
-    "secret": true
-  },
-  {
-    "key": "notify_tg_chat",
-    "section": "notify",
-    "title": "Telegram chat id",
-    "type": "string",
-    "maxLength": 32,
-    "default": "",
-    "requires": "notify"
-  },
-  {
-    "key": "notify_url",
-    "section": "notify",
-    "title": "Webhook URL",
-    "type": "string",
-    "maxLength": 200,
-    "default": "",
-    "requires": "notify"
-  },
-  {
-    "key": "msc_enable",
-    "section": "storage",
-    "title": "Expose virtual media",
-    "help": "Present a USB drive to the target that it can boot from. Off keeps the device a plain keyboard and mouse, which also frees the USB endpoints the drive would use. Adding or removing the drive re-enumerates the device to the target, so it takes effect after a restart; swapping the image once the drive exists does not.",
-    "type": "bool",
-    "default": 0,
-    "requires": "msc",
-    "reboot": true
-  },
-  {
-    "key": "msc_mode",
-    "section": "storage",
-    "title": "Media type",
-    "help": "How an image is presented to the target. \"auto\" serves a .iso as a CD-ROM (so it boots and mounts as an optical drive) and any other file as a removable disk - the right choice almost always. Force \"cdrom\" or \"disk\" only if a file is misnamed. Handing over the whole card is picked in the Media panel, not here. Switching the type re-attaches the USB drive.",
-    "type": "enum",
-    "choices": [
-      "auto",
-      "cdrom",
-      "disk"
-    ],
-    "default": 0,
-    "requires": "msc"
-  },
-  {
-    "key": "sd_speed",
-    "section": "storage",
-    "title": "microSD speed",
-    "help": "The fastest clock the card is tried at. \"auto\" starts at what the board supports and steps down by itself when the card fails to mount, fails a test read, or fails a transfer later. Pick a lower one for a card that keeps stepping down. Takes effect after a restart.",
-    "type": "enum",
-    "choices": [
-      "auto",
-      "40 MHz",
-      "20 MHz",
-      "10 MHz",
-      "4 MHz",
-      "2 MHz"
-    ],
-    "default": 0,
-    "requires": "msc",
-    "reboot": true
-  },
-  {
-    "key": "msc_image",
-    "section": "storage_hidden",
-    "title": "Mounted image",
-    "help": "File on the microSD card currently offered to the target.",
-    "type": "string",
-    "maxLength": 63,
-    "default": "",
-    "requires": "msc"
-  },
-  {
-    "key": "pwr_wol_mac",
-    "section": "power",
-    "title": "Target MAC for Wake-on-LAN",
-    "help": "The target's Ethernet MAC, e.g. AA:BB:CC:DD:EE:FF. The Wake button sends it a magic packet. The target must have Wake-on-LAN enabled in its BIOS and keep standby power.",
-    "type": "string",
-    "maxLength": 17,
-    "default": "",
-    "requires": "wol"
-  },
-  {
-    "key": "atx_enable",
-    "section": "power",
-    "title": "Enable ATX control",
-    "help": "Requires optocouplers wired to the target's front-panel header.",
-    "type": "bool",
-    "default": 0,
-    "requires": "atx"
-  },
-  {
-    "key": "atx_pwr_gpio",
-    "section": "power",
-    "title": "Power button GPIO",
-    "help": "Drives the optocoupler across the target's power button. -1 to disable.",
-    "type": "int",
-    "min": -1,
-    "max": 54,
-    "default": 46,
-    "requires": "atx",
-    "reboot": true
-  },
-  {
-    "key": "atx_rst_gpio",
-    "section": "power",
-    "title": "Reset button GPIO",
-    "help": "Drives the optocoupler across the target's reset button. -1 to disable.",
-    "type": "int",
-    "min": -1,
-    "max": 54,
-    "default": 47,
-    "requires": "atx",
-    "reboot": true
-  },
-  {
-    "key": "atx_led_gpio",
-    "section": "power",
-    "title": "Power LED sense GPIO",
-    "help": "Reads the target's power LED through an optocoupler. Wire it to the power LED, not the HDD LED, which only blinks on disk activity. -1 if you are not sensing the LED.",
-    "type": "int",
-    "min": -1,
-    "max": 54,
-    "default": -1,
-    "requires": "atx",
-    "reboot": true
-  },
-  {
-    "key": "atx_short_ms",
-    "section": "power",
-    "title": "Short press (ms)",
-    "help": "How long a normal power or reset press is held.",
-    "type": "int",
-    "min": 50,
-    "max": 2000,
-    "default": 200,
-    "requires": "atx"
-  },
-  {
-    "key": "atx_long_ms",
-    "section": "power",
-    "title": "Force-off hold (ms)",
-    "help": "How long the power button is held for a hard power off.",
-    "type": "int",
-    "min": 1000,
-    "max": 15000,
-    "default": 5000,
-    "requires": "atx"
-  },
-  {
-    "key": "atx_active_high",
-    "section": "power",
-    "title": "Buttons active-high",
-    "help": "On to press the button when the GPIO drives high (high-level-trigger optocoupler modules). Turn off if your module presses on a low.",
-    "type": "bool",
-    "default": 1,
-    "requires": "atx"
-  },
-  {
-    "key": "atx_led_ah",
-    "section": "power",
-    "title": "Power LED active-high",
-    "help": "On if the LED sense reads high when the target is powered. Flip it if the reported power state is inverted.",
-    "type": "bool",
-    "default": 1,
-    "requires": "atx"
-  },
-  {
-    "key": "aud_enable",
-    "section": "audio",
-    "title": "Stream HDMI audio",
-    "help": "Only works once BCLK, LRCK and DATA are wired from the capture board to the ESP32-P4.",
-    "type": "bool",
-    "default": 0,
-    "requires": "audio",
-    "reboot": true
-  },
-  {
-    "key": "net_hostname",
-    "section": "network",
-    "title": "Hostname",
-    "help": "Also the mDNS name: <hostname>.local",
-    "type": "string",
-    "maxLength": 31,
-    "default": "espkvm",
-    "reboot": true
-  },
-  {
-    "key": "net_dhcp",
-    "section": "network",
-    "title": "Obtain address automatically",
-    "type": "bool",
-    "default": 1,
-    "requires": "net_static",
-    "reboot": true
-  },
-  {
-    "key": "net_ip",
-    "section": "network",
-    "title": "Static address",
-    "type": "string",
-    "maxLength": 15,
-    "default": "",
-    "requires": "net_static",
-    "reboot": true
-  },
-  {
-    "key": "net_mask",
-    "section": "network",
-    "title": "Netmask",
-    "type": "string",
-    "maxLength": 15,
-    "default": "255.255.255.0",
-    "requires": "net_static",
-    "reboot": true
-  },
-  {
-    "key": "net_gw",
-    "section": "network",
-    "title": "Gateway",
-    "type": "string",
-    "maxLength": 15,
-    "default": "",
-    "requires": "net_static",
-    "reboot": true
-  },
-  {
-    "key": "net_dns",
-    "section": "network",
-    "title": "DNS server",
-    "type": "string",
-    "maxLength": 15,
-    "default": "",
-    "requires": "net_static",
-    "reboot": true
-  },
-  {
-    "key": "net_ipv6",
-    "section": "network",
-    "title": "IPv6",
-    "help": "Also answer on an IPv6 address, alongside IPv4. There is nothing to configure: the address comes from the router's advertisements. Turn it off to keep the device off IPv6 entirely.",
-    "type": "bool",
-    "default": 1,
-    "reboot": true
-  },
-  {
-    "key": "wg_enable",
-    "section": "vpn",
-    "title": "Enable WireGuard",
-    "help": "Bring up a classic WireGuard tunnel to a hub so the device is reachable over the VPN. Off by default. Split-tunnel: only the tunnel subnet goes through WireGuard, so the console stays reachable on the LAN too. An alternative to Tailscale below, not a companion - enable one.",
-    "type": "bool",
-    "default": 0,
-    "requires": "wireguard"
-  },
-  {
-    "key": "wg_address",
-    "section": "vpn",
-    "title": "Tunnel address",
-    "help": "The device's own IP on the WireGuard network, e.g. 10.9.0.2.",
-    "type": "string",
-    "maxLength": 31,
-    "default": "",
-    "requires": "wireguard"
-  },
-  {
-    "key": "wg_private_key",
-    "section": "vpn",
-    "title": "Private key",
-    "help": "Base64 WireGuard private key. Leave empty and the device generates one on first connect; its public key is shown below.",
-    "type": "string",
-    "maxLength": 47,
-    "default": "",
-    "requires": "wireguard",
-    "secret": true
-  },
-  {
-    "key": "wg_peer_key",
-    "section": "vpn",
-    "title": "Peer public key",
-    "help": "Base64 public key of the WireGuard peer (the hub/server).",
-    "type": "string",
-    "maxLength": 47,
-    "default": "",
-    "requires": "wireguard"
-  },
-  {
-    "key": "wg_endpoint",
-    "section": "vpn",
-    "title": "Peer endpoint",
-    "help": "host:port of the peer, e.g. vpn.example.com:51820.",
-    "type": "string",
-    "maxLength": 63,
-    "default": "",
-    "requires": "wireguard"
-  },
-  {
-    "key": "wg_keepalive",
-    "section": "vpn",
-    "title": "Persistent keepalive (s)",
-    "help": "Keeps a NAT/firewall mapping open. 25 is typical; 0 disables it.",
-    "type": "int",
-    "min": 0,
-    "max": 65535,
-    "default": 25,
-    "requires": "wireguard"
-  },
-  {
-    "key": "wg_sntp",
-    "section": "vpn",
-    "title": "Sync time over SNTP",
-    "help": "WireGuard handshakes carry a timestamp; without a real clock a reboot can make the peer reject them. Turn this on if the device can reach an NTP server. Off by default.",
-    "type": "bool",
-    "default": 0,
-    "requires": "wireguard"
-  },
-  {
-    "key": "wg_sntp_srv",
-    "section": "vpn",
-    "title": "NTP server",
-    "help": "Used only when SNTP is on.",
-    "type": "string",
-    "maxLength": 47,
-    "default": "pool.ntp.org",
-    "requires": "wireguard"
-  },
-  {
-    "key": "ts_enable",
-    "section": "vpn",
-    "title": "Enable Tailscale",
-    "help": "Join a Tailscale network natively - the device gets a 100.x address reachable from anywhere on your tailnet, with NAT traversal handled for you and no separate gateway. Off by default. An alternative to a plain WireGuard tunnel, not a companion.",
-    "type": "bool",
-    "default": 0,
-    "requires": "tailscale"
-  },
-  {
-    "key": "ts_auth_key",
-    "section": "vpn",
-    "title": "Auth key",
-    "help": "A Tailscale auth key (tskey-auth-...) that authorises this device to join. Generate one in the Tailscale admin console; a reusable key survives re-registration across reboots.",
-    "type": "string",
-    "maxLength": 63,
-    "default": "",
-    "requires": "tailscale",
-    "secret": true
-  },
-  {
-    "key": "ts_hostname",
-    "section": "vpn",
-    "title": "Tailnet hostname",
-    "help": "The name this device takes on the tailnet. Empty uses the mDNS hostname from the Network section.",
-    "type": "string",
-    "maxLength": 63,
-    "default": "",
-    "requires": "tailscale"
-  },
-  {
-    "key": "ts_control_url",
-    "section": "vpn",
-    "title": "Control server",
-    "help": "Coordination server for a self-hosted control plane (Headscale, Ionscale). Empty uses Tailscale's own (controlplane.tailscale.com). Host only, no scheme - e.g. headscale.example.com.",
-    "type": "string",
-    "maxLength": 63,
-    "default": "",
-    "requires": "tailscale"
-  },
-  {
-    "key": "ts_control_port",
-    "section": "vpn",
-    "title": "Control server port",
-    "help": "Port for the control server. 0 = default (443 with TLS, else 80). Set only if your Headscale listens on a non-standard port.",
-    "type": "int",
-    "min": 0,
-    "max": 65535,
-    "default": 0,
-    "requires": "tailscale"
-  },
-  {
-    "key": "ts_ctrl_tls",
-    "section": "vpn",
-    "title": "Control plane over TLS",
-    "help": "Reach the coordination server over HTTPS. Required for the hosted Tailscale service (the default). Turn off only for a self-hosted Headscale served over plain HTTP.",
-    "type": "bool",
-    "default": 1,
-    "requires": "tailscale"
-  },
-  {
-    "key": "mqtt_enable",
-    "section": "mqtt",
-    "title": "Publish to MQTT",
-    "help": "Report status to an MQTT broker and appear in Home Assistant (auto-discovered). Off by default; costs nothing when off.",
-    "type": "bool",
-    "default": 0,
-    "requires": "video"
-  },
-  {
-    "key": "mqtt_host",
-    "section": "mqtt",
-    "title": "Broker host",
-    "help": "Hostname or IP of the MQTT broker, e.g. the Home Assistant host.",
-    "type": "string",
-    "maxLength": 63,
-    "default": "",
-    "requires": "video"
-  },
-  {
-    "key": "mqtt_port",
-    "section": "mqtt",
-    "title": "Broker port",
-    "help": "1883 for plain MQTT, 8883 for MQTT over TLS.",
-    "type": "int",
-    "min": 1,
-    "max": 65535,
-    "default": 1883,
-    "requires": "video"
-  },
-  {
-    "key": "mqtt_tls",
-    "section": "mqtt",
-    "title": "Use TLS",
-    "help": "Connect with mqtts. Set the port to 8883 as well.",
-    "type": "bool",
-    "default": 0,
-    "requires": "video"
-  },
-  {
-    "key": "mqtt_verify",
-    "section": "mqtt",
-    "title": "Verify broker certificate",
-    "help": "With TLS on, check the broker's certificate against the built-in CA bundle (public CAs, e.g. Let's Encrypt). Turn off for a broker with a self-signed certificate.",
-    "type": "bool",
-    "default": 1,
-    "requires": "video"
-  },
-  {
-    "key": "mqtt_user",
-    "section": "mqtt",
-    "title": "Username",
-    "help": "Leave empty for an anonymous broker.",
-    "type": "string",
-    "maxLength": 47,
-    "default": "",
-    "requires": "video"
-  },
-  {
-    "key": "mqtt_pass",
-    "section": "mqtt",
-    "title": "Password",
-    "help": "Stored on the device; never sent back to the console.",
-    "type": "string",
-    "maxLength": 63,
-    "default": "",
-    "requires": "video",
-    "secret": true
-  },
-  {
-    "key": "mqtt_base",
-    "section": "mqtt",
-    "title": "Base topic",
-    "help": "Topic prefix; the device id is appended, e.g. espkvm/a1b2c3.",
-    "type": "string",
-    "maxLength": 31,
-    "default": "espkvm",
-    "requires": "video"
-  },
-  {
-    "key": "mqtt_disco",
-    "section": "mqtt",
-    "title": "Discovery prefix",
-    "help": "Home Assistant MQTT discovery prefix. Default suits a stock HA.",
-    "type": "string",
-    "maxLength": 31,
-    "default": "homeassistant",
-    "requires": "video"
-  },
-  {
-    "key": "mqtt_interval",
-    "section": "mqtt",
-    "title": "Publish interval (s)",
-    "help": "How often telemetry is published.",
-    "type": "int",
-    "min": 5,
-    "max": 3600,
-    "default": 30,
-    "requires": "video"
-  },
-  {
-    "key": "sec_https",
-    "section": "security",
-    "title": "Serve over HTTPS",
-    "help": "Uses a self-signed certificate generated on first boot. Disable only on a trusted network or behind a VPN.",
-    "type": "bool",
-    "default": 1,
-    "requires": "https",
-    "reboot": true
-  },
-  {
-    "key": "sec_auth",
-    "section": "security",
-    "title": "Require login",
-    "type": "bool",
-    "default": 1,
-    "requires": "https",
-    "reboot": true
-  },
-  {
-    "key": "sec_user",
-    "section": "security",
-    "title": "Username",
-    "type": "string",
-    "maxLength": 31,
-    "default": "admin",
-    "requires": "https"
-  },
-  {
-    "key": "upd_check",
-    "section": "system",
-    "title": "Offer firmware updates",
-    "help": "The browser asks the address below whether a newer build exists and offers to install it. The device never reaches out on its own - a KVM that phones home is not what belongs in an isolated network.",
-    "type": "bool",
-    "default": 0,
-    "requires": "ota"
-  },
-  {
-    "key": "upd_url",
-    "section": "system",
-    "title": "Update manifest",
-    "help": "URL of a manifest.json describing the newest build. The project's own builds are published at the default address; point it at your fork, or at a file server inside your network, and it will use that instead. Whatever it points at is what gets written to the device, so point it somewhere you trust.",
-    "type": "string",
-    "maxLength": 200,
-    "default": "https://espkvm.github.io/espkvm/firmware/manifest.json",
-    "requires": "ota"
-  },
-  {
-    "key": "therm_guard",
-    "section": "system",
-    "title": "Thermal protection",
-    "help": "Cap the frame rate when the chip gets warm and stop encoding if it gets hot. Keyboard, mouse and the web interface keep running either way - a KVM that stops accepting keystrokes because it is warm has failed at its job.",
-    "type": "bool",
-    "default": 1
-  },
-  {
-    "key": "therm_warn",
-    "section": "system",
-    "title": "Warm threshold (C)",
-    "help": "Above this the frame rate is halved. Measured on this board: 1080p MJPEG at full rate settles around 46 C in open air, so the default leaves plenty of room before anything is given up.",
-    "type": "int",
-    "min": 35,
-    "max": 100,
-    "default": 70
-  },
-  {
-    "key": "therm_stop",
-    "section": "system",
-    "title": "Hot threshold (C)",
-    "help": "Above this encoding stops until the chip cools. The ESP32 family is rated to 85 C ambient and the die runs hotter than the air around it.",
-    "type": "int",
-    "min": 40,
-    "max": 110,
-    "default": 85
-  },
-  {
-    "key": "log_level",
-    "section": "system",
-    "title": "Log verbosity",
-    "type": "enum",
-    "choices": [
-      "error",
-      "warn",
-      "info",
-      "debug"
-    ],
-    "default": 2
-  },
-  {
-    "key": "ui_side",
-    "section": "system",
-    "title": "Panel side",
-    "help": "Which side of the screen the button rail and its panels sit on.",
-    "type": "enum",
-    "choices": [
-      "left",
-      "right"
-    ],
-    "default": 0
-  },
-  {
-    "key": "disp_enable",
-    "section": "display",
-    "title": "Status display",
-    "help": "Drive a small display that shows the IP, link, capture status and health. An I2C OLED (SSD1306/SH1106) shares the capture chip's I2C and is auto-detected with no extra pins; a round SPI LCD (GC9A01) uses the SPI pins set at build time. Off by default; does nothing when no panel is connected.",
-    "type": "bool",
-    "default": 0
-  },
-  {
-    "key": "disp_type",
-    "section": "display",
-    "title": "Display type",
-    "help": "Which panel is wired. SSD1306/SH1106 are 128x64 I2C OLEDs (pick SH1106 if the image is shifted by two pixels or wraps). GC9A01 is a 240x240 round colour SPI LCD, e.g. the Waveshare 1.28\" module.",
-    "type": "enum",
-    "choices": [
-      "ssd1306",
-      "sh1106",
-      "gc9a01"
-    ],
-    "default": 0
-  }
-]
+{
+  "settings": [
+    {
+      "key": "vid_codec",
+      "section": "video",
+      "group": "Picture",
+      "title": "Stream codec",
+      "help": "H.264 costs a fraction of the bandwidth of MJPEG on a screen that barely changes, and about a third of the frame rate. Browsers decode it through WebCodecs, which they offer on HTTPS pages only, so it is unusable over plain HTTP until TLS is in place.",
+      "type": "enum",
+      "choices": [
+        "mjpeg",
+        "h264"
+      ],
+      "default": 0,
+      "requires": "h264"
+    },
+    {
+      "key": "jpg_quality",
+      "section": "video",
+      "group": "Picture",
+      "title": "JPEG quality",
+      "help": "Higher is sharper and larger. Only affects the MJPEG codec.",
+      "type": "int",
+      "min": 1,
+      "max": 100,
+      "default": 70,
+      "requires": "mjpeg"
+    },
+    {
+      "key": "h264_kbps",
+      "section": "video",
+      "group": "Picture",
+      "title": "H.264 bitrate (kbit/s)",
+      "help": "Target bitrate for the hardware encoder.",
+      "type": "int",
+      "min": 500,
+      "max": 20000,
+      "default": 4000,
+      "requires": "h264"
+    },
+    {
+      "key": "vid_fps_max",
+      "section": "video",
+      "group": "Picture",
+      "title": "Frame rate limit",
+      "help": "Upper bound on encoded frames per second. Lower it to save bandwidth on a slow link.",
+      "type": "int",
+      "min": 1,
+      "max": 60,
+      "default": 30,
+      "requires": "video"
+    },
+    {
+      "key": "vid_adapt",
+      "section": "video",
+      "group": "Picture",
+      "title": "Skip unchanged frames",
+      "help": "Stop sending while the target's screen is static. Drops the bitrate to nearly zero on an idle desktop. MJPEG only: H.264 already codes an unchanged screen as a frame of a few hundred bytes.",
+      "type": "bool",
+      "default": 1,
+      "requires": "video"
+    },
+    {
+      "key": "h264_guard",
+      "section": "video",
+      "group": "Picture",
+      "title": "Rebuild a stuck H.264 encoder",
+      "help": "The encoder's rate controller can settle at its coarsest setting and stay there: the picture goes to visible blocks on a screen that is not moving, and nothing short of building a new encoder brings it back. With this on, keyframes that collapse to a fraction of their usual size are taken as that fault and the encoder is rebuilt - a lost frame, once every two minutes at most. Turn it off if a screen of yours is being rebuilt for no reason; the log says when it happens.",
+      "type": "bool",
+      "default": 1,
+      "requires": "h264"
+    },
+    {
+      "key": "rec_split_min",
+      "section": "video",
+      "group": "Recording",
+      "title": "New recording file every (minutes)",
+      "help": "A long recording is written as several files, each playable on its own, so one is quick to download and a damaged card loses one piece rather than the whole. 0 starts a new file only when FAT32 needs it, at 3.9 GB.",
+      "type": "int",
+      "min": 0,
+      "max": 240,
+      "default": 10,
+      "requires": "h264"
+    },
+    {
+      "key": "rec_max_min",
+      "section": "video",
+      "group": "Recording",
+      "title": "Stop a recording after (minutes)",
+      "help": "So a recording left running does not fill the card. 0 records until it is stopped or the card is full. A runbook's \"record <seconds>\" and the API's ?seconds= set their own length instead.",
+      "type": "int",
+      "min": 0,
+      "max": 1440,
+      "default": 60,
+      "requires": "h264"
+    },
+    {
+      "key": "dashcam",
+      "section": "video",
+      "group": "Dashcam",
+      "title": "Dashcam: keep the last minutes in memory",
+      "help": "Keeps the screen's recent past in memory, and saves it to the microSD card as a clip when something happens - the screen stays one colour, a watched phrase appears, the power goes off - or when you press Save clip. How far back depends on the picture: minutes of a still screen, seconds of a playing video. Needs H.264, and keeps the encoder running while it is on. On boards with an older (pre-3.0) chip there is less memory left, so it reaches back seconds, not minutes; keep the past on the microSD card there instead.",
+      "type": "bool",
+      "default": 0,
+      "requires": "h264"
+    },
+    {
+      "key": "dashcam_store",
+      "section": "video",
+      "group": "Dashcam",
+      "title": "Dashcam: where the past is kept",
+      "help": "\"memory\" holds what PSRAM can spare and does not touch the card until something happens. \"microSD\" writes the screen to the card all the time, in 15-second pieces in VIDEO/.dashcam, and deletes the old ones: it reaches back as far as the setting below on any board, but the card cannot be handed to the target meanwhile.",
+      "type": "enum",
+      "choices": [
+        "memory",
+        "microSD"
+      ],
+      "default": 0,
+      "requires": "h264"
+    },
+    {
+      "key": "dashcam_pre_s",
+      "section": "video",
+      "group": "Dashcam",
+      "title": "Dashcam: seconds before the event",
+      "help": "At most this much of the past goes into a clip - if memory holds that much, or all of it when the past is kept on the card.",
+      "type": "int",
+      "min": 5,
+      "max": 600,
+      "default": 120,
+      "requires": "h264"
+    },
+    {
+      "key": "dashcam_post_s",
+      "section": "video",
+      "group": "Dashcam",
+      "title": "Dashcam: seconds after the event",
+      "help": "How long a clip goes on after what set it off. Another event meanwhile makes it longer, up to ten minutes in all.",
+      "type": "int",
+      "min": 5,
+      "max": 600,
+      "default": 30,
+      "requires": "h264"
+    },
+    {
+      "key": "dashcam_on_flat",
+      "section": "video",
+      "group": "Dashcam",
+      "title": "Dashcam: save when the screen stays one colour",
+      "help": "Half a minute of one flat colour, such as a stop screen. A black screen does not count: that is usually the display going to sleep.",
+      "type": "bool",
+      "default": 1,
+      "requires": "h264"
+    },
+    {
+      "key": "dashcam_on_watch",
+      "section": "video",
+      "group": "Dashcam",
+      "title": "Dashcam: save when a watched phrase appears",
+      "help": "The phrases are the ones set for screen alerts.",
+      "type": "bool",
+      "default": 1,
+      "requires": "h264"
+    },
+    {
+      "key": "dashcam_on_power",
+      "section": "video",
+      "group": "Dashcam",
+      "title": "Dashcam: save when the target's power goes off",
+      "help": "Needs the ATX power LED wired, so the device can see it.",
+      "type": "bool",
+      "default": 1,
+      "requires": "h264"
+    },
+    {
+      "key": "rec_text",
+      "section": "video",
+      "group": "Recording",
+      "title": "Save the screen's text with a recording",
+      "help": "Reads the screen as characters every few seconds while recording and writes what it says into a .txt beside the video, so the recordings panel can search it and jump to the moment. Only screens drawn as text can be read - a BIOS, an installer, a console - and reading one costs about a tenth of a second.",
+      "type": "bool",
+      "default": 1,
+      "requires": "h264"
+    },
+    {
+      "key": "rec_tl_every",
+      "section": "video",
+      "group": "Recording",
+      "title": "Timelapse: seconds between frames",
+      "help": "What a timelapse started from Home Assistant, or offered first in the recordings panel, keeps: one frame this often, played back at 25 fps.",
+      "type": "int",
+      "min": 1,
+      "max": 3600,
+      "default": 10,
+      "requires": "h264"
+    },
+    {
+      "key": "rec_subs",
+      "section": "video",
+      "group": "Recording",
+      "title": "Keystrokes in recordings",
+      "help": "Writes what was pressed as subtitles next to each recording (a .srt file of the same name; VLC and mpv show it). keys: shortcuts, named keys and clicks, with typed characters shown as dots. everything: the typed text too - which includes any password typed on the target, stored on the card in plain text.",
+      "type": "enum",
+      "choices": [
+        "off",
+        "keys",
+        "everything"
+      ],
+      "default": 0,
+      "requires": "h264"
+    },
+    {
+      "key": "rec_clicks",
+      "section": "video",
+      "group": "Recording",
+      "title": "Mouse clicks in recordings",
+      "help": "With keystrokes in recordings on, also write each mouse click and where it landed.",
+      "type": "bool",
+      "default": 1,
+      "requires": "h264"
+    },
+    {
+      "key": "edid_prof",
+      "section": "video",
+      "title": "EDID profile",
+      "help": "What this device claims to be, as a monitor - the target picks its output mode from what is offered here. \"full\" advertises the common modes from 640x480 up to 1920x1080@30. \"720p\" and \"1024x768\" stop lower, which is often what you want: a smaller picture encodes faster and costs less bandwidth. \"1080p30\" offers that one mode alone, for a source that refuses a list. Text modes stay on offer either way, so a BIOS still comes through as text.",
+      "type": "enum",
+      "choices": [
+        "full",
+        "1080p30",
+        "720p",
+        "1024x768"
+      ],
+      "default": 0,
+      "requires": "video",
+      "reboot": true
+    },
+    {
+      "key": "scr_watch",
+      "section": "video",
+      "title": "Watch the screen for words",
+      "help": "Read a text screen even when nobody is looking, and raise an alert when it says one of the phrases below. This is the case a KVM is bought for - a machine that fell over at three in the morning - so it keeps working with the console closed. Costs one pass over the frame a second, and only while the target is showing text.",
+      "type": "bool",
+      "default": 0,
+      "requires": "video"
+    },
+    {
+      "key": "scr_match",
+      "section": "video",
+      "title": "Phrases to watch for",
+      "help": "Comma-separated, matched without regard to case, anywhere on a line - for example: no boot device, kernel panic, press F1 to continue. An alert is raised the moment one appears and cleared when it goes, and every phrase on screen is named, not only the first; the log records both, and Home Assistant gets a sensor if MQTT is on.",
+      "type": "string",
+      "maxLength": 255,
+      "default": "",
+      "requires": "video"
+    },
+    {
+      "key": "target_os",
+      "section": "input",
+      "group": "Target",
+      "title": "Target OS",
+      "help": "Which machine's conventions the console follows - the label on the Meta key, and which OS-specific key combinations it offers. \"auto\" trusts the guess made from how the target enumerates USB, shown next to the USB status; set it by hand if that guess is wrong or unknown.",
+      "type": "enum",
+      "choices": [
+        "auto",
+        "windows",
+        "macos",
+        "linux",
+        "android"
+      ],
+      "default": 0,
+      "requires": "hid"
+    },
+    {
+      "key": "mouse_mode",
+      "section": "input",
+      "group": "Pointer",
+      "title": "Pointer mode",
+      "help": "Absolute puts the target's cursor exactly where you click and is the right choice almost always. Relative is for software that captures the pointer, such as games and 3D viewers.",
+      "type": "enum",
+      "choices": [
+        "absolute",
+        "relative"
+      ],
+      "default": 0,
+      "requires": "hid"
+    },
+    {
+      "key": "ptr_engage",
+      "section": "input",
+      "group": "Pointer",
+      "title": "Start controlling on",
+      "help": "\"click\" waits for a click on the video before input reaches the target, and stops again on Esc or a click outside; the engaging click is still delivered. \"hover\" tracks the pointer as soon as it is over the video, the way a remote desktop behaves. Keyboard input always requires a click first.",
+      "type": "enum",
+      "choices": [
+        "click",
+        "hover"
+      ],
+      "default": 0,
+      "requires": "hid"
+    },
+    {
+      "key": "mouse_sens",
+      "section": "input",
+      "group": "Pointer",
+      "title": "Relative sensitivity (%)",
+      "help": "Scales pointer movement in relative mode only.",
+      "type": "int",
+      "min": 10,
+      "max": 400,
+      "default": 100,
+      "requires": "hid"
+    },
+    {
+      "key": "jiggle_s",
+      "section": "input",
+      "group": "Pointer",
+      "title": "Mouse jiggler (seconds)",
+      "help": "0 turns it off. Otherwise the pointer is nudged one pixel and put straight back this often, so the target does not lock or fall asleep while you are watching it. It stands aside whenever you are using the mouse yourself, and does nothing when no target is attached.",
+      "type": "int",
+      "min": 0,
+      "max": 3600,
+      "default": 0,
+      "requires": "hid"
+    },
+    {
+      "key": "usb_legacy",
+      "section": "input",
+      "group": "Target",
+      "title": "Old BIOS keyboard",
+      "help": "For an old BIOS that does not see the keyboard. The target then gets one plain keyboard at USB 1.1 speed, the way a real keyboard looks. The mouse, media keys and virtual media are off while this is on. Takes effect after a restart.",
+      "type": "bool",
+      "default": 0,
+      "requires": "hid",
+      "reboot": true
+    },
+    {
+      "key": "scroll_inv",
+      "section": "input",
+      "group": "Pointer",
+      "title": "Invert scroll wheel",
+      "type": "bool",
+      "default": 0,
+      "requires": "hid"
+    },
+    {
+      "key": "kbd_layout",
+      "section": "input",
+      "group": "Keyboard",
+      "title": "Target keyboard layout",
+      "help": "Used when pasting text, so the characters sent match what the target actually types. A KVM sends key positions, not characters.",
+      "type": "enum",
+      "choices": [
+        "en_us",
+        "ru_ru",
+        "cs_cz",
+        "uk_ua",
+        "lt_lt"
+      ],
+      "default": 0,
+      "requires": "hid"
+    },
+    {
+      "key": "type_delay",
+      "section": "input",
+      "group": "Keyboard",
+      "title": "Paste keystroke delay (ms)",
+      "help": "Raise it if the target drops characters while text is being pasted.",
+      "type": "int",
+      "min": 1,
+      "max": 200,
+      "default": 8,
+      "requires": "hid"
+    },
+    {
+      "key": "macros_json",
+      "section": "macros",
+      "title": "User key macros",
+      "help": "Saved macros, edited from the Input panel.",
+      "type": "string",
+      "maxLength": 2000,
+      "default": "[]",
+      "requires": "hid"
+    },
+    {
+      "key": "runbooks_json",
+      "section": "runbooks",
+      "title": "Runbooks",
+      "help": "Saved runbooks, edited from the Runbooks panel.",
+      "type": "string",
+      "maxLength": 3000,
+      "default": "[]",
+      "requires": "runbooks"
+    },
+    {
+      "key": "sched_enable",
+      "section": "schedules",
+      "title": "Run schedules",
+      "help": "Let the device fire scheduled actions. It needs the clock set over the network.",
+      "type": "bool",
+      "default": 0,
+      "requires": "scheduler"
+    },
+    {
+      "key": "time_sync",
+      "section": "system",
+      "group": "Clock",
+      "title": "Set the clock over the network",
+      "help": "Recordings and screenshots are named by the clock, and schedules run by it. Without this, the console sets the clock when you sign in. Schedules set it over the network anyway.",
+      "type": "bool",
+      "default": 0,
+      "requires": "scheduler"
+    },
+    {
+      "key": "sched_ntp",
+      "section": "system",
+      "group": "Clock",
+      "title": "Time server (NTP)",
+      "help": "Where the clock is set from. A name on the local network works with no internet.",
+      "type": "string",
+      "maxLength": 64,
+      "default": "pool.ntp.org",
+      "requires": "scheduler"
+    },
+    {
+      "key": "sched_tz",
+      "section": "system",
+      "group": "Clock",
+      "title": "Time zone",
+      "help": "Pick your city; the browser's own zone is at the top of the list. File names and schedules use it. Stored as a POSIX TZ string, e.g. MSK-3 or CET-1CEST,M3.5.0,M10.5.0/3.",
+      "type": "string",
+      "maxLength": 48,
+      "default": "UTC0",
+      "requires": "scheduler"
+    },
+    {
+      "key": "schedules_json",
+      "section": "schedules",
+      "title": "Schedules",
+      "help": "Saved schedules, edited from the Automation panel.",
+      "type": "string",
+      "maxLength": 3000,
+      "default": "[]",
+      "requires": "scheduler"
+    },
+    {
+      "key": "notify_enable",
+      "section": "notify",
+      "group": "When",
+      "title": "Send notifications",
+      "help": "Push a message when a watched phrase appears or the screen goes blank.",
+      "type": "bool",
+      "default": 0,
+      "requires": "notify"
+    },
+    {
+      "key": "notify_watch",
+      "section": "notify",
+      "group": "When",
+      "title": "On a screen-watch phrase",
+      "help": "Notify when one of the phrases the screen is watched for appears.",
+      "type": "bool",
+      "default": 1,
+      "requires": "notify"
+    },
+    {
+      "key": "notify_flat",
+      "section": "notify",
+      "group": "When",
+      "title": "On a blank screen",
+      "help": "Notify when the output stays one flat colour - a stop screen, a blanked display.",
+      "type": "bool",
+      "default": 0,
+      "requires": "notify"
+    },
+    {
+      "key": "notify_snap",
+      "section": "notify",
+      "group": "When",
+      "title": "Attach a screenshot",
+      "help": "Send the screen with the message.",
+      "type": "bool",
+      "default": 1,
+      "requires": "notify"
+    },
+    {
+      "key": "notify_clip",
+      "section": "notify",
+      "group": "When",
+      "title": "Send dashcam clips",
+      "help": "When the dashcam saves a clip, send it: to Telegram as a video that plays in the chat (up to 50 MB; bigger ones are named instead), to the webhook as a message with the file's name.",
+      "type": "bool",
+      "default": 1,
+      "requires": "notify"
+    },
+    {
+      "key": "notify_log",
+      "section": "notify",
+      "group": "When",
+      "title": "Attach recent log",
+      "help": "Include the tail of the device log with the message - the context around an alert.",
+      "type": "bool",
+      "default": 0,
+      "requires": "notify"
+    },
+    {
+      "key": "notify_tg_token",
+      "section": "notify",
+      "group": "Where",
+      "title": "Telegram bot token",
+      "help": "From @BotFather, like 123456:AA... . Message the bot once so it may write to you.",
+      "type": "string",
+      "maxLength": 64,
+      "default": "",
+      "requires": "notify",
+      "secret": true
+    },
+    {
+      "key": "notify_tg_chat",
+      "section": "notify",
+      "group": "Where",
+      "title": "Telegram chat id",
+      "help": "The chat to message. Find chats lists the ones that wrote to the bot lately; a group or channel id typed in works too.",
+      "type": "string",
+      "maxLength": 32,
+      "default": "",
+      "requires": "notify"
+    },
+    {
+      "key": "notify_url",
+      "section": "notify",
+      "group": "Where",
+      "title": "Webhook URL",
+      "help": "A URL to POST a small JSON message to. The body is {\"title\":\"...\",\"message\":\"...\",\"device\":\"<hostname>\"}, with a \"log\" field added when the log tail is switched on above, sent as application/json; anything answering 2xx counts as delivered. Optional.",
+      "type": "string",
+      "maxLength": 200,
+      "default": "",
+      "requires": "notify"
+    },
+    {
+      "key": "msc_enable",
+      "section": "storage",
+      "title": "Expose virtual media",
+      "help": "Present a USB drive to the target that it can boot from. Off keeps the device a plain keyboard and mouse, which also frees the USB endpoints the drive would use. Adding or removing the drive re-enumerates the device to the target, so it takes effect after a restart; swapping the image once the drive exists does not.",
+      "type": "bool",
+      "default": 0,
+      "requires": "msc",
+      "reboot": true
+    },
+    {
+      "key": "msc_mode",
+      "section": "storage",
+      "title": "Media type",
+      "help": "How an image is presented to the target. \"auto\" serves a .iso as a CD-ROM (so it boots and mounts as an optical drive) and any other file as a removable disk - the right choice almost always. Force \"cdrom\" or \"disk\" only if a file is misnamed. Handing over the whole card is picked in the Media panel, not here. Switching the type re-attaches the USB drive.",
+      "type": "enum",
+      "choices": [
+        "auto",
+        "cdrom",
+        "disk"
+      ],
+      "default": 0,
+      "requires": "msc"
+    },
+    {
+      "key": "sd_speed",
+      "section": "storage",
+      "title": "microSD speed",
+      "help": "The fastest clock the card is tried at. \"auto\" starts at what the board supports and steps down by itself when the card fails to mount, fails a test read, or fails a transfer later. Pick a lower one for a card that keeps stepping down. Takes effect after a restart.",
+      "type": "enum",
+      "choices": [
+        "auto",
+        "40 MHz",
+        "20 MHz",
+        "10 MHz",
+        "4 MHz",
+        "2 MHz"
+      ],
+      "default": 0,
+      "requires": "msc",
+      "reboot": true
+    },
+    {
+      "key": "msc_image",
+      "section": "storage_hidden",
+      "title": "Mounted image",
+      "help": "File on the microSD card currently offered to the target.",
+      "type": "string",
+      "maxLength": 63,
+      "default": "",
+      "requires": "msc"
+    },
+    {
+      "key": "pwr_wol_mac",
+      "section": "power",
+      "group": "Wake-on-LAN",
+      "title": "Target MAC for Wake-on-LAN",
+      "help": "The target's Ethernet MAC, e.g. AA:BB:CC:DD:EE:FF. The Wake button sends it a magic packet. The target must have Wake-on-LAN enabled in its BIOS and keep standby power.",
+      "type": "string",
+      "maxLength": 17,
+      "default": "",
+      "requires": "wol"
+    },
+    {
+      "key": "atx_enable",
+      "section": "power",
+      "group": "ATX wiring",
+      "title": "Enable ATX control",
+      "help": "Requires optocouplers wired to the target's front-panel header.",
+      "type": "bool",
+      "default": 0
+    },
+    {
+      "key": "atx_pwr_gpio",
+      "section": "power",
+      "group": "ATX wiring",
+      "title": "Power button GPIO",
+      "help": "Drives the optocoupler across the target's power button. -1 to disable.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": 46,
+      "reboot": true,
+      "pin": true
+    },
+    {
+      "key": "atx_rst_gpio",
+      "section": "power",
+      "group": "ATX wiring",
+      "title": "Reset button GPIO",
+      "help": "Drives the optocoupler across the target's reset button. -1 to disable.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": 47,
+      "reboot": true,
+      "pin": true
+    },
+    {
+      "key": "atx_led_gpio",
+      "section": "power",
+      "group": "ATX wiring",
+      "title": "Power LED sense GPIO",
+      "help": "Reads the target's power LED through an optocoupler. Wire it to the power LED, not the HDD LED, which only blinks on disk activity. -1 if you are not sensing the LED.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": -1,
+      "reboot": true,
+      "pin": true
+    },
+    {
+      "key": "atx_short_ms",
+      "section": "power",
+      "group": "ATX wiring",
+      "title": "Short press (ms)",
+      "help": "How long a normal power or reset press is held.",
+      "type": "int",
+      "min": 50,
+      "max": 2000,
+      "default": 200
+    },
+    {
+      "key": "atx_long_ms",
+      "section": "power",
+      "group": "ATX wiring",
+      "title": "Force-off hold (ms)",
+      "help": "How long the power button is held for a hard power off.",
+      "type": "int",
+      "min": 1000,
+      "max": 15000,
+      "default": 5000
+    },
+    {
+      "key": "atx_active_high",
+      "section": "power",
+      "group": "ATX wiring",
+      "title": "Buttons active-high",
+      "help": "On to press the button when the GPIO drives high (high-level-trigger optocoupler modules). Turn off if your module presses on a low.",
+      "type": "bool",
+      "default": 1
+    },
+    {
+      "key": "atx_led_ah",
+      "section": "power",
+      "group": "ATX wiring",
+      "title": "Power LED active-high",
+      "help": "On if the LED sense reads high when the target is powered. Flip it if the reported power state is inverted.",
+      "type": "bool",
+      "default": 1
+    },
+    {
+      "key": "aud_enable",
+      "section": "audio",
+      "title": "Stream HDMI audio",
+      "help": "Only works once BCLK, LRCK and DATA are wired from the capture board to the ESP32-P4.",
+      "type": "bool",
+      "default": 0,
+      "requires": "audio",
+      "reboot": true
+    },
+    {
+      "key": "net_hostname",
+      "section": "network",
+      "group": "Address",
+      "title": "Hostname",
+      "help": "Also the mDNS name: <hostname>.local",
+      "type": "string",
+      "maxLength": 31,
+      "default": "espkvm",
+      "reboot": true
+    },
+    {
+      "key": "net_dhcp",
+      "section": "network",
+      "group": "Address",
+      "title": "Obtain address automatically",
+      "type": "bool",
+      "default": 1,
+      "requires": "net_static",
+      "reboot": true
+    },
+    {
+      "key": "net_ip",
+      "section": "network",
+      "group": "Address",
+      "title": "Static address",
+      "type": "string",
+      "maxLength": 15,
+      "default": "",
+      "requires": "net_static",
+      "reboot": true
+    },
+    {
+      "key": "net_mask",
+      "section": "network",
+      "group": "Address",
+      "title": "Netmask",
+      "type": "string",
+      "maxLength": 15,
+      "default": "255.255.255.0",
+      "requires": "net_static",
+      "reboot": true
+    },
+    {
+      "key": "net_gw",
+      "section": "network",
+      "group": "Address",
+      "title": "Gateway",
+      "type": "string",
+      "maxLength": 15,
+      "default": "",
+      "requires": "net_static",
+      "reboot": true
+    },
+    {
+      "key": "net_dns",
+      "section": "network",
+      "group": "Address",
+      "title": "DNS server",
+      "type": "string",
+      "maxLength": 15,
+      "default": "",
+      "requires": "net_static",
+      "reboot": true
+    },
+    {
+      "key": "net_ipv6",
+      "section": "network",
+      "group": "Address",
+      "title": "IPv6",
+      "help": "Also answer on an IPv6 address, alongside IPv4. There is nothing to configure: the address comes from the router's advertisements. Turn it off to keep the device off IPv6 entirely.",
+      "type": "bool",
+      "default": 1,
+      "reboot": true
+    },
+    {
+      "key": "net_mode",
+      "section": "network",
+      "group": "WiFi",
+      "title": "Connection",
+      "help": "The device uses one link at a time. \"ethernet\": the wired port. \"wifi\": join the network below (Ethernet is left down). \"ap\": the device makes its own WiFi hotspot for setup where there is no network to join. If WiFi is unreachable: reset the board, then hold the button for two seconds - that returns it to Ethernet, and clears the password too. Hold it AFTER the reset, not through it.",
+      "type": "enum",
+      "choices": [
+        "ethernet",
+        "wifi",
+        "ap"
+      ],
+      "default": 0,
+      "requires": "wifi",
+      "reboot": true
+    },
+    {
+      "key": "wifi_ssid",
+      "section": "network",
+      "group": "WiFi",
+      "title": "WiFi network (SSID)",
+      "help": "The name of the network to join in \"wifi\" mode.",
+      "type": "string",
+      "maxLength": 32,
+      "default": "",
+      "requires": "wifi",
+      "reboot": true
+    },
+    {
+      "key": "wifi_pass",
+      "section": "network",
+      "group": "WiFi",
+      "title": "WiFi password",
+      "help": "Left blank for an open network. Stored write-only.",
+      "type": "string",
+      "maxLength": 63,
+      "default": "",
+      "requires": "wifi",
+      "reboot": true,
+      "secret": true
+    },
+    {
+      "key": "ap_open",
+      "section": "network",
+      "group": "WiFi",
+      "title": "Open hotspot (no password)",
+      "help": "Run the device's hotspot with no password at all. Off, and with no password set, the device makes one up on first use and prints it in the log and on the display - an open network anybody in the building can join is a poor way to reach a server. Turn this on only where that is what you want.",
+      "type": "bool",
+      "default": 0,
+      "requires": "wifi",
+      "reboot": true
+    },
+    {
+      "key": "ap_pass",
+      "section": "network",
+      "group": "WiFi",
+      "title": "Hotspot password",
+      "help": "Password for the device's own hotspot (\"ap\" mode, or the rescue hotspot below). At least 8 characters. Left blank, the device makes one up the first time the hotspot comes up and prints it in the log and on the display; for a hotspot with no password at all, use the setting above. The network name is ESP-KVM-xxxx (the device's MAC). Stored write-only.",
+      "type": "string",
+      "maxLength": 63,
+      "default": "",
+      "requires": "wifi",
+      "reboot": true,
+      "secret": true
+    },
+    {
+      "key": "net_fallback",
+      "section": "network",
+      "group": "WiFi",
+      "title": "If WiFi can't connect",
+      "help": "keep_trying: keep retrying the network - it reconnects on its own when the network comes back (best for a device you cannot reach physically). hotspot: ALSO run a rescue hotspot (ESP-KVM-xxxx) the whole time WiFi is trying, so you can always reach the device on-site to fix its settings - set a Hotspot password first. Only applies in WiFi (station) mode.",
+      "type": "enum",
+      "choices": [
+        "keep_trying",
+        "hotspot"
+      ],
+      "default": 0,
+      "requires": "wifi",
+      "reboot": true
+    },
+    {
+      "key": "setup_ap",
+      "section": "network",
+      "group": "WiFi",
+      "title": "Setup hotspot on an unclaimed device",
+      "help": "While no password has been set and no network cable is plugged in, put out an open hotspot (ESP-KVM-xxxx) so the device can be reached and given one. It stops happening the moment a password exists. Until then a visitor can only set that password - video, keyboard and every other endpoint stay shut.",
+      "type": "bool",
+      "default": 1,
+      "requires": "wifi",
+      "reboot": true
+    },
+    {
+      "key": "wg_enable",
+      "section": "vpn",
+      "group": "WireGuard",
+      "title": "Enable WireGuard",
+      "help": "Bring up a classic WireGuard tunnel to a hub so the device is reachable over the VPN. Off by default. Split-tunnel: only the tunnel subnet goes through WireGuard, so the console stays reachable on the LAN too. An alternative to Tailscale below, not a companion - enable one.",
+      "type": "bool",
+      "default": 0,
+      "requires": "wireguard"
+    },
+    {
+      "key": "wg_address",
+      "section": "vpn",
+      "group": "WireGuard",
+      "title": "Tunnel address",
+      "help": "The device's own IP on the WireGuard network, e.g. 10.9.0.2.",
+      "type": "string",
+      "maxLength": 31,
+      "default": "",
+      "requires": "wireguard"
+    },
+    {
+      "key": "wg_private_key",
+      "section": "vpn",
+      "group": "WireGuard",
+      "title": "Private key",
+      "help": "Base64 WireGuard private key. Leave empty and the device generates one on first connect; its public key is shown below.",
+      "type": "string",
+      "maxLength": 47,
+      "default": "",
+      "requires": "wireguard",
+      "secret": true
+    },
+    {
+      "key": "wg_peer_key",
+      "section": "vpn",
+      "group": "WireGuard",
+      "title": "Peer public key",
+      "help": "Base64 public key of the WireGuard peer (the hub/server).",
+      "type": "string",
+      "maxLength": 47,
+      "default": "",
+      "requires": "wireguard"
+    },
+    {
+      "key": "wg_endpoint",
+      "section": "vpn",
+      "group": "WireGuard",
+      "title": "Peer endpoint",
+      "help": "host:port of the peer, e.g. vpn.example.com:51820.",
+      "type": "string",
+      "maxLength": 63,
+      "default": "",
+      "requires": "wireguard"
+    },
+    {
+      "key": "wg_keepalive",
+      "section": "vpn",
+      "group": "WireGuard",
+      "title": "Persistent keepalive (s)",
+      "help": "Keeps a NAT/firewall mapping open. 25 is typical; 0 disables it.",
+      "type": "int",
+      "min": 0,
+      "max": 65535,
+      "default": 25,
+      "requires": "wireguard"
+    },
+    {
+      "key": "wg_sntp",
+      "section": "vpn",
+      "group": "WireGuard",
+      "title": "Sync time over SNTP",
+      "help": "WireGuard handshakes carry a timestamp; without a real clock a reboot can make the peer reject them. Turn this on if the device can reach an NTP server. Off by default (isolated networks).",
+      "type": "bool",
+      "default": 0,
+      "requires": "wireguard"
+    },
+    {
+      "key": "wg_sntp_srv",
+      "section": "vpn",
+      "group": "WireGuard",
+      "title": "NTP server",
+      "help": "Used only when SNTP is on.",
+      "type": "string",
+      "maxLength": 47,
+      "default": "pool.ntp.org",
+      "requires": "wireguard"
+    },
+    {
+      "key": "ts_enable",
+      "section": "vpn",
+      "group": "Tailscale",
+      "title": "Enable Tailscale",
+      "help": "Join a Tailscale network natively - the device gets a 100.x address reachable from anywhere on your tailnet, with NAT traversal handled for you and no separate gateway. Off by default. An alternative to WireGuard above, not a companion; enabling both is unusual.",
+      "type": "bool",
+      "default": 0,
+      "requires": "tailscale"
+    },
+    {
+      "key": "ts_auth_key",
+      "section": "vpn",
+      "group": "Tailscale",
+      "title": "Auth key",
+      "help": "A Tailscale auth key (tskey-auth-...) that authorises this device to join. Generate one in the Tailscale admin console; a reusable key survives re-registration across reboots.",
+      "type": "string",
+      "maxLength": 63,
+      "default": "",
+      "requires": "tailscale",
+      "secret": true
+    },
+    {
+      "key": "ts_hostname",
+      "section": "vpn",
+      "group": "Tailscale",
+      "title": "Tailnet hostname",
+      "help": "The name this device takes on the tailnet. Empty uses the mDNS hostname from the Network section.",
+      "type": "string",
+      "maxLength": 63,
+      "default": "",
+      "requires": "tailscale"
+    },
+    {
+      "key": "ts_control_url",
+      "section": "vpn",
+      "group": "Tailscale",
+      "title": "Control server",
+      "help": "Coordination server for a self-hosted control plane (Headscale, Ionscale). Empty uses Tailscale's own (controlplane.tailscale.com). Host only, no scheme - e.g. headscale.example.com.",
+      "type": "string",
+      "maxLength": 63,
+      "default": "",
+      "requires": "tailscale"
+    },
+    {
+      "key": "ts_control_port",
+      "section": "vpn",
+      "group": "Tailscale",
+      "title": "Control server port",
+      "help": "Port for the control server. 0 = default (443 with TLS, else 80). Set only if your Headscale listens on a non-standard port.",
+      "type": "int",
+      "min": 0,
+      "max": 65535,
+      "default": 0,
+      "requires": "tailscale"
+    },
+    {
+      "key": "ts_ctrl_tls",
+      "section": "vpn",
+      "group": "Tailscale",
+      "title": "Control plane over TLS",
+      "help": "Reach the coordination server over HTTPS. Required for the hosted Tailscale service (the default). Turn off only for a self-hosted Headscale served over plain HTTP.",
+      "type": "bool",
+      "default": 1,
+      "requires": "tailscale"
+    },
+    {
+      "key": "ts_key_warn",
+      "section": "vpn",
+      "group": "Tailscale",
+      "title": "Warn before the key runs out",
+      "help": "Send a notification this many days before the tailnet key expires. Tailscale gives a node six months at most, and when that runs out the device drops off the tailnet until someone authorises it again. 0 turns the warning off. Needs notifications set up and the clock in sync.",
+      "type": "int",
+      "min": 0,
+      "max": 90,
+      "default": 14,
+      "requires": "tailscale"
+    },
+    {
+      "key": "mqtt_enable",
+      "section": "mqtt",
+      "group": "Broker",
+      "title": "Publish to MQTT",
+      "help": "Report status to an MQTT broker and appear in Home Assistant (auto-discovered). Off by default; costs nothing when off.",
+      "type": "bool",
+      "default": 0
+    },
+    {
+      "key": "mqtt_host",
+      "section": "mqtt",
+      "group": "Broker",
+      "title": "Broker host",
+      "help": "Hostname or IP of the MQTT broker, e.g. the Home Assistant host.",
+      "type": "string",
+      "maxLength": 63,
+      "default": ""
+    },
+    {
+      "key": "mqtt_port",
+      "section": "mqtt",
+      "group": "Broker",
+      "title": "Broker port",
+      "help": "1883 for plain MQTT, 8883 for MQTT over TLS.",
+      "type": "int",
+      "min": 1,
+      "max": 65535,
+      "default": 1883
+    },
+    {
+      "key": "mqtt_tls",
+      "section": "mqtt",
+      "group": "Broker",
+      "title": "Use TLS",
+      "help": "Connect with mqtts. Set the port to 8883 as well.",
+      "type": "bool",
+      "default": 0
+    },
+    {
+      "key": "mqtt_verify",
+      "section": "mqtt",
+      "group": "Broker",
+      "title": "Verify broker certificate",
+      "help": "With TLS on, check the broker's certificate against the built-in CA bundle (public CAs, e.g. Let's Encrypt). Turn off for a broker with a self-signed certificate.",
+      "type": "bool",
+      "default": 1
+    },
+    {
+      "key": "mqtt_user",
+      "section": "mqtt",
+      "group": "Broker",
+      "title": "Username",
+      "help": "Leave empty for an anonymous broker.",
+      "type": "string",
+      "maxLength": 47,
+      "default": ""
+    },
+    {
+      "key": "mqtt_pass",
+      "section": "mqtt",
+      "group": "Broker",
+      "title": "Password",
+      "help": "Stored on the device; never sent back to the console.",
+      "type": "string",
+      "maxLength": 63,
+      "default": "",
+      "secret": true
+    },
+    {
+      "key": "mqtt_base",
+      "section": "mqtt",
+      "group": "What it publishes",
+      "title": "Base topic",
+      "help": "Topic prefix; the device id is appended, e.g. espkvm/a1b2c3.",
+      "type": "string",
+      "maxLength": 31,
+      "default": "espkvm"
+    },
+    {
+      "key": "mqtt_disco",
+      "section": "mqtt",
+      "group": "What it publishes",
+      "title": "Discovery prefix",
+      "help": "Home Assistant MQTT discovery prefix. Default suits a stock HA.",
+      "type": "string",
+      "maxLength": 31,
+      "default": "homeassistant"
+    },
+    {
+      "key": "mqtt_interval",
+      "section": "mqtt",
+      "group": "What it publishes",
+      "title": "Publish interval (s)",
+      "help": "How often telemetry is published.",
+      "type": "int",
+      "min": 5,
+      "max": 3600,
+      "default": 30
+    },
+    {
+      "key": "mqtt_snap",
+      "section": "mqtt",
+      "group": "What it publishes",
+      "title": "Send a picture with a screen alert",
+      "help": "When the screen watch fires, publish a still of the screen as a camera in Home Assistant, so the notification carries what the machine actually shows. The button is always there; this only decides whether an alert takes a picture by itself. Needs the MJPEG codec - there is no still to take while H.264 runs - and a 1080p frame is a few hundred kilobytes over the broker.",
+      "type": "bool",
+      "default": 0
+    },
+    {
+      "key": "sec_https",
+      "section": "security",
+      "title": "Serve over HTTPS",
+      "help": "Uses a self-signed certificate generated on first boot. Disable only on a trusted network or behind a VPN.",
+      "type": "bool",
+      "default": 1,
+      "requires": "https",
+      "reboot": true
+    },
+    {
+      "key": "sec_auth",
+      "section": "security",
+      "title": "Require login",
+      "type": "bool",
+      "default": 1,
+      "requires": "https",
+      "reboot": true
+    },
+    {
+      "key": "sec_user",
+      "section": "security",
+      "title": "Username",
+      "type": "string",
+      "maxLength": 31,
+      "default": "admin",
+      "requires": "https"
+    },
+    {
+      "key": "agent_api",
+      "section": "security",
+      "title": "Agent REST API",
+      "help": "Enables the plain-REST snapshot and keyboard/mouse endpoints (/api/v1/video/frame.jpg, /api/v1/hid/*) used to drive the target from an AI agent or a script. Off by default: it grants the same control the console already has, over a simpler interface, so turn it on only when you mean to hand that control to a program.",
+      "type": "bool",
+      "default": 0
+    },
+    {
+      "key": "upd_check",
+      "section": "system",
+      "group": "Updates",
+      "title": "Offer firmware updates",
+      "help": "The browser asks the address below whether a newer build exists and offers to install it. The device never reaches out on its own - a KVM that phones home is not what belongs in an isolated network.",
+      "type": "bool",
+      "default": 0,
+      "requires": "ota"
+    },
+    {
+      "key": "upd_url",
+      "section": "system",
+      "group": "Updates",
+      "title": "Update manifest",
+      "help": "URL of a manifest.json describing the newest build. The project's own builds are published at the default address; point it at your fork, or at a file server inside your network, and it will use that instead. Whatever it points at is what gets written to the device, so point it somewhere you trust.",
+      "type": "string",
+      "maxLength": 200,
+      "default": "https://espkvm.github.io/espkvm/firmware/funcev/manifest.json",
+      "requires": "ota"
+    },
+    {
+      "key": "fw_fetch",
+      "section": "system",
+      "group": "Updates",
+      "title": "Let the device fetch releases itself",
+      "help": "Off by default, and deliberately so: a KVM often sits where nothing is supposed to reach the internet, and it does not talk to GitHub unless it is told to. Turn it on and the console can offer any published release - which is how you go back to an earlier one, since the browser is not allowed to download the image itself. Ordinary updates do not need this; the browser fetches those and hands them over.",
+      "type": "bool",
+      "default": 0,
+      "requires": "ota"
+    },
+    {
+      "key": "therm_guard",
+      "section": "system",
+      "group": "Thermal",
+      "title": "Thermal protection",
+      "help": "Cap the frame rate when the chip gets warm and stop encoding if it gets hot. Keyboard, mouse and the web interface keep running either way - a KVM that stops accepting keystrokes because it is warm has failed at its job.",
+      "type": "bool",
+      "default": 1
+    },
+    {
+      "key": "therm_warn",
+      "section": "system",
+      "group": "Thermal",
+      "title": "Warm threshold (C)",
+      "help": "Above this the frame rate is halved. Measured on this board: 1080p MJPEG at full rate settles around 46 C in open air, so the default leaves plenty of room before anything is given up.",
+      "type": "int",
+      "min": 35,
+      "max": 100,
+      "default": 70
+    },
+    {
+      "key": "therm_stop",
+      "section": "system",
+      "group": "Thermal",
+      "title": "Hot threshold (C)",
+      "help": "Above this encoding stops until the chip cools. The ESP32 family is rated to 85 C ambient and the die runs hotter than the air around it.",
+      "type": "int",
+      "min": 40,
+      "max": 110,
+      "default": 85
+    },
+    {
+      "key": "log_level",
+      "section": "system",
+      "group": "Console",
+      "title": "Log verbosity",
+      "type": "enum",
+      "choices": [
+        "error",
+        "warn",
+        "info",
+        "debug"
+      ],
+      "default": 2
+    },
+    {
+      "key": "ui_side",
+      "section": "system",
+      "group": "Console",
+      "title": "Panel side",
+      "help": "Which side of the screen the button rail and its panels sit on.",
+      "type": "enum",
+      "choices": [
+        "left",
+        "right"
+      ],
+      "default": 0
+    },
+    {
+      "key": "disp_enable",
+      "section": "display",
+      "group": "Screen",
+      "title": "Status display",
+      "help": "Drive a small display that shows the IP, link, capture status and health. An I2C OLED (SSD1306/SH1106) shares the capture chip's I2C and is auto-detected with no extra pins; a round SPI LCD (GC9A01) uses the GPIOs set below, after you pick it as the display type. Off by default; does nothing when no panel is connected.",
+      "type": "bool",
+      "default": 0
+    },
+    {
+      "key": "disp_type",
+      "section": "display",
+      "group": "Screen",
+      "title": "Panel",
+      "help": "Which panel is wired, controller and size together. SSD1306 and SH1106 are I2C OLEDs - pick SH1106 if the image is shifted by two pixels or wraps. GC9A01 is a round colour SPI LCD, e.g. the Waveshare 1.28\" module. None of this can be detected: one chip drives every size and reports none of it. A wrong size shows the picture squeezed into part of the glass, or every other row missing. Shorter panels show fewer status lines.",
+      "type": "enum",
+      "choices": [
+        "SSD1306 128x64",
+        "SH1106 128x64",
+        "GC9A01 240x240",
+        "SSD1306 128x32",
+        "SSD1306 96x16",
+        "SSD1306 72x40",
+        "SSD1306 64x48",
+        "SSD1306 64x32",
+        "SH1106 128x32",
+        "SH1106 96x16",
+        "SH1106 64x48",
+        "SSD1315 128x64 (untested)"
+      ],
+      "default": 0
+    },
+    {
+      "key": "disp_rotate_180",
+      "section": "display",
+      "group": "Screen",
+      "title": "Upside down",
+      "help": "Turn the picture on the status display through 180 degrees, for a panel mounted the other way up because of where its connector or its enclosure put it. Takes effect at once: the panel is re-initialised where it stands, with no restart.",
+      "type": "bool",
+      "default": 0
+    },
+    {
+      "key": "disp_sclk",
+      "section": "display",
+      "group": "Wiring",
+      "title": "LCD SCLK / CLK",
+      "help": "SPI clock GPIO for the GC9A01. Ignored by the I2C OLEDs.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": 20,
+      "reboot": true,
+      "pin": true,
+      "showIf": {
+        "key": "disp_type",
+        "eq": 2
+      }
+    },
+    {
+      "key": "disp_mosi",
+      "section": "display",
+      "group": "Wiring",
+      "title": "LCD MOSI / DIN",
+      "help": "SPI data GPIO for the GC9A01.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": 21,
+      "reboot": true,
+      "pin": true,
+      "showIf": {
+        "key": "disp_type",
+        "eq": 2
+      }
+    },
+    {
+      "key": "disp_cs",
+      "section": "display",
+      "group": "Wiring",
+      "title": "LCD CS",
+      "help": "Chip-select GPIO for the GC9A01.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": 22,
+      "reboot": true,
+      "pin": true,
+      "showIf": {
+        "key": "disp_type",
+        "eq": 2
+      }
+    },
+    {
+      "key": "disp_dc",
+      "section": "display",
+      "group": "Wiring",
+      "title": "LCD DC",
+      "help": "Data/command GPIO for the GC9A01.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": 26,
+      "reboot": true,
+      "pin": true,
+      "showIf": {
+        "key": "disp_type",
+        "eq": 2
+      }
+    },
+    {
+      "key": "disp_rst",
+      "section": "display",
+      "group": "Wiring",
+      "title": "LCD RST",
+      "help": "Reset GPIO for the GC9A01. -1 (None) if RST is tied to 3V3.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": 33,
+      "reboot": true,
+      "pin": true,
+      "showIf": {
+        "key": "disp_type",
+        "eq": 2
+      }
+    },
+    {
+      "key": "disp_bl",
+      "section": "display",
+      "group": "Wiring",
+      "title": "LCD backlight",
+      "help": "Backlight GPIO for the GC9A01. -1 (None) if BL is tied to 3V3 (always on).",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": -1,
+      "reboot": true,
+      "pin": true,
+      "showIf": {
+        "key": "disp_type",
+        "eq": 2
+      }
+    }
+  ],
+  "sections": [
+    {
+      "id": "video",
+      "title": "Video",
+      "blurb": "The picture, and what is recorded from it."
+    },
+    {
+      "id": "input",
+      "title": "Input",
+      "blurb": "Keyboard and pointer, as the target sees them."
+    },
+    {
+      "id": "storage",
+      "title": "Virtual media",
+      "blurb": "The microSD card and what is offered to the target."
+    },
+    {
+      "id": "power",
+      "title": "Power",
+      "blurb": "ATX wiring and Wake-on-LAN."
+    },
+    {
+      "id": "network",
+      "title": "Network",
+      "blurb": "How the device is reached."
+    },
+    {
+      "id": "vpn",
+      "title": "VPN",
+      "blurb": "One tunnel at a time: WireGuard or Tailscale."
+    },
+    {
+      "id": "mqtt",
+      "title": "MQTT / Home Assistant",
+      "blurb": "Reporting to a home automation system."
+    },
+    {
+      "id": "notify",
+      "title": "Notifications",
+      "blurb": "Where the device sends news of its own accord."
+    },
+    {
+      "id": "security",
+      "title": "Security",
+      "blurb": "Who may connect, and over what."
+    },
+    {
+      "id": "display",
+      "title": "Display",
+      "blurb": "The optional screen on the device."
+    },
+    {
+      "id": "system",
+      "title": "System",
+      "blurb": "The clock, updates, logging and the console itself."
+    }
+  ]
+}
