@@ -1158,6 +1158,7 @@ async function startConsole() {
   storage.value = await loadImages().catch(() => null);
 
   window.addEventListener("keydown", onGlobalKey);
+  document.addEventListener("fullscreenchange", onFullscreenChange);
 }
 
 onMounted(async () => {
@@ -1220,6 +1221,12 @@ onUnmounted(() => {
   clearInterval(demoAskId);
   clearTimeout(engageNudgeId);
   window.removeEventListener("keydown", onGlobalKey);
+  document.removeEventListener("fullscreenchange", onFullscreenChange);
+  window.removeEventListener("beforeunload", confirmClose);
+  if (keyLockOn.value) {
+    keyLockApi?.unlock();
+    keyLockOn.value = false;
+  }
 });
 
 function onGlobalKey(e: KeyboardEvent) {
@@ -1308,6 +1315,83 @@ const askingMedia = computed(() => DEMO && demoAsk.value === "media" && panel.va
 const askingSelect = computed(
   () => DEMO && demoAsk.value === "select" && !selectingText.value && textModeLikely.value,
 );
+
+/*
+ * Keyboard Lock: the keys a browser and a window manager keep for themselves.
+ *
+ * Alt+Tab, Cmd+Tab, the Windows key, Alt+F4, Ctrl+W, Ctrl+T - a page never sees
+ * any of them, so the target never sees them either, and Ctrl+W closes the
+ * console instead of a window on the far machine. In full screen a Chromium
+ * browser will hand them over for the asking; Firefox and Safari have nothing
+ * like it, and there the button is not shown.
+ *
+ * Two ways out, and neither can be taken away: Esc hands control back here,
+ * which drops the lock with it, and holding Esc for a couple of seconds is the
+ * browser's own way out of full screen. Esc for the target itself goes through
+ * the macro bar, as it did before.
+ */
+const KEYLOCK_KEY = "espkvm:keylock";
+type KeyboardLockNav = Navigator & {
+  keyboard?: { lock: () => Promise<void>; unlock: () => void };
+};
+const keyLockApi = (navigator as KeyboardLockNav).keyboard;
+const keyLockSupported = typeof keyLockApi?.lock === "function";
+const keyLockWanted = ref(true);
+try {
+  keyLockWanted.value = localStorage.getItem(KEYLOCK_KEY) !== "0";
+} catch {
+  /* private window: it simply starts on every time */
+}
+/* Whether the keys are actually ours right now, which is what the hint reads. */
+const keyLockOn = ref(false);
+
+async function applyKeyLock() {
+  if (!keyLockSupported) return;
+  /* Only with control taken: a console that is only watching has no use for the
+     keys, and taking them from the operator's own desktop would be rude. */
+  const want = keyLockWanted.value && engaged.value && !!document.fullscreenElement;
+  if (want === keyLockOn.value) return;
+  try {
+    if (want) await keyLockApi?.lock();
+    else keyLockApi?.unlock();
+    keyLockOn.value = want;
+  } catch {
+    /* the browser refused; the console works without it */
+    keyLockOn.value = false;
+  }
+}
+
+watch([keyLockWanted, engaged], () => {
+  void applyKeyLock();
+});
+watch(keyLockWanted, (on) => {
+  try {
+    localStorage.setItem(KEYLOCK_KEY, on ? "1" : "0");
+  } catch {
+    /* nothing to remember it with */
+  }
+});
+function onFullscreenChange() {
+  void applyKeyLock();
+}
+
+/*
+ * Closing the tab by accident.
+ *
+ * Ctrl+W is in everyone's fingers, and while the keys are not captured it
+ * closes the console rather than a window on the target. The browser asks its
+ * own question here - the wording is not ours to set - and only while control
+ * is taken, so a tab left open to watch closes without a word.
+ */
+function confirmClose(e: BeforeUnloadEvent) {
+  e.preventDefault();
+  e.returnValue = "";
+}
+watch(engaged, (on) => {
+  if (DEMO) return; /* a visitor to the demo is not driving anything */
+  if (on) window.addEventListener("beforeunload", confirmClose);
+  else window.removeEventListener("beforeunload", confirmClose);
+});
 
 async function toggleFullscreen() {
   try {
@@ -1592,6 +1676,12 @@ const LED_BITS: Array<[number, string]> = [
             }}
             <span class="screen-engage-hint">Esc gives control back</span>
           </button>
+
+          <!-- While the keys are ours, say so and say the way out: a captured
+               Alt+Tab that does nothing locally reads as a hung browser. -->
+          <div v-if="keyLockOn" class="screen-keylock">
+            All keys go to the target &mdash; Esc gives them back
+          </div>
 
           <!-- Text mode sets `paused` to stop the video, but the keyboard still
                goes to the target - that is most of what a BIOS needs. So the
@@ -1903,6 +1993,21 @@ const LED_BITS: Array<[number, string]> = [
           @click="fit = fit === 'fit' ? 'stretch' : fit === 'stretch' ? 'actual' : 'fit'"
         >
           {{ fit === "fit" ? "Fit" : fit === "stretch" ? "Stretch" : "1:1" }}
+        </button>
+        <button
+          v-if="keyLockSupported"
+          type="button"
+          class="btn btn-sm"
+          :class="{ 'btn-on': keyLockWanted }"
+          :title="
+            keyLockWanted
+              ? 'Alt+Tab, Ctrl+W and the Windows key go to the target in full screen, while you have control. Esc gives them back.'
+              : 'Alt+Tab, Ctrl+W and the Windows key stay with this computer'
+          "
+          :aria-pressed="keyLockWanted"
+          @click="keyLockWanted = !keyLockWanted"
+        >
+          All keys
         </button>
         <button
           type="button"
