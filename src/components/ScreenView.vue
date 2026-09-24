@@ -57,6 +57,14 @@ const loaded = ref(false);
 /** Why this browser cannot play the stream, when that is the problem. */
 const codecError = ref<string | null>(null);
 const streamUrl = ref("/stream");
+/*
+ * The multipart element is hidden while the WebSocket carries the picture, and
+ * hidden is not the same as gone: with a src set, the browser keeps downloading
+ * it. So the device was sending every frame twice, to a canvas nobody could see
+ * and to a socket that was the real one - 36 Mbit/s out of a board doing 1080p,
+ * which is what the console kept reconnecting over. No src, no second stream.
+ */
+const imgSrc = computed(() => (useWebsocket.value ? undefined : streamUrl.value));
 
 let stream: VideoStream | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
@@ -1258,7 +1266,7 @@ const fitClass = computed(() =>
         fitClass,
         { 'screen-engaged': engaged, 'screen-img-blank': textView },
       ]"
-      :src="streamUrl"
+      :src="imgSrc"
       alt="Target screen"
       :draggable="false"
       @load="
