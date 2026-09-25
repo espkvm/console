@@ -368,6 +368,19 @@
   text-align: center;
 }
 
+.screen-reconnect {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+.screen-reconnect p {
+  width: 100%;
+  margin: 0;
+}
+
 .screen-message-icon {
   display: inline-flex;
   margin-bottom: var(--space-3);

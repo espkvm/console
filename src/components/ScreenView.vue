@@ -15,7 +15,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { textSpans } from "../screen/textSpans";
-import type { ScreenText, VideoStatus } from "../state/device";
+import { reconnectSource, type ScreenText, type VideoStatus } from "../state/device";
 import { pictureRect } from "../video/picture";
 import { VideoStream } from "../video/stream";
 import Icon from "./Icon.vue";
@@ -1208,9 +1208,18 @@ const tooFast = computed(() => !!props.status?.signal && props.status.tooFast ==
  * whose machine is plainly running sends them to check the wrong things.
  */
 const DDC5V = 0x01;
+/* Older firmware has no knowsDdc5v and every bridge it ran on could tell. */
+const powerKnown = computed(() => props.status?.knowsDdc5v !== false);
 const noSignalNote = computed(() => {
   const st = props.status;
   if (!st) return "";
+  if (!powerKnown.value) {
+    return (
+      "This capture chip cannot tell a machine that is off or asleep from one that has " +
+      "stopped sending. If the target should be showing something, reconnect the HDMI - " +
+      "to the target that looks like the monitor was unplugged and plugged back in."
+    );
+  }
   if ((st.sysStatus & DDC5V) === 0) {
     return "Nothing is plugged into the HDMI input, or the machine on the other end is powered off.";
   }
@@ -1220,6 +1229,67 @@ const noSignalNote = computed(() => {
     "the device offers it a fresh hotplug a few times when this happens."
   );
 });
+/*
+ * "Reconnect HDMI". Where the bridge cannot see the source's +5 V the device no
+ * longer resets it on its own - that woke sleeping machines - so the person
+ * looking at "No signal" gets the button, and a countdown that presses it for
+ * them unless they say no. Once per outage: pressed, cancelled or run out, it
+ * waits for the picture to come back before offering again.
+ */
+const RECONNECT_AFTER_S = 30;
+const reconnectLeft = ref(0);
+const reconnectState = ref<"idle" | "counting" | "done" | "busy">("idle");
+const reconnectError = ref("");
+let reconnectTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopReconnectTimer() {
+  if (reconnectTimer !== null) {
+    clearInterval(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
+async function reconnectNow() {
+  stopReconnectTimer();
+  reconnectState.value = "busy";
+  reconnectError.value = "";
+  try {
+    await reconnectSource();
+  } catch (e) {
+    reconnectError.value = e instanceof Error ? e.message : String(e);
+  }
+  reconnectState.value = "done";
+}
+
+function cancelReconnect() {
+  stopReconnectTimer();
+  reconnectState.value = "done";
+}
+
+watch(
+  () => !DEMO && noSignal.value && !props.textView,
+  (on) => {
+    stopReconnectTimer();
+    reconnectError.value = "";
+    if (!on) {
+      reconnectState.value = "idle";
+      return;
+    }
+    if (reconnectState.value !== "idle") return;
+    if (powerKnown.value) return; /* the device nudges these itself */
+    reconnectLeft.value = RECONNECT_AFTER_S;
+    reconnectState.value = "counting";
+    reconnectTimer = setInterval(() => {
+      /* A hidden tab is nobody watching: hold the count. */
+      if (document.hidden) return;
+      reconnectLeft.value -= 1;
+      if (reconnectLeft.value <= 0) void reconnectNow();
+    }, 1000);
+  },
+  { immediate: true },
+);
+onUnmounted(stopReconnectTimer);
+
 const showOverlay = computed(
   () =>
     /* In text mode the characters are the content, and the stream is paused on
@@ -1329,6 +1399,23 @@ const fitClass = computed(() =>
           }}
         </p>
         <p v-else-if="noSignal" class="muted">{{ noSignalNote }}</p>
+        <div v-if="!videoBlocked && !paused && noSignal" class="screen-reconnect">
+          <template v-if="reconnectState === 'counting'">
+            <p class="muted">Reconnecting the HDMI in {{ reconnectLeft }} s.</p>
+            <button type="button" class="btn btn-sm" @click="reconnectNow">Reconnect now</button>
+            <button type="button" class="btn btn-sm btn-quiet" @click="cancelReconnect">Don't</button>
+          </template>
+          <button
+            v-else
+            type="button"
+            class="btn btn-sm"
+            :disabled="reconnectState === 'busy'"
+            @click="reconnectNow"
+          >
+            {{ reconnectState === "busy" ? "Reconnecting..." : "Reconnect HDMI" }}
+          </button>
+          <p v-if="reconnectError" class="muted">{{ reconnectError }}</p>
+        </div>
         <p v-else-if="tooFast" class="muted">
           The target sends {{ status?.width }}x{{ status?.height }} at {{ status?.inputHz }} Hz, more
           than the capture link carries, so no frames arrive. Set it to 30 Hz or a smaller mode, or

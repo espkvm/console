@@ -127,6 +127,12 @@ export interface VideoStatus {
    * only an explicit `true` as a yes.
    */
   textMode?: boolean;
+  /**
+   * Whether the bridge can see the source's +5 V (bit 0 of sysStatus). False on
+   * the LT6911D, whose "no signal" may just be a screen gone to sleep. Absent on
+   * older firmware, which the console reads as true.
+   */
+  knowsDdc5v?: boolean;
   /** How long the picture has been one flat colour, in ms; 0 when it is not. */
   flatMs?: number;
   /** The recorder. Absent on firmware without one. */
@@ -474,6 +480,19 @@ export async function runRunbook(name: string): Promise<void> {
 
 export async function stopRunbook(): Promise<void> {
   return postRunbooks("stop");
+}
+
+/**
+ * Reconnect the HDMI source: a hotplug cycle, or a reset of the capture chip
+ * where there is no hotplug line. The target sees a monitor replugged.
+ */
+export async function reconnectSource(): Promise<void> {
+  const res = await fetch("/api/v1/video/reconnect", { method: "POST", headers: CONSOLE_HEADER });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) {
+    const j = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(j.error ?? `reconnect failed (${res.status})`);
+  }
 }
 
 /* ---- schedules --------------------------------------------------------- */
