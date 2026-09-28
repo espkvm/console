@@ -1053,6 +1053,11 @@ export async function loadImages(): Promise<StorageInfo> {
   return getJson<StorageInfo>("/api/v1/storage/images");
 }
 
+/* The device reads a body length as 32 bits, so a file of 4 GB and over goes
+   in parts of this size, each appended at its offset. */
+const UPLOAD_MAX = 2 ** 32;
+const UPLOAD_PART = 2 ** 31;
+
 /**
  * Stream a file to the card. Uses XMLHttpRequest, not fetch, for one reason:
  * an image is measured in gigabytes and the operator needs to see it move.
@@ -1063,12 +1068,30 @@ export function uploadImage(
   onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
 ): Promise<void> {
+  if (file.size < UPLOAD_MAX) return uploadPart(file, file.name, 0, file.size, onProgress, signal);
+  return (async () => {
+    for (let at = 0; at < file.size; at += UPLOAD_PART) {
+      const part = file.slice(at, Math.min(at + UPLOAD_PART, file.size));
+      await uploadPart(part, file.name, at, file.size, onProgress, signal);
+    }
+  })();
+}
+
+function uploadPart(
+  body: Blob,
+  name: string,
+  offset: number,
+  total: number,
+  onProgress?: (p: UploadProgress) => void,
+  signal?: AbortSignal,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `/api/v1/storage/upload?name=${encodeURIComponent(file.name)}`);
+    const at = offset ? `&offset=${offset}` : "";
+    xhr.open("POST", `/api/v1/storage/upload?name=${encodeURIComponent(name)}${at}`);
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
     xhr.setRequestHeader("X-ESP-KVM", "1");
-    trackUpload(xhr, onProgress);
+    trackUpload(xhr, onProgress, offset, total);
     cancelWith(xhr, signal, reject);
     xhr.onload = () => {
       if (xhr.status === 401) return reject(new Unauthorized());
@@ -1076,7 +1099,7 @@ export function uploadImage(
       reject(rejectFromXhr(xhr, `upload failed (${xhr.status})`));
     };
     xhr.onerror = () => reject(new Error("upload failed: the connection dropped"));
-    xhr.send(file);
+    xhr.send(body);
   });
 }
 
@@ -1187,7 +1210,12 @@ export interface UploadProgress {
  * exponential moving average over ~0.25 s windows, which rides out the bursty
  * way the browser drains its send buffer without lagging real speed changes.
  */
-function trackUpload(xhr: XMLHttpRequest, onProgress?: (p: UploadProgress) => void): void {
+function trackUpload(
+  xhr: XMLHttpRequest,
+  onProgress?: (p: UploadProgress) => void,
+  base = 0,
+  whole = 0,
+): void {
   if (!onProgress) return;
   let lastT = 0;
   let lastLoaded = 0;
@@ -1204,12 +1232,15 @@ function trackUpload(xhr: XMLHttpRequest, onProgress?: (p: UploadProgress) => vo
       lastT = now;
       lastLoaded = e.loaded;
     }
+    // A part of a big file reports against the whole file.
+    const loaded = base + e.loaded;
+    const total = whole || e.total;
     onProgress({
-      fraction: e.total ? e.loaded / e.total : 0,
-      loaded: e.loaded,
-      total: e.total,
+      fraction: total ? loaded / total : 0,
+      loaded,
+      total,
       bytesPerSec: rate,
-      secondsLeft: rate > 0 ? (e.total - e.loaded) / rate : Infinity,
+      secondsLeft: rate > 0 ? (total - loaded) / rate : Infinity,
     });
   };
 }

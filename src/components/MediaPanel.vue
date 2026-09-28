@@ -242,8 +242,8 @@ async function removeImage(name: string) {
       v-else-if="storage && !storage.mounted && !storage.rescue?.supported"
       class="section-blocked"
     >
-      No microSD card and no built-in rescue partition. Insert a card formatted FAT32 with your
-      boot images copied on (up to 4&nbsp;GB per file).
+      No microSD card and no built-in rescue partition. Insert a card formatted FAT32 or exFAT
+      with your boot images copied on (exFAT for images over 4&nbsp;GB).
     </p>
     <template v-else-if="storage">
       <label class="expose-toggle">
@@ -407,7 +407,7 @@ async function removeImage(name: string) {
         </p>
         <p v-if="!storage.writable" class="setting-note setting-note-blocked">
           {{ storage.writeReason ?? "The card is read-only on this device." }}
-          Format it FAT32, one file up to 4&nbsp;GB.
+          Format it FAT32 or exFAT.
         </p>
         <label
           v-if="storage.writable"

@@ -575,10 +575,12 @@ class DemoXhr {
       this.status = 200;
       this.responseText = JSON.stringify({ status: "written", restarting: true });
     } else if (this.path.startsWith("/api/v1/storage/upload")) {
-      const name = new URLSearchParams(this.path.split("?")[1] ?? "").get("name") ?? "image.iso";
+      const q = new URLSearchParams(this.path.split("?")[1] ?? "");
+      const name = q.get("name") ?? "image.iso";
+      const size = Number(q.get("offset") ?? 0) + total;
       images = {
         ...images,
-        images: [...(images.images as Json[]), { name, size: total }],
+        images: [...(images.images as Json[]).filter((i) => i.name !== name), { name, size }],
       };
       this.status = 200;
       this.responseText = JSON.stringify(images);
