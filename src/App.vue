@@ -16,7 +16,7 @@ import { installNoPagePull } from "./input/noPagePull";
 import { installPagePin } from "./input/keepPagePinned";
 import { installKeyboardInset } from "./input/keyboardInset";
 import { ScreenTextStream } from "./screen/textStream";
-import { restartWatch, runRestart, takeRestart } from "./state/restart";
+import { restartWatch, runRestart, takeRestart, watchStep } from "./state/restart";
 import ScreenView from "./components/ScreenView.vue";
 import DiagWidget from "./components/DiagWidget.vue";
 import OsWidget from "./components/OsWidget.vue";
@@ -60,6 +60,7 @@ import {
   startRecording,
   stopRecording,
   takeScreenshot,
+  updateCoproc,
 } from "./state/device";
 import { loadSession, logout, type SessionState } from "./state/auth";
 import { toast } from "./state/toasts";
@@ -848,6 +849,54 @@ async function switchNet(mode: "ethernet" | "wifi" | "ap") {
   }
 }
 
+/*
+ * Install the Wi-Fi chip firmware this build carries. The device writes it,
+ * then restarts on its own, so the kick waits for "done" and the restart watch
+ * takes it from there. On a Wi-Fi-only board the console talks through that
+ * same chip the whole time; it keeps working until the restart.
+ */
+async function installCoproc() {
+  connDetail.value = null;
+  const cp = system.value?.coproc;
+  if (!cp) return;
+  if (
+    !confirm(
+      `Install esp-hosted ${cp.bundled} into the Wi-Fi chip?\n\nThis is a test feature. It takes about a minute, then the device restarts. If it is cut off halfway, the chip keeps its old firmware. But if the new firmware does not start, Wi-Fi stops working and the chip has to be flashed by hand, over its own UART pins.\n\nYou do this at your own risk.`,
+    )
+  )
+    return;
+  const kick = async () => {
+    await updateCoproc();
+    let written = false;
+    for (let misses = 0; ; ) {
+      await new Promise((r) => setTimeout(r, 1000));
+      let st;
+      try {
+        st = (await loadSystemInfo()).coproc;
+        misses = 0;
+      } catch {
+        /* Gone after the last write: that is the restart, not a failure. */
+        if (written) return;
+        if (++misses > 20) throw new Error("the device stopped answering");
+        continue;
+      }
+      if (!st || st.state === "done") return;
+      if (st.percent >= 100) written = true;
+      if (st.state === "failed") throw new Error(st.msg);
+      watchStep("", `${st.msg} ${st.percent}%`, { pct: st.percent });
+    }
+  };
+  try {
+    if (
+      await runRestart("Updating the Wi-Fi chip", kick, { kind: "coproc", to: cp.bundled })
+    ) {
+      location.reload();
+    }
+  } catch (e) {
+    toast.error(`Wi-Fi chip update: ${(e as Error).message}`);
+  }
+}
+
 /* The network pill's popup is the whole network panel rather than a plain
    tooltip: how the device is connected, and every address it can be reached on. */
 const isNetPill = computed(() =>
@@ -1023,9 +1072,19 @@ let systemPollId = 0;
  */
 const restartOutcome = ref<{ bad: boolean; text: string } | null>(null);
 
-function reportRestart(version: string) {
+function reportRestart(version: string, coprocFw?: string) {
   const note = takeRestart();
   if (!note) return;
+  if (note.kind === "coproc") {
+    restartOutcome.value =
+      coprocFw === note.to
+        ? { bad: false, text: `The Wi-Fi chip runs esp-hosted ${coprocFw}.` }
+        : {
+            bad: true,
+            text: `The Wi-Fi chip reports ${coprocFw || "no version"}, not ${note.to}. It kept its old firmware.`,
+          };
+    return;
+  }
   if (note.kind === "update" || note.kind === "slot") {
     if (note.to && version && note.to !== version) {
       restartOutcome.value = {
@@ -1073,7 +1132,7 @@ async function startConsole() {
     caps.value = c;
     system.value = sys;
     bootVersion = sys.version;
-    reportRestart(sys.version);
+    reportRestart(sys.version, sys.coproc?.fw);
     ready.value = true;
     /* The preference is remembered, so a page opened on a BIOS should arrive as
        characters rather than after the first six seconds of the retry rhythm. */
@@ -1829,6 +1888,24 @@ const LED_BITS: Array<[number, string]> = [
                     <Icon :name="m" :size="15" />
                     {{ m === "ethernet" ? "Ethernet" : m === "wifi" ? "WiFi" : "Hotspot" }}
                   </button>
+                </template>
+
+                <template v-if="system?.coproc?.running">
+                  <span class="conn-switch-title">Wi-Fi chip</span>
+                  <p class="conn-note">
+                    esp-hosted {{ system.coproc.fw || "(an early build that reports no version)" }}
+                  </p>
+                  <template v-if="system.coproc.update">
+                    <p class="conn-note">
+                      This firmware carries {{ system.coproc.bundled }}. A newer one
+                      moves data faster and matches this side. A test feature, at
+                      your own risk: if it goes wrong, the chip has to be flashed
+                      by hand.
+                    </p>
+                    <button type="button" class="btn btn-sm conn-action" @click="installCoproc">
+                      Update the Wi-Fi chip
+                    </button>
+                  </template>
                 </template>
               </template>
 

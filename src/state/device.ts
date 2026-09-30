@@ -207,6 +207,22 @@ export interface SystemInfo {
    * table predates it.
    */
   crashDumpBytes?: number;
+  /**
+   * The Wi-Fi chip's own firmware (esp-hosted on the C6 or C5), on a build that
+   * carries an image to install into it. `fw` is "" when the chip cannot say,
+   * which only early builds do. Null or absent otherwise.
+   */
+  coproc?: {
+    fw: string;
+    bundled: string;
+    /** The chip is up; it only is in a Wi-Fi mode. */
+    running: boolean;
+    /** The carried image is newer than what runs. */
+    update: boolean;
+    state: "idle" | "updating" | "done" | "failed";
+    percent: number;
+    msg: string;
+  } | null;
   /** 0 when the sensor is unavailable. */
   tempC: number;
   /**
@@ -616,6 +632,16 @@ export async function replugUsb(): Promise<void> {
 export const powerClick = () => powerAction("click");
 export const powerHold = () => powerAction("hold");
 export const powerReset = () => powerAction("reset");
+
+/**
+ * Install the Wi-Fi chip firmware this build carries. Returns at once; the
+ * progress is in system info under `coproc`, and the device restarts after.
+ */
+export async function updateCoproc(): Promise<void> {
+  const res = await fetch("/api/v1/wifi/coproc/update", { method: "POST", headers: CONSOLE_HEADER });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(await errorFromResponse(res, `the device answered ${res.status}`));
+}
 
 /** Reboot the device itself (not the target). It drops off the network briefly. */
 export async function restartDevice(): Promise<void> {

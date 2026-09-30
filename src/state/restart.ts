@@ -14,7 +14,7 @@ import { waitForDevice } from "./device";
 
 const NOTE_KEY = "espkvm.restart";
 
-export type RestartKind = "update" | "slot" | "manual" | "network";
+export type RestartKind = "update" | "slot" | "manual" | "network" | "coproc";
 
 export interface RestartNote {
   kind: RestartKind;
