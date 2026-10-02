@@ -49,6 +49,9 @@ const MAX_STALL_REBUILDS = 3;
  */
 const RESYNC_MIN_GAP_MS = 500;
 
+/** Decoder errors in a row, with no frame between, before the page says so. */
+const MAX_DECODER_ERRORS = 3;
+
 /** Anything a canvas can draw and that must be released afterwards. */
 export type Drawable = (ImageBitmap | VideoFrame) & { close(): void };
 
@@ -122,6 +125,9 @@ export class VideoStream {
   #lastOutputAt = 0;
   /** Rebuilds since the last frame actually came out; caps runaway stalls. */
   #stallRebuilds = 0;
+  /** Decoder errors since the last frame came out. One is a broken reference
+      chain that a keyframe repairs; only a run of them is worth showing. */
+  #decoderErrors = 0;
   #lastMeta = { width: 0, height: 0, sequence: 0, pts: 0 };
   /** performance.now() of the last keyframe we asked the device for. */
   #lastResyncAt = 0;
@@ -208,6 +214,9 @@ export class VideoStream {
   }
 
   async #onMessage(ev: MessageEvent) {
+    /* A stopped stream's socket still delivers what was in flight; a keyframe
+       there would build a decoder nobody closes. */
+    if (this.#stopped) return;
     if (!(ev.data instanceof ArrayBuffer) || ev.data.byteLength <= HEADER_LEN) return;
     const view = new DataView(ev.data);
     if (view.getUint8(0) !== MAGIC) return;
@@ -334,6 +343,7 @@ export class VideoStream {
     } catch {
       this.#resetDecoder();
       this.#hadKeyframe = false;
+      this.#resync();
     }
   }
 
@@ -346,6 +356,7 @@ export class VideoStream {
              and clear the rebuild count. */
           this.#lastOutputAt = performance.now();
           this.#stallRebuilds = 0;
+          this.#decoderErrors = 0;
           const meta = this.#lastMeta;
           this.#handlers.onFrame({
             image: frame,
@@ -358,7 +369,10 @@ export class VideoStream {
         error: (err) => {
           this.#resetDecoder();
           this.#hadKeyframe = false;
-          this.#handlers.onCodecError(`the H.264 decoder failed: ${err.message}`);
+          this.#resync();
+          if (++this.#decoderErrors >= MAX_DECODER_ERRORS) {
+            this.#handlers.onCodecError(`the H.264 decoder failed: ${err.message}`);
+          }
         },
       });
       decoder.configure({ codec, optimizeForLatency: true });
