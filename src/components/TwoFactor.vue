@@ -185,10 +185,12 @@ function downloadCodes() {
         />
       </label>
       <p v-if="error" class="setting-note setting-note-blocked">{{ error }}</p>
-      <button type="submit" class="btn btn-sm" :disabled="busy || !password || !code">
-        {{ mode === "enable" ? "Turn on" : mode === "disable" ? "Turn off" : "Make new codes" }}
-      </button>
-      <button type="button" class="btn btn-sm btn-quiet" :disabled="busy" @click="cancel">Cancel</button>
+      <div class="tf-actions">
+        <button type="submit" class="btn btn-sm" :disabled="busy || !password || !code">
+          {{ mode === "enable" ? "Turn on" : mode === "disable" ? "Turn off" : "Make new codes" }}
+        </button>
+        <button type="button" class="btn btn-sm btn-quiet" :disabled="busy" @click="cancel">Cancel</button>
+      </div>
     </form>
     <p v-if="error && mode === 'idle'" class="setting-note setting-note-blocked">{{ error }}</p>
   </div>
@@ -200,6 +202,11 @@ function downloadCodes() {
   height: 200px;
   display: block;
   margin: 0.5rem 0;
+}
+.tf-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 .tf-secret {
   word-break: break-all;

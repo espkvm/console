@@ -310,7 +310,16 @@ export class Unauthorized extends Error {
   constructor() {
     super("the session has ended");
     this.name = "Unauthorized";
+    noteSignedOut();
   }
+}
+
+/** Fired on window whenever the device answers 401 to a signed-in request. */
+export const SIGNED_OUT_EVENT = "espkvm:signed-out";
+
+/** Tell the console the session is gone, so it shows the sign-in form. */
+export function noteSignedOut(): void {
+  globalThis.window?.dispatchEvent(new Event(SIGNED_OUT_EVENT));
 }
 
 /**

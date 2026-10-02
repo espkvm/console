@@ -56,6 +56,7 @@ import {
   replugUsb,
   type UsbProbe,
   Unauthorized,
+  SIGNED_OUT_EVENT,
   saveClip,
   startRecording,
   stopRecording,
@@ -1203,12 +1204,12 @@ async function startConsole() {
     } catch (err) {
       if (err instanceof Unauthorized) {
         /* Not a network problem: the device is answering, it just does not
-           know us any more. Stop polling and let the sign-in form take over -
+           know us any more. The sign-in form takes over (onSignedOut) -
            reporting "lost contact" here would send the operator looking for a
            fault that is not there. */
-        clearInterval(systemPollId);
         status.value = null;
-        session.value = await loadSession().catch(() => session.value);
+        if (locked.value) return;
+        pollId = window.setTimeout(tick, interval);
         return;
       }
       status.value = null;
@@ -1258,7 +1259,31 @@ async function startConsole() {
   document.addEventListener("fullscreenchange", onFullscreenChange);
 }
 
+/* Any 401 means the session is gone (a reboot wipes them all). Ask the device
+   until it answers: one failed question used to stop the polling and leave a
+   console whose buttons all failed, with no sign-in form. */
+let signedOutId = 0;
+async function onSignedOut() {
+  if (signedOutId || locked.value) return;
+  signedOutId = -1;
+  for (;;) {
+    try {
+      session.value = await loadSession();
+      break;
+    } catch {
+      await new Promise((r) => (signedOutId = window.setTimeout(r, 2000)));
+    }
+  }
+  signedOutId = 0;
+  /* Still signed in (a stray 401): the polls carry on as they were. */
+  if (!locked.value) return;
+  clearTimeout(pollId);
+  clearInterval(systemPollId);
+  status.value = null;
+}
+
 onMounted(async () => {
+  window.addEventListener(SIGNED_OUT_EVENT, onSignedOut);
   installNoPagePull();
   installPagePin();
   installKeyboardInset();
@@ -1308,6 +1333,8 @@ async function onPasswordChanged() {
 }
 
 onUnmounted(() => {
+  window.removeEventListener(SIGNED_OUT_EVENT, onSignedOut);
+  clearTimeout(signedOutId);
   clearTimeout(pollId);
   clearInterval(systemPollId);
   clearInterval(screenTextPollId);

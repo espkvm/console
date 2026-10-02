@@ -312,10 +312,6 @@ async function submitChange() {
       <p v-if="mustChange" class="muted login-foot">
         You will be asked to sign in again with the new password.
       </p>
-      <p class="muted login-foot">
-        ESP-KVM is open source -
-        <a href="https://github.com/espkvm/espkvm" target="_blank" rel="noopener">github.com/espkvm/espkvm</a>
-      </p>
     </form>
   </div>
 </template>

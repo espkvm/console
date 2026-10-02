@@ -5,7 +5,7 @@
  * HttpOnly cookie that this code cannot read, and every answer about who is
  * logged in comes from asking the device rather than from remembering.
  */
-import { CONSOLE_HEADER } from "./device";
+import { CONSOLE_HEADER, noteSignedOut } from "./device";
 
 export interface SessionState {
   /** The device requires a login at all. */
@@ -42,6 +42,7 @@ export async function revokeViewToken(): Promise<void> {
     method: "DELETE",
     headers: CONSOLE_HEADER,
   });
+  if (res.status === 401) noteSignedOut();
   if (!res.ok) throw new Error(`revoke failed (${res.status})`);
 }
 
@@ -53,6 +54,8 @@ async function postJson(url: string, body: unknown): Promise<Record<string, unkn
   });
   const parsed = (await res.json().catch(() => ({}))) as { error?: string; needCode?: boolean };
   if (!res.ok) {
+    /* A 401 from login is a wrong password; from anything else, the session is gone. */
+    if (res.status === 401 && url !== "/api/v1/auth/login") noteSignedOut();
     const message = parsed.error ?? `request failed (${res.status})`;
     throw parsed.needCode ? new NeedCode(message) : new Error(message);
   }
