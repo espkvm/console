@@ -256,6 +256,16 @@ export function mockDevice() {
         if (url === "/api/v1/auth/password" && req.method === "POST") {
           return json(res, { status: "changed" });
         }
+        if (url === "/api/v1/auth/2fa/begin" && req.method === "POST") {
+          return json(res, { secret: "MOCKMOCKMOCKMOCKMOCKMOCKMOCKMOCK", uri: "", qrSize: 0, qr: "" });
+        }
+        if ((url === "/api/v1/auth/2fa/enable" || url === "/api/v1/auth/2fa/recovery") && req.method === "POST") {
+          return json(res, { status: "on", recovery: ["MOCK-AAAA", "MOCK-BBBB", "MOCK-CCCC", "MOCK-DDDD",
+            "MOCK-EEEE", "MOCK-FFFF", "MOCK-GGGG", "MOCK-HHHH"] });
+        }
+        if (url === "/api/v1/auth/2fa/disable" && req.method === "POST") {
+          return json(res, { status: "off" });
+        }
 
         if (url === "/api/v1/system/info") {
           return json(res, {

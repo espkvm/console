@@ -99,7 +99,7 @@
   "sec_user": "admin",
   "agent_api": true,
   "upd_check": true,
-  "upd_url": "https://espkvm.github.io/espkvm/firmware/manifest.json",
+  "upd_url": "https://fw.espkvm.io/firmware/manifest.json",
   "fw_fetch": true,
   "therm_guard": true,
   "therm_warn": 70,

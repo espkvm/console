@@ -43,6 +43,12 @@ import {
 import { runRestart } from "../state/restart";
 import { TIME_ZONES, browserZone, zoneName, zoneOptions } from "../state/timezones";
 import { toast } from "../state/toasts";
+import TwoFactor from "./TwoFactor.vue";
+
+/* Groups that need something wired, and where the wiring is written up. */
+const GROUP_DOCS: Record<string, string> = {
+  "ATX wiring": "https://github.com/espkvm/espkvm/blob/main/docs/wiring.md",
+};
 
 const props = defineProps<{
   schema: Setting[];
@@ -783,7 +789,17 @@ async function doRevertCert() {
           </div>
 
           <template v-for="block in grouped" :key="block.name || 'first'">
-            <h3 v-if="block.name" class="settings-group">{{ block.name }}</h3>
+            <h3 v-if="block.name" class="settings-group">
+              {{ block.name }}
+              <a
+                v-if="GROUP_DOCS[block.name]"
+                style="margin-left: 0.5em; font-size: 0.75em; font-weight: normal"
+                :href="GROUP_DOCS[block.name]"
+                target="_blank"
+                rel="noopener"
+                >how to wire it</a
+              >
+            </h3>
             <div
               v-for="s in block.rows"
               :key="s.key"
@@ -1241,6 +1257,8 @@ async function doRevertCert() {
             {{ changingPassword ? "Changing..." : "Change password" }}
           </button>
         </form>
+
+        <TwoFactor v-if="currentSection === 'security'" />
 
         <div v-if="currentSection === 'security'" class="firmware">
           <h3>Viewing token</h3>

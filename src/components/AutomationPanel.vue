@@ -554,6 +554,8 @@ async function sendTest() {
       Push a message when a watched phrase appears or the screen goes blank - to Telegram (with a
       screenshot on the MJPEG codec) or a webhook. Set the bot token, chat id or URL under
       Settings &rarr; Notifications.
+      <a href="https://github.com/espkvm/espkvm/blob/main/docs/NOTIFICATIONS.md" target="_blank"
+        rel="noopener">How they work</a>.
     </p>
     <label class="switch">
       <input v-model="notifyEnabled" type="checkbox" />

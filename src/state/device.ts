@@ -207,6 +207,12 @@ export interface SystemInfo {
    * table predates it.
    */
   crashDumpBytes?: number;
+  /** A battery-backed clock chip answered on the I2C bus. */
+  rtc?: boolean;
+  /** Which one: "DS3231", "PCF8563", "PCF85063", "PCF8523". */
+  rtcChip?: string;
+  /** That chip's thermometer: the air by the board, not the P4's die. Null without one. */
+  boardTempC?: number | null;
   /**
    * The Wi-Fi chip's own firmware (esp-hosted on the C6 or C5), on a build that
    * carries an image to install into it. `fw` is "" when the chip cannot say,

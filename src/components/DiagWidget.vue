@@ -11,6 +11,9 @@ import { computed, ref } from "vue";
 
 import { CONSOLE_HEADER, logUrl, type SystemInfo } from "../state/device";
 
+/* The feedback thread in Discussions. */
+const FEEDBACK_URL = "https://github.com/orgs/espkvm/discussions/65";
+
 const props = defineProps<{ system: SystemInfo | null; side: "left" | "right" }>();
 
 const open = ref(false);
@@ -96,6 +99,14 @@ async function eraseDump() {
             <dd class="mono">{{ Math.floor(system.uptimeSeconds / 60) }} min</dd>
           </div>
           <div class="fact"><dt>ESP-IDF</dt><dd class="mono">{{ system.idf }}</dd></div>
+          <div v-if="system.boardTempC != null" class="fact">
+            <dt>By the board</dt>
+            <dd class="mono">{{ system.boardTempC.toFixed(1) }}&deg;C</dd>
+          </div>
+          <div v-if="system.rtc" class="fact">
+            <dt>Clock</dt>
+            <dd>battery-backed ({{ system.rtcChip || "clock chip" }})</dd>
+          </div>
         </dl>
         <!--
           The device keeps its own log in memory that survives a restart, which
@@ -125,6 +136,29 @@ async function eraseDump() {
             The firmware panicked and wrote {{ Math.round(dumpBytes / 1024) }} KB of
             registers and stacks before rebooting. Worth attaching to a bug report
             &mdash; it holds no settings and no keys.
+          </span>
+        </p>
+        <!--
+          Where to say what works and what does not. The device has no
+          telemetry, so this is the only way that reaches the author.
+        -->
+        <p class="dw-log">
+          <span class="dw-row">
+            <a :href="FEEDBACK_URL" target="_blank" rel="noopener" class="btn btn-sm">
+              Tell me what you think
+            </a>
+            <a href="https://github.com/espkvm/espkvm/issues/new" target="_blank" rel="noopener"
+              class="btn btn-sm">
+              Report a bug
+            </a>
+            <a href="https://github.com/espkvm/espkvm#if-it-does-not-work" target="_blank"
+              rel="noopener" class="btn btn-sm btn-quiet">
+              If it does not work
+            </a>
+          </span>
+          <span class="muted">
+            What you like, what gets in your way, what is missing &mdash; one line is
+            plenty. A bug report goes better with the log above.
           </span>
         </p>
       </div>

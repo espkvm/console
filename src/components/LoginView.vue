@@ -10,7 +10,7 @@
  */
 import { computed, ref } from "vue";
 
-import { changePassword, login } from "../state/auth";
+import { changePassword, login, NeedCode } from "../state/auth";
 import { peekRestart } from "../state/restart";
 import Icon from "./Icon.vue";
 
@@ -23,6 +23,9 @@ const nextPassword = ref("");
 const confirmPassword = ref("");
 const busy = ref(false);
 const error = ref<string | null>(null);
+/* Two-factor: the password was right, the app's code comes next. */
+const needCode = ref(false);
+const code = ref("");
 
 /*
  * Why the sign-in page is showing at all.
@@ -82,11 +85,19 @@ async function submitLogin() {
   busy.value = true;
   error.value = null;
   try {
-    const mustChange = await login(username.value, password.value);
+    const mustChange = await login(username.value, password.value, needCode.value ? code.value.trim() : "");
     await rememberCredentials();
     if (!mustChange) password.value = "";
+    code.value = "";
     emit("authenticated");
   } catch (err) {
+    if (err instanceof NeedCode) {
+      /* First time: just ask for it. A wrong one says so. */
+      error.value = needCode.value ? err.message : null;
+      needCode.value = true;
+      code.value = "";
+      return;
+    }
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
     busy.value = false;
@@ -236,6 +247,23 @@ async function submitChange() {
             </button>
           </span>
         </label>
+        <label v-if="needCode" class="field">
+          <span>Code from your authenticator app</span>
+          <input
+            id="espkvm-code"
+            v-model="code"
+            name="code"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="9"
+            placeholder="123456"
+            autofocus
+          />
+        </label>
+        <p v-if="needCode" class="muted login-foot">
+          Lost the phone? A recovery code works here too.
+        </p>
       </template>
 
       <template v-else>
@@ -283,6 +311,10 @@ async function submitChange() {
 
       <p v-if="mustChange" class="muted login-foot">
         You will be asked to sign in again with the new password.
+      </p>
+      <p class="muted login-foot">
+        ESP-KVM is open source -
+        <a href="https://github.com/espkvm/espkvm" target="_blank" rel="noopener">github.com/espkvm/espkvm</a>
       </p>
     </form>
   </div>

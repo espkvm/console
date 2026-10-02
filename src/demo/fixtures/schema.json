@@ -1193,7 +1193,7 @@
       "help": "URL of a manifest.json describing the newest build. The project's own builds are published at the default address; point it at your fork, or at a file server inside your network, and it will use that instead. Whatever it points at is what gets written to the device, so point it somewhere you trust.",
       "type": "string",
       "maxLength": 200,
-      "default": "https://espkvm.github.io/espkvm/firmware/funcev/manifest.json",
+      "default": "https://fw.espkvm.io/firmware/funcev/manifest.json",
       "requires": "ota"
     },
     {

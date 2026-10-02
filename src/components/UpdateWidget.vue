@@ -541,7 +541,20 @@ onUnmounted(stopInstallPoll);
         </div>
 
         <dl class="facts">
-          <div class="fact"><dt>Version</dt><dd class="mono">{{ system.version }}</dd></div>
+          <div class="fact">
+            <dt>Version</dt>
+            <dd class="mono">
+              <a
+                v-if="/^v\.\d+\.\d+\.\d+$/.test(system.version)"
+                :href="`https://github.com/espkvm/espkvm/releases/tag/${system.version}`"
+                target="_blank"
+                rel="noopener"
+                title="What is in this version"
+                >{{ system.version }}</a
+              >
+              <template v-else>{{ system.version }}</template>
+            </dd>
+          </div>
           <div class="fact"><dt>Built</dt><dd class="mono">{{ system.built }}</dd></div>
           <div v-if="!slots.length" class="fact">
             <dt>Running from</dt>

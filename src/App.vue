@@ -1072,6 +1072,44 @@ let systemPollId = 0;
  */
 const restartOutcome = ref<{ bad: boolean; text: string } | null>(null);
 
+/*
+ * Update checks are off by default - a KVM may sit where nothing should reach
+ * the internet - so a freshly flashed device never hears about fixes unless
+ * someone goes looking for the switch. Ask once, in this browser, and take
+ * "not now" for an answer.
+ */
+const UPD_ASK_KEY = "espkvm.updAsked";
+const updAskDismissed = ref(true);
+try {
+  updAskDismissed.value = localStorage.getItem(UPD_ASK_KEY) === "1";
+} catch {
+  /* no storage: keep quiet rather than ask on every load */
+}
+const showUpdAsk = computed(
+  () =>
+    !updAskDismissed.value &&
+    Boolean(caps.value.ota?.available) &&
+    "upd_check" in values.value &&
+    !values.value.upd_check,
+);
+function dismissUpdAsk() {
+  updAskDismissed.value = true;
+  try {
+    localStorage.setItem(UPD_ASK_KEY, "1");
+  } catch {
+    /* nothing to remember it in */
+  }
+}
+async function enableUpdateChecks() {
+  try {
+    values.value = await saveSettings({ upd_check: true });
+    dismissUpdAsk();
+    toast.info("Update checks are on");
+  } catch {
+    toast.error("Could not turn update checks on");
+  }
+}
+
 function reportRestart(version: string, coprocFw?: string) {
   const note = takeRestart();
   if (!note) return;
@@ -1496,6 +1534,16 @@ const LED_BITS: Array<[number, string]> = [
     >
       <span>{{ restartOutcome.text }}</span>
       <button type="button" class="btn btn-sm" @click="restartOutcome = null">Dismiss</button>
+    </div>
+    <div v-if="showUpdAsk" class="update-banner" role="status">
+      <span>
+        Get told when a new version is out? The browser checks whether a newer ESP-KVM is
+        published and offers it; the device itself never reaches out.
+      </span>
+      <button type="button" class="btn btn-sm btn-primary" @click="enableUpdateChecks">
+        Turn on
+      </button>
+      <button type="button" class="btn btn-sm" @click="dismissUpdAsk">Not now</button>
     </div>
     <header class="statusbar">
       <svg

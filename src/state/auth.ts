@@ -16,7 +16,12 @@ export interface SessionState {
   user: string;
   /** A viewing token exists. What it is, the device will not say twice. */
   viewToken?: boolean;
+  /** Two-factor sign-in is on: a code from an authenticator app follows the password. */
+  twoFactor?: boolean;
 }
+
+/** The password was right and the device wants the code from the app next. */
+export class NeedCode extends Error {}
 
 /*
  * The viewing token: a credential for a dashboard, and for nothing else.
@@ -46,9 +51,10 @@ async function postJson(url: string, body: unknown): Promise<Record<string, unkn
     headers: { ...CONSOLE_HEADER, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const parsed = (await res.json().catch(() => ({}))) as { error?: string };
+  const parsed = (await res.json().catch(() => ({}))) as { error?: string; needCode?: boolean };
   if (!res.ok) {
-    throw new Error(parsed.error ?? `request failed (${res.status})`);
+    const message = parsed.error ?? `request failed (${res.status})`;
+    throw parsed.needCode ? new NeedCode(message) : new Error(message);
   }
   return parsed as Record<string, unknown>;
 }
@@ -59,12 +65,47 @@ export async function loadSession(): Promise<SessionState> {
   return (await res.json()) as SessionState;
 }
 
-/** @returns true when the password in use is the default and must be changed */
-export async function login(user: string, password: string): Promise<boolean> {
-  /* The browser's time sets a device clock that has none (no NTP). */
+/**
+ * @returns true when the password in use is the default and must be changed
+ * @throws NeedCode when two-factor sign-in is on and @p code is missing or wrong
+ */
+export async function login(user: string, password: string, code = ""): Promise<boolean> {
+  /* The browser's time sets a device clock that has none (no NTP), and checks
+     the code on a device that has no clock yet. */
   const now = Math.floor(Date.now() / 1000);
-  const body = await postJson("/api/v1/auth/login", { user, password, now });
+  const body = await postJson("/api/v1/auth/login", code ? { user, password, code, now } : { user, password, now });
   return Boolean(body.mustChange);
+}
+
+export interface TwoFactorSetup {
+  /** The secret as base32, for typing into an app that cannot scan. */
+  secret: string;
+  uri: string;
+  /** The QR code as rows of 0/1, qrSize by qrSize. */
+  qrSize: number;
+  qr: string;
+}
+
+export async function twoFactorBegin(): Promise<TwoFactorSetup> {
+  return (await postJson("/api/v1/auth/2fa/begin", {})) as unknown as TwoFactorSetup;
+}
+
+const nowSec = () => Math.floor(Date.now() / 1000);
+
+/** @returns the recovery codes, shown once */
+export async function twoFactorEnable(password: string, code: string): Promise<string[]> {
+  const body = await postJson("/api/v1/auth/2fa/enable", { password, code, now: nowSec() });
+  return (body.recovery as string[]) ?? [];
+}
+
+export async function twoFactorDisable(password: string, code: string): Promise<void> {
+  await postJson("/api/v1/auth/2fa/disable", { password, code, now: nowSec() });
+}
+
+/** New recovery codes; the old ones stop working. */
+export async function twoFactorRecovery(password: string, code: string): Promise<string[]> {
+  const body = await postJson("/api/v1/auth/2fa/recovery", { password, code, now: nowSec() });
+  return (body.recovery as string[]) ?? [];
 }
 
 export async function logout(): Promise<void> {

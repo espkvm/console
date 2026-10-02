@@ -467,6 +467,18 @@ async function route(
         return json({ status: "logged out" });
       case "/api/v1/auth/password":
         return json({ status: "changed" });
+      /* Two-factor in the demo: no real secret and no QR, just the steps. */
+      case "/api/v1/auth/2fa/begin":
+        return json({ secret: "DEMODEMODEMODEMODEMODEMODEMODEMO", uri: "", qrSize: 0, qr: "" });
+      case "/api/v1/auth/2fa/enable":
+      case "/api/v1/auth/2fa/recovery":
+        return json({
+          status: "on",
+          recovery: ["DEMO-AAAA", "DEMO-BBBB", "DEMO-CCCC", "DEMO-DDDD",
+            "DEMO-EEEE", "DEMO-FFFF", "DEMO-GGGG", "DEMO-HHHH"],
+        });
+      case "/api/v1/auth/2fa/disable":
+        return json({ status: "off" });
       case "/api/v1/system/restart":
         return json({ status: "restarting" });
       case "/api/v1/system/install": {
