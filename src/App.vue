@@ -1544,6 +1544,7 @@ const LED_BITS: Array<[number, string]> = [
     v-else-if="locked || mustChange"
     :user="session?.user ?? 'admin'"
     :must-change="mustChange"
+    :setup-network="session?.setupNetwork ?? null"
     @authenticated="onAuthenticated"
     @changed="onPasswordChanged"
   />

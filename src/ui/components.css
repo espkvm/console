@@ -652,7 +652,7 @@
 }
 
 .firmware .field input,
-.login-card input {
+.login-card input:not([type="radio"]) {
   padding: var(--space-2) var(--space-3);
   background: var(--bg-sunken);
   border: 1px solid var(--border);
@@ -685,6 +685,32 @@
 .login-foot {
   margin: 0;
   font-size: var(--text-sm);
+}
+
+.login-net {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.login-net legend {
+  padding: 0 var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.login-radio {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text);
+  cursor: pointer;
 }
 
 /* ---- virtual media image list ------------------------------------------- */

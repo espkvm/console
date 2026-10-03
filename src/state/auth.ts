@@ -18,6 +18,21 @@ export interface SessionState {
   viewToken?: boolean;
   /** Two-factor sign-in is on: a code from an authenticator app follows the password. */
   twoFactor?: boolean;
+  /**
+   * Set while the device is on its open setup hotspot with no password yet: the
+   * first password must come with one of these ways onto a network, because
+   * setting it closes the hotspot.
+   */
+  setupNetwork?: SetupNetworkKind[] | null;
+}
+
+export type SetupNetworkKind = "ethernet" | "wifi" | "ap";
+
+export interface SetupNetwork {
+  network: SetupNetworkKind;
+  ssid?: string;
+  wifiPass?: string;
+  apPass?: string;
 }
 
 /** The password was right and the device wants the code from the app next. */
@@ -115,7 +130,15 @@ export async function logout(): Promise<void> {
   await postJson("/api/v1/auth/logout", {});
 }
 
-/** Changing the password ends every session, including this one. */
-export async function changePassword(current: string, next: string): Promise<void> {
-  await postJson("/api/v1/auth/password", { current, next });
+/**
+ * Changing the password ends every session, including this one.
+ * @returns true when the device restarts (the first password, set over the setup hotspot)
+ */
+export async function changePassword(
+  current: string,
+  next: string,
+  setup?: SetupNetwork,
+): Promise<boolean> {
+  const body = await postJson("/api/v1/auth/password", { current, next, ...setup });
+  return body.restart === true;
 }

@@ -10,11 +10,15 @@
  */
 import { computed, ref } from "vue";
 
-import { changePassword, login, NeedCode } from "../state/auth";
+import { changePassword, login, NeedCode, type SetupNetworkKind } from "../state/auth";
 import { peekRestart } from "../state/restart";
 import Icon from "./Icon.vue";
 
-const props = defineProps<{ user: string; mustChange: boolean }>();
+const props = defineProps<{
+  user: string;
+  mustChange: boolean;
+  setupNetwork?: SetupNetworkKind[] | null;
+}>();
 const emit = defineEmits<{ authenticated: []; changed: [] }>();
 
 const password = ref("");
@@ -48,6 +52,55 @@ const restartLine = computed(() => {
       return "The device restarted, so the session ended. Sign in to carry on.";
   }
 });
+
+/*
+ * The first password over the setup hotspot. Setting it closes the open
+ * hotspot (the device restarts), so it has to say where the device goes next -
+ * on a board with no network port there is no other way back in.
+ */
+const netChoices = computed(() => props.setupNetwork ?? []);
+const netKind = ref<SetupNetworkKind | "">("");
+const ssid = ref("");
+const wifiPass = ref("");
+const apPass = ref("");
+/* After the restart: what to do to find the device again. */
+const doneNote = ref<string | null>(null);
+
+const netProblem = computed(() => {
+  if (!netChoices.value.length) return null;
+  switch (netKind.value) {
+    case "":
+      return "Choose how the device reaches a network.";
+    case "wifi":
+      if (!ssid.value.trim()) return "Type the WiFi network name.";
+      if (wifiPass.value.length > 0 && wifiPass.value.length < 8)
+        return "A WiFi password has at least 8 characters.";
+      return null;
+    case "ap":
+      return apPass.value.length >= 8 ? null : "The hotspot password needs at least 8 characters.";
+    default:
+      return null;
+  }
+});
+
+function setupBody() {
+  if (!netChoices.value.length || !netKind.value) return undefined;
+  if (netKind.value === "wifi")
+    return { network: netKind.value, ssid: ssid.value.trim(), wifiPass: wifiPass.value };
+  if (netKind.value === "ap") return { network: netKind.value, apPass: apPass.value };
+  return { network: netKind.value };
+}
+
+function afterRestart(kind: SetupNetworkKind | ""): string {
+  switch (kind) {
+    case "wifi":
+      return `The device restarts and joins "${ssid.value.trim()}". Connect this phone or computer to that network and open http://espkvm.local/ - or look for the device's address in your router.`;
+    case "ap":
+      return "The device restarts. Join its hotspot again, now with the password you just chose, and open http://192.168.4.1/.";
+    default:
+      return "The device restarts. Plug in the network cable, then open http://espkvm.local/ - or look for the device's address in your router.";
+  }
+}
 
 const mismatch = computed(
   () => confirmPassword.value.length > 0 && nextPassword.value !== confirmPassword.value,
@@ -105,14 +158,20 @@ async function submitLogin() {
 }
 
 async function submitChange() {
-  if (mismatch.value || tooShort.value) return;
+  if (mismatch.value || tooShort.value || netProblem.value) return;
   busy.value = true;
   error.value = null;
   try {
-    await changePassword(password.value, nextPassword.value);
+    const restarting = await changePassword(password.value, nextPassword.value, setupBody());
     password.value = "";
     nextPassword.value = "";
     confirmPassword.value = "";
+    wifiPass.value = "";
+    apPass.value = "";
+    if (restarting) {
+      doneNote.value = afterRestart(netKind.value);
+      return;
+    }
     emit("changed");
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
@@ -124,7 +183,11 @@ async function submitChange() {
 
 <template>
   <div class="login">
-    <form class="login-card" @submit.prevent="mustChange ? submitChange() : submitLogin()">
+    <div v-if="doneNote" class="login-card" role="status">
+      <h1>Password set</h1>
+      <p class="login-hint">{{ doneNote }}</p>
+    </div>
+    <form v-else class="login-card" @submit.prevent="mustChange ? submitChange() : submitLogin()">
       <svg class="login-mark" viewBox="6 15 51 33" width="68" height="44" aria-hidden="true">
         <g fill="currentColor">
           <rect x="6" y="15" width="3" height="3" />
@@ -294,6 +357,41 @@ async function submitChange() {
         </label>
         <p v-if="tooShort" class="login-hint">At least 8 characters.</p>
         <p v-else-if="mismatch" class="login-hint">The two do not match.</p>
+
+        <fieldset v-if="netChoices.length" class="login-net">
+          <legend>After this, the device</legend>
+          <p class="login-hint">
+            Setting the password closes this open hotspot. Choose how to reach the device after
+            that.
+          </p>
+          <label v-if="netChoices.includes('ethernet')" class="login-radio">
+            <input v-model="netKind" type="radio" name="setup-net" value="ethernet" />
+            <span>uses the network cable</span>
+          </label>
+          <label v-if="netChoices.includes('wifi')" class="login-radio">
+            <input v-model="netKind" type="radio" name="setup-net" value="wifi" />
+            <span>joins my WiFi</span>
+          </label>
+          <template v-if="netKind === 'wifi'">
+            <label class="field">
+              <span>WiFi network name</span>
+              <input v-model="ssid" type="text" autocomplete="off" autocapitalize="off" maxlength="32" />
+            </label>
+            <label class="field">
+              <span>WiFi password (blank for an open network)</span>
+              <input v-model="wifiPass" type="password" autocomplete="off" maxlength="63" />
+            </label>
+          </template>
+          <label v-if="netChoices.includes('ap')" class="login-radio">
+            <input v-model="netKind" type="radio" name="setup-net" value="ap" />
+            <span>keeps its own hotspot, with a password</span>
+          </label>
+          <label v-if="netKind === 'ap'" class="field">
+            <span>Hotspot password</span>
+            <input v-model="apPass" type="password" autocomplete="off" maxlength="63" />
+          </label>
+          <p v-if="netProblem && netKind" class="login-hint">{{ netProblem }}</p>
+        </fieldset>
       </template>
 
       <p v-if="error" class="login-error">
@@ -304,7 +402,7 @@ async function submitChange() {
       <button
         type="submit"
         class="btn btn-primary"
-        :disabled="busy || (mustChange && (tooShort || mismatch || !nextPassword))"
+        :disabled="busy || (mustChange && (tooShort || mismatch || !nextPassword || !!netProblem))"
       >
         {{ busy ? "Working..." : mustChange ? "Set password" : "Sign in" }}
       </button>
