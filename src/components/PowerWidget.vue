@@ -12,7 +12,14 @@
  */
 import { computed, ref } from "vue";
 
-import { powerClick, powerHold, powerReset, wakeTarget, type Capability } from "../state/device";
+import {
+  cecPower,
+  powerClick,
+  powerHold,
+  powerReset,
+  wakeTarget,
+  type Capability,
+} from "../state/device";
 import { toast } from "../state/toasts";
 import Icon from "./Icon.vue";
 
@@ -31,7 +38,8 @@ const waking = ref(false);
 
 const hasAtx = computed(() => Boolean(props.caps.atx?.active));
 const hasWol = computed(() => Boolean(props.caps.wol?.available));
-const available = computed(() => hasAtx.value || hasWol.value);
+const hasCec = computed(() => Boolean(props.caps.cec?.active));
+const available = computed(() => hasAtx.value || hasWol.value || hasCec.value);
 const known = computed(() => Boolean(props.atx?.known));
 const on = computed(() => Boolean(props.atx?.on));
 
@@ -66,6 +74,13 @@ function reset() {
 function forceOff() {
   if (!confirm("Hold the power button to force the target off? Unsaved work is lost.")) return;
   void act(powerHold, "Holding power button (force off)");
+}
+
+function hdmi(action: "standby" | "wake") {
+  void act(
+    () => cecPower(action),
+    action === "wake" ? "Asked the HDMI source to wake" : "Asked the HDMI source to sleep",
+  );
 }
 
 async function wake() {
@@ -136,6 +151,17 @@ async function wake() {
           <p v-else class="pw-note">
             Set the target's MAC under Settings &rarr; Power to wake it from here.
           </p>
+        </template>
+
+        <template v-if="hasCec">
+          <button type="button" class="pw-item" :disabled="busy" @click="hdmi('wake')">
+            Wake over HDMI
+            <small>HDMI-CEC; TV boxes and consoles, not most PCs</small>
+          </button>
+          <button type="button" class="pw-item" :disabled="busy" @click="hdmi('standby')">
+            Sleep over HDMI
+            <small>HDMI-CEC standby to the source</small>
+          </button>
         </template>
       </div>
     </template>

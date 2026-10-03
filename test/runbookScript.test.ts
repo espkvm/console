@@ -37,6 +37,17 @@ test("recording and screenshots", () => {
   ]);
 });
 
+test("hdmi-cec steps, and their refusals", () => {
+  assert.deepEqual(parseRunbookScript("hdmi standby\nHDMI Wake\nhdmi key up"), [
+    { kind: "hdmi", arg: "standby" },
+    { kind: "hdmi", arg: "wake" },
+    { kind: "hdmi", arg: "key up" },
+  ]);
+  for (const bad of ["hdmi", "hdmi key", "hdmi reboot"]) {
+    assert.throws(() => parseRunbookScript(bad), /line 1: hdmi wants standby, wake or key <name>/);
+  }
+});
+
 test("refusals name the line, in the device's words", () => {
   const refuses = (script: string, message: string) =>
     assert.throws(() => parseRunbookScript(script), (e: Error) => e.message === message);

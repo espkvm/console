@@ -22,6 +22,7 @@ import DiagWidget from "./components/DiagWidget.vue";
 import OsWidget from "./components/OsWidget.vue";
 import MediaPanel from "./components/MediaPanel.vue";
 import PowerWidget from "./components/PowerWidget.vue";
+import RemotePanel from "./components/RemotePanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import VideoWidget from "./components/VideoWidget.vue";
 import ToastHost from "./components/ToastHost.vue";
@@ -62,6 +63,8 @@ import {
   stopRecording,
   takeScreenshot,
   updateCoproc,
+  getCec,
+  type CecStatus,
 } from "./state/device";
 import { loadSession, logout, type SessionState } from "./state/auth";
 import { toast } from "./state/toasts";
@@ -529,6 +532,50 @@ const oskOpen = ref(localStorage.getItem("espkvm.osk") === "1");
 watch(oskOpen, (open) => {
   try {
     localStorage.setItem("espkvm.osk", open ? "1" : "0");
+  } catch {
+    /* a private window; it just will not be remembered */
+  }
+});
+/*
+ * HDMI-CEC: who the source says it is. Read every 10 s while CEC runs - the
+ * HDMI pill shows it, and the remote is offered only when somebody answers,
+ * since a PC that does not speak CEC would leave a button that does nothing.
+ */
+const cecStatus = ref<CecStatus | null>(null);
+let cecTimer: number | null = null;
+async function readCec() {
+  try {
+    cecStatus.value = await getCec();
+  } catch {
+    /* the next reading will do */
+  }
+}
+watch(
+  () => Boolean(caps.value.cec?.active),
+  (on) => {
+    if (cecTimer !== null) clearInterval(cecTimer);
+    cecTimer = null;
+    cecStatus.value = null;
+    if (!on) return;
+    void readCec();
+    cecTimer = window.setInterval(() => void readCec(), 10000);
+  },
+  { immediate: true },
+);
+onUnmounted(() => {
+  if (cecTimer !== null) clearInterval(cecTimer);
+});
+const cecSource = computed(() => {
+  const st = cecStatus.value;
+  if (!st?.running) return null;
+  return st.devices.find((d) => d.la === st.target) ?? st.devices[0] ?? null;
+});
+
+/* The HDMI-CEC remote floats like the keyboard and opens from beside it. */
+const remoteOpen = ref(localStorage.getItem("espkvm.rc") === "1");
+watch(remoteOpen, (open) => {
+  try {
+    localStorage.setItem("espkvm.rc", open ? "1" : "0");
   } catch {
     /* a private window; it just will not be remembered */
   }
@@ -1899,6 +1946,11 @@ const LED_BITS: Array<[number, string]> = [
       :leds="input.target.value.leds"
       @close="oskOpen = false"
     />
+    <RemotePanel
+      v-if="remoteOpen && cecSource"
+      :caps="caps"
+      @close="remoteOpen = false"
+    />
 
     <footer class="actionbar">
       <div class="actionbar-left">
@@ -1985,6 +2037,32 @@ const LED_BITS: Array<[number, string]> = [
                 </template>
               </template>
 
+              <template v-if="connDetail === 'hdmi' && cecStatus?.running">
+                <span class="conn-switch-title">HDMI-CEC</span>
+                <template v-if="cecSource">
+                  <p class="conn-note">
+                    <strong>{{ cecSource.name || "A device with no name" }}</strong>
+                    <template v-if="cecSource.type"> &middot; {{ cecSource.type }}</template>
+                  </p>
+                  <p class="conn-note mono">
+                    {{
+                      [
+                        cecSource.version && `CEC ${cecSource.version}`,
+                        cecSource.physAddr && `address ${cecSource.physAddr}`,
+                        cecSource.vendor && `vendor ${cecSource.vendor}`,
+                        `power ${cecSource.power}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                    }}
+                  </p>
+                </template>
+                <p v-else class="conn-note">
+                  The source does not answer over HDMI-CEC. TV boxes, consoles and a Raspberry Pi
+                  do; most PCs do not.
+                </p>
+              </template>
+
               <template v-if="isUsbPill">
                 <p v-if="input.target.value.known && !input.target.value.busAlive" class="conn-note">
                   There is no live USB bus on the target's side: its port has no
@@ -2040,14 +2118,28 @@ const LED_BITS: Array<[number, string]> = [
         >
           <Icon name="keyboard" :size="15" />
         </button>
+        <!-- Only while a source answers over HDMI-CEC. -->
+        <button
+          v-if="cecSource"
+          type="button"
+          class="btn btn-sm btn-icon"
+          :class="{ 'btn-on': remoteOpen }"
+          aria-label="Remote control (HDMI-CEC)"
+          :title="remoteOpen ? 'Hide the remote' : `A remote for ${cecSource.name || 'the HDMI source'}, over HDMI-CEC`"
+          @click="remoteOpen = !remoteOpen"
+        >
+          <Icon name="remote" :size="15" />
+        </button>
         <button
           type="button"
-          class="btn btn-sm"
+          class="btn btn-sm btn-icon"
           :class="{ 'btn-on': touchMode }"
+          aria-label="Touch mode"
+          :aria-pressed="touchMode"
           :title="touchMode ? 'Touch mode: screen is a trackpad' : 'Use the screen as a trackpad'"
           @click="touchMode = !touchMode"
         >
-          Touch
+          <Icon name="touch" :size="15" />
         </button>
         <button
           type="button"
@@ -2108,7 +2200,7 @@ const LED_BITS: Array<[number, string]> = [
         </button>
         <button
           type="button"
-          class="btn btn-sm"
+          class="btn btn-sm btn-icon"
           :class="{ 'btn-on': selectingText, asking: askingSelect }"
           :disabled="!textModeLikely"
           :title="
@@ -2116,36 +2208,43 @@ const LED_BITS: Array<[number, string]> = [
               ? 'Select text on the screen with the mouse, as on a page'
               : 'The target is not showing a text screen'
           "
+          aria-label="Select text on the screen"
+          :aria-pressed="selectingText"
           @click="toggleSelectText()"
         >
-          Select
+          <Icon name="text-select" :size="15" />
         </button>
         <button
           type="button"
-          class="btn btn-sm"
+          class="btn btn-sm btn-icon"
           :disabled="!textModeLikely"
           :title="
             textModeLikely
               ? 'Copy everything on the screen as text'
               : 'The target is not showing a text screen'
           "
+          aria-label="Copy the screen as text"
           @click="copyScreenText()"
         >
-          Copy
+          <Icon name="copy" :size="15" />
         </button>
         <button
           type="button"
-          class="btn btn-sm"
+          class="btn btn-sm btn-icon"
+          :aria-label="`Scale: ${fit === 'fit' ? 'fit' : fit === 'stretch' ? 'stretch' : '1:1'}`"
           :title="
             fit === 'fit'
-              ? 'Shrink a picture bigger than the window; leave a smaller one alone'
+              ? 'Fit: shrink a picture bigger than the window, leave a smaller one alone'
               : fit === 'stretch'
-                ? 'Fill the window, whatever the picture measures'
-                : 'One screen pixel per browser pixel'
+                ? 'Stretch: fill the window, whatever the picture measures'
+                : '1:1: one screen pixel per browser pixel'
           "
           @click="fit = fit === 'fit' ? 'stretch' : fit === 'stretch' ? 'actual' : 'fit'"
         >
-          {{ fit === "fit" ? "Fit" : fit === "stretch" ? "Stretch" : "1:1" }}
+          <Icon
+            :name="fit === 'fit' ? 'fit-shrink' : fit === 'stretch' ? 'fit-stretch' : 'fit-actual'"
+            :size="15"
+          />
         </button>
         <button
           v-if="keyLockSupported"

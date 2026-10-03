@@ -451,7 +451,10 @@ async function sendTest() {
         runbook there. <code>record</code> starts recording the screen to the microSD card and
         goes on (<code>record 300</code> for five minutes), <code>timelapse 10</code> records one frame every
         10 seconds (<code>timelapse 10 28800</code> for eight hours), <code>record stop</code> ends
-        either, and <code>screenshot</code> saves one picture. Lines starting with # are ignored. Every key name is listed in
+        either, and <code>screenshot</code> saves one picture. Over HDMI-CEC, <code>hdmi standby</code>
+        puts the source to sleep, <code>hdmi wake</code> wakes it and <code>hdmi key up</code>
+        presses a remote key (up, down, left, right, select, back, home, play, pause...). Lines
+        starting with # are ignored. Every key name is listed in
         <a href="https://espkvm.io/scripts/" target="_blank" rel="noopener">espkvm.io/scripts</a>.
       </p>
       <p v-if="scriptError" class="setting-note setting-note-blocked">{{ scriptError }}</p>

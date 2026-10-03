@@ -116,5 +116,12 @@
     "available": true,
     "enabled": true,
     "active": true
+  },
+  "cec": {
+    "compiled": true,
+    "available": true,
+    "enabled": true,
+    "active": true,
+    "setting": "cec_enable"
   }
 }

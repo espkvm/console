@@ -4,7 +4,7 @@
  * A runbook is a macro that can wait: the macro grammar (key, type, delay)
  * plus `wait <phrase>`, `gone <phrase>` and `timeout <seconds>`, and `record`,
  * `record <seconds>`, `record stop`, `timelapse <every> [<seconds>]` and `screenshot`
- * to the microSD card. The device
+ * to the microSD card, and `hdmi standby|wake|key <name>` over HDMI-CEC. The device
  * runs it, not the browser, so this parser exists only to tell the operator
  * about a bad line before the run - the rules and the messages mirror
  * components/kvm_runbook/runbook_script.c, and a script this accepts, the
@@ -28,7 +28,9 @@ export type RunbookStep =
   | { kind: "record-stop" }
   | { kind: "screenshot" }
   /** every: seconds between frames; seconds 0 = until stopped */
-  | { kind: "timelapse"; every: number; seconds: number };
+  | { kind: "timelapse"; every: number; seconds: number }
+  /** HDMI-CEC to the source: "standby", "wake" or "key <name>" (the name is checked on the device) */
+  | { kind: "hdmi"; arg: string };
 
 export const RUNBOOK_MAX_STEPS = 64;
 const PHRASE_MAX = 63;
@@ -103,6 +105,12 @@ export function parseRunbookScript(script: string): RunbookStep[] {
         throw at("timelapse wants 1..3600 seconds between frames, then how long it runs");
       }
       steps.push({ kind: "timelapse", every, seconds });
+    } else if (cmd === "hdmi") {
+      const a = arg.toLowerCase();
+      if (a !== "standby" && a !== "wake" && !/^key \S/.test(a)) {
+        throw at("hdmi wants standby, wake or key <name>");
+      }
+      steps.push({ kind: "hdmi", arg: a });
     } else if (cmd === "screenshot") {
       if (arg) throw at("screenshot takes nothing after it");
       steps.push({ kind: "screenshot" });

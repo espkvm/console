@@ -353,6 +353,8 @@ async function route(
         return json({ https: true, custom: tlsCustom });
       case "/api/v1/runbooks/status":
         return json(runbookStatus());
+      case "/api/v1/cec":
+        return json(cecStatus());
       case "/api/v1/notify/status":
         return json({
           enabled: settings.notify_enable === true || settings.notify_enable === 1,
@@ -516,6 +518,30 @@ async function route(
             b.toString(16).padStart(2, "0"),
           ).join(""),
         });
+      case "/api/v1/cec/key": {
+        const { key } = (await bodyJson(init, req)) as { key?: string };
+        cecLog("tx", `04 44 ${cecCode(String(key ?? ""))}`);
+        cecLog("tx", "04 45");
+        return json({ ok: true });
+      }
+      case "/api/v1/cec/power": {
+        const { action } = (await bodyJson(init, req)) as { action?: string };
+        if (action === "standby") {
+          cecLog("tx", "04 36");
+          cecLog("rx", "40 9d 10 00");
+          cecBox.power = "standby";
+        } else {
+          cecLog("tx", "0f 86 10 00");
+          cecLog("tx", "04 44 6d");
+          cecLog("rx", "4f 82 10 00");
+          cecBox.power = "on";
+        }
+        return json({ ok: true });
+      }
+      case "/api/v1/cec/scan":
+        return json({ ok: true });
+      case "/api/v1/cec/send":
+        return json({ tx: "ok" });
       case "/api/v1/power/wake":
         demoPower("wake");
         return json({ status: "sent" });
@@ -726,4 +752,28 @@ export function installDemoBackend(): void {
     },
   });
   window.WebSocket = patched as unknown as typeof WebSocket;
+}
+
+/* HDMI-CEC: one made-up TV box on the line, so the remote has something to drive. */
+const cecBox = { la: 4, name: "Living room box", type: "playback", physAddr: "1.0.0.0", vendor: "000000", power: "on", version: "1.4", seenMs: 0 };
+const cecFrames: { ms: number; dir: "tx" | "rx"; hex: string; result?: string }[] = [];
+const CEC_CODES: Record<string, number> = {
+  select: 0x00, up: 0x01, down: 0x02, left: 0x03, right: 0x04, home: 0x09, menu: 0x0a, back: 0x0d,
+  info: 0x35, volume_up: 0x41, volume_down: 0x42, mute: 0x43, play: 0x44, stop: 0x45, pause: 0x46,
+  rewind: 0x48, fast_forward: 0x49, blue: 0x71, red: 0x72, green: 0x73, yellow: 0x74,
+};
+
+function cecCode(key: string): string {
+  const code = /^[0-9]$/.test(key) ? 0x20 + Number(key) : (CEC_CODES[key] ?? 0);
+  return code.toString(16).padStart(2, "0");
+}
+
+function cecLog(dir: "tx" | "rx", hex: string) {
+  cecFrames.push({ ms: Math.round(performance.now()), dir, hex, ...(dir === "tx" ? { result: "ok" } : {}) });
+  if (cecFrames.length > 24) cecFrames.shift();
+}
+
+function cecStatus() {
+  cecBox.seenMs = Math.round(performance.now());
+  return { available: true, running: true, ownAddr: 0, active: 4, target: 4, devices: [cecBox], log: cecFrames };
 }

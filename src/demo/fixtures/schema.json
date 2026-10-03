@@ -276,7 +276,7 @@
       "section": "input",
       "group": "Pointer",
       "title": "Pointer mode",
-      "help": "Absolute puts the target's cursor exactly where you click and is the right choice almost always. Relative is for software that captures the pointer, such as games and 3D viewers.",
+      "help": "Absolute puts the target's cursor exactly where you click and is the right choice almost always. Relative is for software that captures the pointer, such as games and 3D viewers, and for SteamOS in game mode, where the absolute one does not move. In relative mode the console hides your own cursor while in control, so the target's is the only one; Esc gives it back.",
       "type": "enum",
       "choices": [
         "absolute",
@@ -599,6 +599,16 @@
       "maxLength": 17,
       "default": "",
       "requires": "wol"
+    },
+    {
+      "key": "cec_enable",
+      "section": "power",
+      "group": "HDMI-CEC",
+      "title": "HDMI-CEC",
+      "help": "Talk to the target over the HDMI cable's CEC line: see what is connected, put it to sleep, wake it and send remote-control keys. Works with TV boxes, consoles, a Raspberry Pi; most PCs do not speak CEC.",
+      "type": "bool",
+      "default": 1,
+      "requires": "cec"
     },
     {
       "key": "atx_enable",

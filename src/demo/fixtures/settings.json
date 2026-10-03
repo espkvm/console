@@ -118,5 +118,6 @@
   "notify_tg_token": "",
   "mqtt_pass": "",
   "wg_private_key": "",
-  "ts_auth_key": ""
+  "ts_auth_key": "",
+  "cec_enable": true
 }

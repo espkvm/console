@@ -149,15 +149,17 @@ export function useInput(opts: InputOptions) {
 
     const onMove = (e: PointerEvent) => {
       if (!tracking()) return;
+      /* Relative needs no position - and with the pointer locked there is
+         none, the browser keeps it pinned where the lock began. */
+      if (relative() && opts.engaged.value) {
+        control.mouseRelative(buttonsOf(e), e.movementX || 0, e.movementY || 0);
+        return;
+      }
       const p = mapToTarget(e);
       if (!p) return;
       lastPos.x = p.x;
       lastPos.y = p.y;
-      if (relative() && opts.engaged.value) {
-        control.mouseRelative(buttonsOf(e), e.movementX || 0, e.movementY || 0);
-      } else {
-        control.mouseAbsolute(buttonsOf(e), p.x, p.y);
-      }
+      control.mouseAbsolute(buttonsOf(e), p.x, p.y);
     };
 
     /*
@@ -170,8 +172,14 @@ export function useInput(opts: InputOptions) {
       const b = buttonsOf(e);
       if (!opts.engaged.value && !(buttonsHeld && b === 0)) return;
       buttonsHeld = b;
-      const p = mapToTarget(e) ?? lastPos;
       e.preventDefault();
+      /* A click in relative mode is a click where the target's cursor already
+         is; an absolute report would first jump it to the browser's spot. */
+      if (relative()) {
+        control.mouseRelative(b, 0, 0);
+        return;
+      }
+      const p = mapToTarget(e) ?? lastPos;
       control.mouseAbsolute(b, p.x, p.y);
     };
 
@@ -183,7 +191,8 @@ export function useInput(opts: InputOptions) {
     const onCancel = () => {
       if (!buttonsHeld) return;
       buttonsHeld = 0;
-      control.mouseAbsolute(0, lastPos.x, lastPos.y);
+      if (relative()) control.mouseRelative(0, 0, 0);
+      else control.mouseAbsolute(0, lastPos.x, lastPos.y);
     };
 
     const onWheel = (e: WheelEvent) => {
@@ -191,6 +200,10 @@ export function useInput(opts: InputOptions) {
       e.preventDefault();
       const clicks = Math.round(-e.deltaY / 100) * (opts.invertScroll.value ? -1 : 1);
       if (clicks === 0) return;
+      if (relative()) {
+        control.mouseRelative(0, 0, 0, clicks);
+        return;
+      }
       const p = mapToTarget(e) ?? lastPos;
       control.mouseAbsolute(0, p.x, p.y, clicks);
     };
@@ -220,6 +233,45 @@ export function useInput(opts: InputOptions) {
       document.removeEventListener("pointerup", onButton);
       document.removeEventListener("pointercancel", onCancel);
       document.removeEventListener("visibilitychange", onHidden);
+    });
+  });
+
+  /*
+   * Pointer lock, in relative mode. The target accelerates the movements it is
+   * sent and keeps its own cursor, so two cursors on the page never agree. With
+   * the pointer locked the browser hides its own and sends movements only: the
+   * one cursor left is the target's, in the picture. Esc ends the lock, and
+   * losing the lock any other way hands control back too.
+   */
+  watchEffect((onCleanup) => {
+    const el = opts.surface.value;
+    if (!el || !opts.engaged.value || opts.pointerMode.value !== "relative") return;
+    if (opts.touchActive?.value || !el.requestPointerLock) return;
+
+    let locked = false;
+    const onChange = () => {
+      if (document.pointerLockElement === el) {
+        locked = true;
+      } else if (locked) {
+        locked = false;
+        releaseEverything();
+        opts.onDisengage();
+      }
+    };
+    document.addEventListener("pointerlockchange", onChange);
+    try {
+      /* Chrome returns a promise, and refuses it without a recent click. */
+      const r = el.requestPointerLock() as unknown as Promise<void> | undefined;
+      r?.catch?.(() => {
+        /* refused: relative still works, with the browser's cursor shown */
+      });
+    } catch {
+      /* not allowed here; the same */
+    }
+
+    onCleanup(() => {
+      document.removeEventListener("pointerlockchange", onChange);
+      if (document.pointerLockElement === el) document.exitPointerLock();
     });
   });
 

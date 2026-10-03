@@ -620,6 +620,71 @@ export async function wakeTarget(): Promise<void> {
   if (!res.ok) throw new Error(await errorFromResponse(res, `wake failed (${res.status})`));
 }
 
+/** A device on the HDMI-CEC line, as the device last heard it. */
+export interface CecDevice {
+  la: number;
+  name: string;
+  type: string;
+  physAddr?: string;
+  vendor?: string;
+  power: string;
+  version?: string;
+  seenMs: number;
+}
+
+export interface CecLogEntry {
+  ms: number;
+  dir: "tx" | "rx";
+  hex: string;
+  result?: string;
+}
+
+export interface CecStatus {
+  available: boolean;
+  running: boolean;
+  ownAddr: number;
+  active: number;
+  /** Where an action without an address goes; -1 when nobody is there. */
+  target: number;
+  devices: CecDevice[];
+  log: CecLogEntry[];
+}
+
+export async function getCec(): Promise<CecStatus> {
+  return getJson<CecStatus>("/api/v1/cec");
+}
+
+async function cecPost(path: string, body: unknown): Promise<Response> {
+  const res = await fetch(`/api/v1/cec/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...CONSOLE_HEADER },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(await errorFromResponse(res, `HDMI-CEC ${path} failed (${res.status})`));
+  return res;
+}
+
+/** Press and release one remote key ("up", "select", "play", ...) on a CEC device. */
+export async function cecKey(key: string, la?: number): Promise<void> {
+  await cecPost("key", la === undefined ? { key } : { key, la });
+}
+
+/** Put a CEC device to sleep, or ask it to wake. Without `la`, the active source. */
+export async function cecPower(action: "standby" | "wake", la?: number): Promise<void> {
+  await cecPost("power", la === undefined ? { action } : { action, la });
+}
+
+export async function cecScan(): Promise<void> {
+  await cecPost("scan", {});
+}
+
+/** One raw frame, e.g. "04 8f"; answers how the line took it ("ok", "nack", ...). */
+export async function cecSend(hex: string): Promise<string> {
+  const res = await cecPost("send", { hex });
+  return ((await res.json()) as { tx: string }).tx;
+}
+
 /**
  * ATX power actions: "press" the target's front-panel buttons through the
  * device's optocouplers. Each returns as soon as the press is queued; the
