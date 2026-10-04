@@ -10,6 +10,7 @@
  *     0x05 release all
  *     0x06 ping
  *     0x07 take control
+ *     0x08 gamepad     buttons:u16, hat:u8 (8 none), lx, ly, rx, ry:u8 (128 centre)
  *   device -> client
  *     0x81 status      flags:u8 (bit0 target attached, bit1 bus alive), leds:u8
  *     0x82 pong
@@ -28,6 +29,7 @@ const MSG_CONSUMER = 0x04;
 const MSG_RELEASE_ALL = 0x05;
 const MSG_PING = 0x06;
 const MSG_TAKEOVER = 0x07;
+const MSG_PAD = 0x08;
 const MSG_STATUS = 0x81;
 const MSG_CONTROL = 0x83;
 const MSG_UPDATE = 0x84;
@@ -223,6 +225,20 @@ export class Control {
     const dv = new DataView(b.buffer);
     dv.setUint8(0, MSG_CONSUMER);
     dv.setUint16(1, usage, true);
+    this.#send(b);
+  }
+
+  /** The whole gamepad state; see input/gamepad.ts. Only sent when it changes. */
+  pad(buttons: number, hat: number, lx: number, ly: number, rx: number, ry: number) {
+    const b = new Uint8Array(8);
+    const dv = new DataView(b.buffer);
+    dv.setUint8(0, MSG_PAD);
+    dv.setUint16(1, buttons & 0x3fff, true);
+    dv.setUint8(3, hat >= 0 && hat <= 7 ? hat : 8);
+    dv.setUint8(4, clamp(lx, 0, 255));
+    dv.setUint8(5, clamp(ly, 0, 255));
+    dv.setUint8(6, clamp(rx, 0, 255));
+    dv.setUint8(7, clamp(ry, 0, 255));
     this.#send(b);
   }
 

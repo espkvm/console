@@ -66,5 +66,6 @@
   "jiggler": {
     "everyS": 0,
     "nudges": 0
-  }
+  },
+  "usbPad": "switch"
 }

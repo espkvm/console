@@ -23,6 +23,7 @@ import OsWidget from "./components/OsWidget.vue";
 import MediaPanel from "./components/MediaPanel.vue";
 import PowerWidget from "./components/PowerWidget.vue";
 import RemotePanel from "./components/RemotePanel.vue";
+import GamepadPanel from "./components/GamepadPanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import VideoWidget from "./components/VideoWidget.vue";
 import ToastHost from "./components/ToastHost.vue";
@@ -580,6 +581,23 @@ watch(remoteOpen, (open) => {
     /* a private window; it just will not be remembered */
   }
 });
+/* The gamepad window, offered only while the device really shows a pad over USB
+   (Settings -> Input -> Gamepad, from the next restart). */
+const gamepadOpen = ref(localStorage.getItem("espkvm.gp") === "1");
+watch(gamepadOpen, (open) => {
+  try {
+    localStorage.setItem("espkvm.gp", open ? "1" : "0");
+  } catch {
+    /* a private window; it just will not be remembered */
+  }
+});
+const usbPad = computed(() => !!system.value?.usbPad);
+const moreOpen = ref(false);
+/* The gamepad drawn over the picture: the engage prompt would sit on its
+   controls, and a press on the pad takes control anyway. */
+const padLook = ref<"window" | "overlay">("window");
+const padOverlay = computed(() => gamepadOpen.value && !!system.value?.usbPad && padLook.value === "overlay");
+
 /* Touch trackpad speed, driven by the same "Relative sensitivity" slider as the
    desktop relative pointer. A finger crosses a small phone screen but has to
    move the cursor across a large target, so 100% maps to a healthy 4x base (the
@@ -1876,7 +1894,9 @@ const LED_BITS: Array<[number, string]> = [
           />
 
           <button
-            v-if="!engaged && (!paused || textView) && !touchMode && !heldByOther && !selectingText"
+            v-if="
+              !engaged && (!paused || textView) && !touchMode && !heldByOther && !selectingText && !padOverlay
+            "
             type="button"
             :class="['screen-engage', { 'screen-engage-nudge': engageNudge }]"
             @pointerdown="onEngage($event)"
@@ -1980,6 +2000,13 @@ const LED_BITS: Array<[number, string]> = [
       v-if="remoteOpen && cecSource"
       :caps="caps"
       @close="remoteOpen = false"
+    />
+    <GamepadPanel
+      v-if="gamepadOpen && system?.usbPad"
+      :control="input.control"
+      :kind="system.usbPad"
+      @look="padLook = $event"
+      @close="gamepadOpen = false"
     />
 
     <footer class="actionbar">
@@ -2163,6 +2190,18 @@ const LED_BITS: Array<[number, string]> = [
         >
           <Icon name="remote" :size="15" />
         </button>
+        <!-- Only while the device shows a gamepad over USB. -->
+        <button
+          v-if="usbPad"
+          type="button"
+          class="btn btn-sm btn-icon"
+          :class="{ 'btn-on': gamepadOpen }"
+          aria-label="Gamepad"
+          :title="gamepadOpen ? 'Hide the gamepad' : 'A gamepad for a console (Switch, Steam Deck)'"
+          @click="gamepadOpen = !gamepadOpen"
+        >
+          <Icon name="gamepad" :size="15" />
+        </button>
         <button
           type="button"
           class="btn btn-sm btn-icon"
@@ -2190,6 +2229,20 @@ const LED_BITS: Array<[number, string]> = [
         >
           <Icon :name="paused ? 'play' : 'pause'" :size="15" />
         </button>
+        <!-- On a narrow screen the less used controls fold into this menu; on a
+             wide one the menu is the bar itself (display: contents). -->
+        <button
+          type="button"
+          :class="['btn', 'btn-sm', 'btn-icon', 'ab-more-btn', { 'btn-on': moreOpen, 'rec-on': record?.on }]"
+          aria-label="More controls"
+          :aria-expanded="moreOpen"
+          title="More"
+          @click="moreOpen = !moreOpen"
+        >
+          <Icon name="more" :size="15" />
+        </button>
+        <div v-if="moreOpen" class="ab-more-backdrop" @click="moreOpen = false" />
+        <div :class="['ab-more', { 'ab-more-open': moreOpen }]" @click="moreOpen = false">
         <!-- Absent on firmware with no recorder. -->
         <button
           v-if="status && status.screenshotBlocked !== undefined"
@@ -2294,6 +2347,7 @@ const LED_BITS: Array<[number, string]> = [
         >
           All keys
         </button>
+        </div>
         <button
           type="button"
           class="btn btn-sm btn-icon"

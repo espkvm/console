@@ -254,6 +254,54 @@
   gap: var(--space-2);
 }
 
+/* The overflow menu: the bar itself when there is room. */
+.ab-more {
+  display: contents;
+}
+
+.ab-more-btn,
+.ab-more-backdrop {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .actionbar {
+    position: relative;
+  }
+
+  .ab-more-btn {
+    display: inline-flex;
+  }
+
+  .ab-more-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 59;
+  }
+
+  .ab-more {
+    display: none;
+    position: absolute;
+    right: max(var(--space-3), env(safe-area-inset-right, 0px));
+    bottom: calc(100% + 6px);
+    z-index: 60;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    max-width: calc(100vw - 2 * var(--space-3));
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-raised);
+    box-shadow: var(--shadow, 0 8px 24px rgba(0, 0, 0, 0.4));
+  }
+
+  .ab-more.ab-more-open {
+    display: flex;
+  }
+}
+
 /* The keyboard-LED indicators are the least essential thing in the bar; drop
    them first on a narrow screen so the controls fit on one row. */
 @media (max-width: 640px) {

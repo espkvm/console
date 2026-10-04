@@ -188,6 +188,13 @@ async function switchSlot(slot: OtaSlot) {
 
 /** The badge carries the version and nothing else - the install has the screen. */
 const badgeText = computed(() => props.system?.version ?? "");
+/* A local build carries a git-describe tail ("-12-gabc123-dirty") that does
+   not fit a phone's top bar; there the badge shows the release part only. */
+const badgeShort = computed(() => {
+  const v = badgeText.value;
+  const i = v.indexOf("-");
+  return i > 0 ? `${v.slice(0, i)}\u2026` : v;
+});
 
 /** One line for the badge tooltip and the button label while an install runs. */
 const statusText = computed(() => {
@@ -514,12 +521,13 @@ onUnmounted(stopInstallPoll);
       type="button"
       class="uw-badge"
       :style="ringStyle"
-      :title="uploading ? statusText : updateAvailable ? 'Update available' : 'Firmware'"
+      :title="uploading ? statusText : `${system.version}${updateAvailable ? ' - update available' : ''}`"
       :aria-label="`Firmware ${system.version}${updateAvailable ? ', update available' : ''}`"
       @click="open = !open"
     >
       <span class="uw-inner mono">
-        {{ badgeText }}
+        <span class="uw-ver uw-ver-full">{{ badgeText }}</span>
+        <span class="uw-ver uw-ver-short">{{ badgeShort }}</span>
         <span v-if="updateAvailable && !uploading" class="uw-dot" aria-hidden="true" />
       </span>
     </button>
@@ -811,6 +819,30 @@ onUnmounted(stopInstallPoll);
   color: var(--text);
   font-size: var(--text-sm);
   line-height: 1.4;
+}
+
+/* One line, never wrapped: a long local build name used to stand the badge on
+   end. Whatever still does not fit is cut with an ellipsis. */
+.uw-ver {
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40vw;
+}
+
+.uw-ver-short {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .uw-ver-full {
+    display: none;
+  }
+
+  .uw-ver-short {
+    display: inline-block;
+  }
 }
 
 /* The OTA slot list: one row per app slot, its version and state, and the button

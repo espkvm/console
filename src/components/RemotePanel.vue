@@ -21,6 +21,7 @@ import {
   type CecStatus,
 } from "../state/device";
 import { toast } from "../state/toasts";
+import { useFloating } from "../ui/floating";
 import Icon from "./Icon.vue";
 
 const props = defineProps<{ caps: Record<string, Capability> }>();
@@ -60,53 +61,16 @@ onUnmounted(() => {
   if (timer !== null) clearInterval(timer);
 });
 
-/* Where it floats, kept between visits like the keyboard's. A phone starts it
-   low on the screen, clear of the top of the picture. */
-const remembered = (key: string, fallback: number) => {
-  try {
-    const v = Number(localStorage.getItem(key));
-    return localStorage.getItem(key) !== null && Number.isFinite(v) ? v : fallback;
-  } catch {
-    return fallback;
-  }
-};
-const WIDTH = 248;
-const pos = ref({
-  x: remembered("espkvm.rc.x", Math.max(8, window.innerWidth - WIDTH - 24)),
-  y: remembered("espkvm.rc.y", window.innerWidth < 700 ? Math.max(8, window.innerHeight - 560) : 80),
+/* Where it floats, kept between visits and kept on the screen. A phone starts
+   it low, clear of the top of the picture. */
+const { pos, dragStart, dragMove, dragEnd } = useFloating({
+  key: "espkvm.rc",
+  el: popup,
+  initial: () => ({
+    x: Math.max(8, window.innerWidth - 248 - 24),
+    y: window.innerWidth < 700 ? Math.max(8, window.innerHeight - 560) : 80,
+  }),
 });
-/* A window resized smaller since: pull it back where it can be grabbed. */
-function clamp(x: number, y: number) {
-  return {
-    x: Math.min(Math.max(x, 8 - WIDTH + 80), window.innerWidth - 80),
-    y: Math.min(Math.max(y, 8), window.innerHeight - 48),
-  };
-}
-pos.value = clamp(pos.value.x, pos.value.y);
-
-let dragFrom: { x: number; y: number; px: number; py: number } | null = null;
-
-function dragStart(e: PointerEvent) {
-  if ((e.target as HTMLElement).closest("button, select")) return;
-  dragFrom = { x: e.clientX, y: e.clientY, px: pos.value.x, py: pos.value.y };
-  (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-}
-
-function dragMove(e: PointerEvent) {
-  if (!dragFrom) return;
-  pos.value = clamp(dragFrom.px + (e.clientX - dragFrom.x), dragFrom.py + (e.clientY - dragFrom.y));
-}
-
-function dragEnd() {
-  if (!dragFrom) return;
-  dragFrom = null;
-  try {
-    localStorage.setItem("espkvm.rc.x", String(Math.round(pos.value.x)));
-    localStorage.setItem("espkvm.rc.y", String(Math.round(pos.value.y)));
-  } catch {
-    /* not remembered, no harm */
-  }
-}
 
 async function key(name: string) {
   try {

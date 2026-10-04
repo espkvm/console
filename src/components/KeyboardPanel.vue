@@ -13,7 +13,7 @@
  * Modifiers latch rather than needing two hands: one press arms a modifier for
  * the next key, a second press locks it until pressed again.
  */
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 
 import {
   HID_MOD_LALT,
@@ -25,6 +25,7 @@ import {
   usageForCode,
 } from "../input/keymap";
 import type { Control } from "../input/control";
+import { useFloating } from "../ui/floating";
 import Icon from "./Icon.vue";
 
 const props = defineProps<{ control: Control; leds: number }>();
@@ -63,10 +64,15 @@ const compact = ref(
 /* The ready-made combinations are a strip of their own, and on a small screen
    a whole row of the keyboard's height. They stay folded until asked for. */
 const combosOpen = ref(remembered("espkvm.osk.combos", "0") === "1");
-const pos = ref({
-  x: Number(remembered("espkvm.osk.x", "24")),
-  y: Number(remembered("espkvm.osk.y", "80")),
+const panel = ref<HTMLElement | null>(null);
+/* Floating, it is dragged by its header and kept whole on the screen. */
+const { pos, dragStart, dragMove, dragEnd, fit } = useFloating({
+  key: "espkvm.osk",
+  el: panel,
+  initial: () => ({ x: 24, y: 80 }),
+  active: () => floating.value,
 });
+watch(floating, () => void nextTick(fit));
 watch([floating, compact, skin, combosOpen], () => {
   try {
     localStorage.setItem("espkvm.osk.floating", floating.value ? "1" : "0");
@@ -77,37 +83,6 @@ watch([floating, compact, skin, combosOpen], () => {
     /* a private window; it just will not be remembered */
   }
 });
-
-/* Dragging the floating one by its header. */
-let dragFrom: { x: number; y: number; px: number; py: number } | null = null;
-
-function dragStart(e: PointerEvent) {
-  if (!floating.value) return;
-  dragFrom = { x: e.clientX, y: e.clientY, px: pos.value.x, py: pos.value.y };
-  (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-}
-
-function dragMove(e: PointerEvent) {
-  if (!dragFrom) return;
-  const x = dragFrom.px + (e.clientX - dragFrom.x);
-  const y = dragFrom.py + (e.clientY - dragFrom.y);
-  /* Never off the screen: a window that cannot be grabbed again is a trap. */
-  pos.value = {
-    x: Math.min(Math.max(x, 8 - window.innerWidth * 0.6), window.innerWidth - 120),
-    y: Math.min(Math.max(y, 8), window.innerHeight - 60),
-  };
-}
-
-function dragEnd() {
-  if (!dragFrom) return;
-  dragFrom = null;
-  try {
-    localStorage.setItem("espkvm.osk.x", String(Math.round(pos.value.x)));
-    localStorage.setItem("espkvm.osk.y", String(Math.round(pos.value.y)));
-  } catch {
-    /* not remembered, no harm */
-  }
-}
 
 interface Key {
   /** KeyboardEvent.code, which the keymap turns into a HID usage. */
@@ -514,6 +489,7 @@ function state(key: Key): Record<string, boolean> {
 <template>
   <Teleport to="body" :disabled="!floating">
     <section
+      ref="panel"
       :class="['vk', `vk-skin-${skin}`, { 'vk-floating': floating }]"
       :style="floating ? { left: pos.x + 'px', top: pos.y + 'px' } : undefined"
       aria-label="On-screen keyboard"

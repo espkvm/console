@@ -22,6 +22,14 @@ const PATHS = {
     "M12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z",
   ],
   power: ["M12 3v9", "M18.4 6.6a9 9 0 1 1-12.8 0"],
+  /* Three dots in a row: more of something. */
+  more: ["M5 12h.01", "M12 12h.01", "M19 12h.01"],
+  /* A game controller: the body, a cross on the left, two buttons on the right. */
+  gamepad: [
+    "M7 7h10a5 5 0 0 1 4.9 6l-.8 4a2.5 2.5 0 0 1-4.3 1.2L14.5 16h-5l-2.3 2.2a2.5 2.5 0 0 1-4.3-1.2l-.8-4A5 5 0 0 1 7 7z",
+    "M8 10v4M6 12h4",
+    "M15.5 11h.01M17.5 13h.01",
+  ],
   remote: [
     "M9 2h6a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z",
     "M12 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
