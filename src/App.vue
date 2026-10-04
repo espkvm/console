@@ -839,10 +839,28 @@ type Conn = {
 };
 
 /* The network pill reflects the active link (Ethernet / WiFi station / hotspot),
-   so its icon and label follow system.net.mode. */
+   so its icon and label follow system.net.mode - and in "auto", whichever link
+   carries traffic right now. */
 function netPill(): Conn {
   const net = system.value?.net;
   const mode = net?.mode ?? "ethernet";
+  if (mode === "auto") {
+    if (net?.active === "wifi") {
+      return {
+        id: "wifi",
+        title: `WiFi - ${net?.ssid || "connected"}, standing in for the cable`,
+        state: "on",
+      };
+    }
+    const backup = net?.wifiUp ? "WiFi ready as the backup" : "WiFi backup not connected";
+    return {
+      id: "ethernet",
+      title: net?.up
+        ? `Ethernet - link up${net?.mbps ? ` (${net.mbps} Mbps)` : ""}; ${backup}`
+        : `Ethernet - link down; ${backup}`,
+      state: net?.up ? "on" : "off",
+    };
+  }
   if (mode === "wifi") {
     const rssi = net?.rssi ? ` (${net.rssi} dBm)` : "";
     return {
@@ -872,18 +890,15 @@ function netPill(): Conn {
 
 /* Switch the active link. net_mode is reboot-flagged, so this saves it and
    restarts; the device may come back on a different address. */
-async function switchNet(mode: "ethernet" | "wifi" | "ap") {
+async function switchNet(mode: "ethernet" | "wifi" | "ap" | "auto") {
   connDetail.value = null;
   if (mode === system.value?.net?.mode) return;
-  if (
-    !confirm(
-      `Switch the connection to ${mode === "ap" ? "hotspot" : mode}? The device restarts and may change address.`,
-    )
-  )
+  const name = { ethernet: "Ethernet", wifi: "WiFi", ap: "the hotspot", auto: "Ethernet with WiFi as the backup" }[mode];
+  if (!confirm(`Switch the connection to ${name}? The device restarts and may change address.`))
     return;
   try {
-    await saveSettings({ net_mode: { ethernet: 0, wifi: 1, ap: 2 }[mode] });
-    const label = mode === "ap" ? "Switching to the hotspot" : `Switching to ${mode}`;
+    await saveSettings({ net_mode: { ethernet: 0, wifi: 1, ap: 2, auto: 3 }[mode] });
+    const label = `Switching to ${name}`;
     /* A new network usually means a new address. By name it can still be found,
        unless the page is already open by name. */
     const host = system.value?.net?.hostname;
@@ -944,6 +959,13 @@ async function installCoproc() {
     toast.error(`Wi-Fi chip update: ${(e as Error).message}`);
   }
 }
+
+/* "auto" needs both links, so a board with no wired port does not offer it. */
+const netModes = computed(() =>
+  system.value?.net?.hasEth
+    ? (["ethernet", "wifi", "ap", "auto"] as const)
+    : (["ethernet", "wifi", "ap"] as const),
+);
 
 /* The network pill's popup is the whole network panel rather than a plain
    tooltip: how the device is connected, and every address it can be reached on. */
@@ -1009,6 +1031,14 @@ const netAddrs = computed<Addr[]>(() => {
   }
   if (net?.ip4) {
     rows.push({ label: "IPv4", value: net.ip4, note: "", url: addrUrl(net.ip4) });
+  }
+  if (net?.ip4Backup) {
+    rows.push({
+      label: "IPv4",
+      value: net.ip4Backup,
+      note: "WiFi backup",
+      url: addrUrl(net.ip4Backup),
+    });
   }
   for (const addr of net?.ipv6 ?? []) {
     const a = addr.toLowerCase();
@@ -2006,15 +2036,18 @@ const LED_BITS: Array<[number, string]> = [
                 <template v-if="caps.wifi?.available">
                   <span class="conn-switch-title">Connection</span>
                   <button
-                    v-for="m in (['ethernet', 'wifi', 'ap'] as const)"
+                    v-for="m in netModes"
                     :key="m"
                     type="button"
                     class="conn-switch-btn"
                     :class="{ 'conn-switch-active': (system?.net?.mode ?? 'ethernet') === m }"
+                    :title="m === 'auto' ? 'Ethernet, and WiFi when the cable is out' : undefined"
                     @click="switchNet(m)"
                   >
-                    <Icon :name="m" :size="15" />
-                    {{ m === "ethernet" ? "Ethernet" : m === "wifi" ? "WiFi" : "Hotspot" }}
+                    <Icon :name="m === 'auto' ? 'ethernet' : m" :size="15" />
+                    {{
+                      m === "ethernet" ? "Ethernet" : m === "wifi" ? "WiFi" : m === "ap" ? "Hotspot" : "Auto"
+                    }}
                   </button>
                 </template>
 

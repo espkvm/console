@@ -239,7 +239,11 @@ export interface SystemInfo {
   net?: {
     up: boolean;
     mbps: number;
-    mode?: "ethernet" | "wifi" | "ap";
+    mode?: "ethernet" | "wifi" | "ap" | "auto";
+    /** The link carrying traffic now; differs from `mode` only in "auto". */
+    active?: "ethernet" | "wifi" | "ap";
+    /** The board has a wired port, so "auto" can be offered. */
+    hasEth?: boolean;
     wifiUp?: boolean;
     rssi?: number;
     ssid?: string;
@@ -248,6 +252,8 @@ export interface SystemInfo {
     hostname?: string;
     /** The active link's IPv4 address, "" on a network without one. */
     ip4?: string;
+    /** In "auto", the standby WiFi station's address while Ethernet carries traffic. */
+    ip4Backup?: string;
     /** The active link's MAC - what a DHCP reservation is keyed on. */
     mac?: string;
     /**

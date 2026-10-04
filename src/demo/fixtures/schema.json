@@ -789,12 +789,13 @@
       "section": "network",
       "group": "WiFi",
       "title": "Connection",
-      "help": "The device uses one link at a time. \"ethernet\": the wired port. \"wifi\": join the network below (Ethernet is left down). \"ap\": the device makes its own WiFi hotspot for setup where there is no network to join. If WiFi is unreachable: reset the board, then hold the button for two seconds - that returns it to Ethernet, and clears the password too. Hold it AFTER the reset, not through it.",
+      "help": "\"ethernet\": the wired port. \"wifi\": join the network below (Ethernet is left down). \"ap\": the device makes its own WiFi hotspot for setup where there is no network to join. \"auto\": the wired port, with the WiFi network below joined and waiting - when the cable is pulled the device moves to WiFi, and back when the cable returns. It answers on both addresses. If WiFi is unreachable: reset the board, then hold the button for two seconds - that returns it to Ethernet, and clears the password too. Hold it AFTER the reset, not through it.",
       "type": "enum",
       "choices": [
         "ethernet",
         "wifi",
-        "ap"
+        "ap",
+        "auto"
       ],
       "default": 0,
       "requires": "wifi",
