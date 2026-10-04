@@ -21,7 +21,7 @@ const FRAME_H = 720;
 type Stage = "off" | "post" | "stuck" | "boot" | "shell" | "desktop" | "crash";
 /* Which image is in the drive decides what boots. Three of them, because a demo
    that only ever shows one thing is a screenshot with extra steps. */
-export type Guest = "none" | "halfos" | "xp" | "memtest" | "mac";
+export type Guest = "none" | "halfos" | "xp" | "memtest" | "mac" | "box";
 
 /* What is in the drive, and what actually booted - two different things. A disc
    swapped while the machine runs changes nothing until it restarts. */
@@ -66,6 +66,10 @@ const now = () => performance.now();
 function go(next: Stage, spent?: number) {
   stage = next;
   since = spent === undefined ? now() : since + spent;
+  /* A box that boots again starts on its home screen, awake. */
+  if (next === "desktop" && guest === "box") {
+    Object.assign(box, { row: 0, col: 0, view: "home", asleep: false });
+  }
   if (next === "shell") {
     shell = [
       "HalfOS Life 3.0 - the one that exists",
@@ -110,6 +114,11 @@ const BOOT: Record<Exclude<Guest, "none">, Array<[number, string]>> = {
   mac: [
     [0, "Booting from ESP-KVM virtual media..."],
     [700, "EFI: loading boot.efi"],
+  ],
+  box: [
+    [0, "Booting from ESP-KVM virtual media..."],
+    [700, "VaporOS 3.7, living-room edition"],
+    [1500, "Starting the big-screen interface..."],
   ],
 };
 
@@ -170,6 +179,15 @@ const CRASH: Record<Exclude<Guest, "none">, { bg: string; lines: string[] }> = {
       "",
       "  panic(cpu 0 caller 0xfruit): \"the fruit was not ripe\"",
       "  Backtrace: 0xdeadbeef 0xfeedface 0xba5eba11",
+    ],
+  },
+  box: {
+    bg: "#14101f",
+    lines: [
+      "",
+      "  VaporOS ran out of steam.",
+      "",
+      "  The box will restart by itself. It will not, actually - press Reset.",
     ],
   },
   memtest: {
@@ -268,7 +286,7 @@ function tick() {
       go(mediaMounted ? "boot" : "stuck", POST_MS);
     } else if (stage === "boot" && t > BOOT_MS) {
       /* Two of them are pictures from here on; the other two land on a screen. */
-      go(guest === "xp" || guest === "mac" ? "desktop" : "shell", BOOT_MS);
+      go(guest === "xp" || guest === "mac" || guest === "box" ? "desktop" : "shell", BOOT_MS);
     } else if (stage === "stuck" && !touched && t > STUCK_AUTO_MS) {
       /* Nobody chose an image, so the demo chooses one. Through the drive, not
          around it: the console sees the same insertion a visitor would make. */
@@ -342,7 +360,9 @@ function guestFor(name: string): Guest {
         ? "xp"
         : n.includes("pear") || n.includes("mac")
           ? "mac"
-          : "halfos";
+          : n.includes("vapor")
+            ? "box"
+            : "halfos";
 }
 
 /** What the target would see: the chosen image, but only while virtual media is
@@ -464,6 +484,12 @@ export function demoKeys(mod: number, usages: number[]) {
   if (stage === "desktop" && guest === "halfos") {
     return launcherKeys(mod, fresh);
   }
+  if (stage === "desktop" && guest === "box") {
+    /* A keyboard on the box's USB walks the same menus as the remote. */
+    const KEY: Record<number, string> = { 0x4f: "right", 0x50: "left", 0x51: "down", 0x52: "up", 0x28: "select", 0x29: "back", 0x2a: "back", 0x4a: "home" };
+    for (const u of fresh) if (KEY[u]) boxKey(KEY[u], "keyboard");
+    return;
+  }
   if (stage !== "shell") return;
   const shift = (mod & 0x22) !== 0;
   for (const u of fresh) {
@@ -555,7 +581,7 @@ export function demoAsk(): "media" | "select" | null {
 }
 
 /** What the screen is: nothing at all, characters, or one of the pictures. */
-export function demoScene(): "off" | "text" | "particles" | "hills" | "mac" {
+export function demoScene(): "off" | "text" | "particles" | "hills" | "mac" | "box" {
   tick();
   /* A machine with no power has no picture. Saying so matters: without it the
      drawing fell through to the constellation, so a target that had just been
@@ -563,6 +589,7 @@ export function demoScene(): "off" | "text" | "particles" | "hills" | "mac" {
      a machine that is already off, looked broken. Reported by DaveDavenport. */
   if (stage === "off") return "off";
   if (stage === "desktop") {
+    if (guest === "box") return box.asleep ? "off" : "box";
     return guest === "xp" ? "hills" : guest === "mac" ? "mac" : "particles";
   }
   /* A crash is text, whatever the guest was showing a moment ago. */
@@ -588,3 +615,111 @@ export function demoMachine() {
     alert: stage === "stuck" ? "no boot device" : "",
   };
 }
+
+/*
+ * A TV box, for the HDMI-CEC remote: a living-room launcher that the remote's
+ * arrows walk, OK opens and Back leaves. Booted from vapor-box-os.iso. It is on
+ * the CEC line only while it runs, as a real box would be - so the remote
+ * button shows up when it boots and goes when it is switched off.
+ */
+export const BOX_ROWS: { title: string; tiles: string[] }[] = [
+  { title: "Continue", tiles: ["Black Sheep Rally", "Half-Light", "Pear Orchard Tycoon", "Memtest Racer"] },
+  { title: "Library", tiles: ["Crab Kart", "Moss Valley", "Night Courier", "Orbit Golf", "Tiny Rail Co.", "Deep Lantern"] },
+];
+
+export interface BoxState {
+  row: number;
+  col: number;
+  view: "home" | "game" | "playing";
+  asleep: boolean;
+  volume: number;
+  muted: boolean;
+  /** When the volume last changed, so the drawing can show its bar for a moment. */
+  volumeAt: number;
+  /** The last key and where it came from, shown briefly in a corner. */
+  lastKey: string;
+  lastFrom: "remote" | "keyboard";
+  keyAt: number;
+}
+
+const box: BoxState = {
+  row: 0,
+  col: 0,
+  view: "home",
+  asleep: false,
+  volume: 12,
+  muted: false,
+  volumeAt: -1e9,
+  lastKey: "",
+  lastFrom: "remote",
+  keyAt: -1e9,
+};
+
+function boxKey(key: string, from: "remote" | "keyboard") {
+  box.lastKey = key;
+  box.lastFrom = from;
+  box.keyAt = now();
+  if (box.asleep) return;
+  const tiles = () => BOX_ROWS[box.row].tiles.length;
+  if (key === "volume_up" || key === "volume_down") {
+    box.volume = Math.max(0, Math.min(20, box.volume + (key === "volume_up" ? 1 : -1)));
+    box.muted = false;
+    box.volumeAt = now();
+    return;
+  }
+  if (key === "mute") {
+    box.muted = !box.muted;
+    box.volumeAt = now();
+    return;
+  }
+  if (key === "home") {
+    box.view = "home";
+    return;
+  }
+  if (key === "back" || key === "exit") {
+    box.view = box.view === "playing" ? "game" : "home";
+    return;
+  }
+  if (box.view === "home") {
+    if (key === "left") box.col = Math.max(0, box.col - 1);
+    if (key === "right") box.col = Math.min(tiles() - 1, box.col + 1);
+    if (key === "up" || key === "down") {
+      box.row = Math.max(0, Math.min(BOX_ROWS.length - 1, box.row + (key === "up" ? -1 : 1)));
+      box.col = Math.min(box.col, tiles() - 1);
+    }
+    if (key === "select") box.view = "game";
+  } else if (box.view === "game") {
+    if (key === "select" || key === "play") box.view = "playing";
+  }
+}
+
+/** A remote key from the console's CEC panel. */
+export function demoCecKey(key: string) {
+  demoTouched();
+  tick();
+  if (stage === "desktop" && guest === "box") boxKey(key, "remote");
+}
+
+/** Standby and wake over CEC. Unlike the box this one imitates, it does wake. */
+export function demoCecPower(action: "standby" | "wake") {
+  demoTouched();
+  tick();
+  if (stage !== "desktop" || guest !== "box") return;
+  box.asleep = action === "standby";
+  if (!box.asleep) box.view = "home";
+}
+
+/** Whether the box answers on the CEC line, and how. */
+export function demoCecBox(): { present: boolean; power: "on" | "standby" } {
+  tick();
+  const present = stage === "desktop" && guest === "box";
+  return { present, power: box.asleep ? "standby" : "on" };
+}
+
+/** What the box is showing, for the drawing. */
+export function demoBox(): (BoxState & { ms: number; now: number; rows: typeof BOX_ROWS }) | null {
+  tick();
+  if (stage !== "desktop" || guest !== "box") return null;
+  return { ...box, ms: now() - since, now: now(), rows: BOX_ROWS };
+}
+

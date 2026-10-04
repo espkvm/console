@@ -27,6 +27,10 @@ import {
   demoMountMedia,
   demoPower,
   demoScene,
+  demoBox,
+  demoCecBox,
+  demoCecKey,
+  demoCecPower,
   demoSceneMs,
   demoScreenText,
 } from "./machine";
@@ -519,22 +523,29 @@ async function route(
           ).join(""),
         });
       case "/api/v1/cec/key": {
+        if (!demoCecBox().present) {
+          return json({ error: "no CEC device on the line to send to" }, 404);
+        }
         const { key } = (await bodyJson(init, req)) as { key?: string };
         cecLog("tx", `04 44 ${cecCode(String(key ?? ""))}`);
         cecLog("tx", "04 45");
+        demoCecKey(String(key ?? ""));
         return json({ ok: true });
       }
       case "/api/v1/cec/power": {
+        if (!demoCecBox().present) {
+          return json({ error: "no CEC device on the line to send to" }, 404);
+        }
         const { action } = (await bodyJson(init, req)) as { action?: string };
         if (action === "standby") {
           cecLog("tx", "04 36");
           cecLog("rx", "40 9d 10 00");
-          cecBox.power = "standby";
+          demoCecPower("standby");
         } else {
           cecLog("tx", "0f 86 10 00");
           cecLog("tx", "04 44 6d");
           cecLog("rx", "4f 82 10 00");
-          cecBox.power = "on";
+          demoCecPower("wake");
         }
         return json({ ok: true });
       }
@@ -718,6 +729,7 @@ export function installDemoBackend(): void {
   const w = window as unknown as {
     __espkvmDemoScreen?: unknown;
     __espkvmDemoScene?: unknown;
+    __espkvmDemoBox?: unknown;
     __espkvmDemoSceneMs?: unknown;
     __espkvmDemoCrash?: unknown;
     __espkvmDemoPower?: unknown;
@@ -726,6 +738,7 @@ export function installDemoBackend(): void {
   };
   w.__espkvmDemoScreen = demoScreenText;
   w.__espkvmDemoScene = demoScene;
+  w.__espkvmDemoBox = demoBox;
   w.__espkvmDemoSceneMs = demoSceneMs;
   /* The drawing knows where the sheep and the dock are, so it is the drawing that
      decides a click landed on one - it only has to say so. */
@@ -754,8 +767,9 @@ export function installDemoBackend(): void {
   window.WebSocket = patched as unknown as typeof WebSocket;
 }
 
-/* HDMI-CEC: one made-up TV box on the line, so the remote has something to drive. */
-const cecBox = { la: 4, name: "Living room box", type: "playback", physAddr: "1.0.0.0", vendor: "000000", power: "on", version: "1.4", seenMs: 0 };
+/* HDMI-CEC: the made-up TV box (vapor-box-os.iso) answers on the line while it
+   runs, so the remote has something to drive. */
+const cecBox = { la: 4, name: "Vapor Box", type: "playback", physAddr: "1.0.0.0", vendor: "000000", power: "on", version: "2.0", seenMs: 0 };
 const cecFrames: { ms: number; dir: "tx" | "rx"; hex: string; result?: string }[] = [];
 const CEC_CODES: Record<string, number> = {
   select: 0x00, up: 0x01, down: 0x02, left: 0x03, right: 0x04, home: 0x09, menu: 0x0a, back: 0x0d,
@@ -775,5 +789,15 @@ function cecLog(dir: "tx" | "rx", hex: string) {
 
 function cecStatus() {
   cecBox.seenMs = Math.round(performance.now());
-  return { available: true, running: true, ownAddr: 0, active: 4, target: 4, devices: [cecBox], log: cecFrames };
+  const box = demoCecBox();
+  cecBox.power = box.power;
+  return {
+    available: true,
+    running: true,
+    ownAddr: 0,
+    active: box.present ? 4 : -1,
+    target: box.present ? 4 : -1,
+    devices: box.present ? [cecBox] : [],
+    log: cecFrames,
+  };
 }

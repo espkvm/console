@@ -15,6 +15,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { textSpans } from "../screen/textSpans";
+import { drawDemoBox, type DemoBoxView } from "./demoBox";
 import { reconnectSource, type ScreenText, type VideoStatus } from "../state/device";
 import { pictureRect } from "../video/picture";
 import { VideoStream } from "../video/stream";
@@ -99,6 +100,8 @@ const demoScene = () =>
 /* How long the machine has been in this stage. The scene's own clock has to come
    from the machine: a picture that follows a text screen would otherwise inherit
    whatever the drawing loop last remembered. */
+const demoBox = () =>
+  (window as unknown as { __espkvmDemoBox?: () => DemoBoxView | null }).__espkvmDemoBox?.() ?? null;
 const demoSceneMs = () =>
   (window as unknown as { __espkvmDemoSceneMs?: () => number }).__espkvmDemoSceneMs?.() ?? 0;
 
@@ -825,6 +828,13 @@ function startDemoScreen() {
       const shepherd = driving && t - movedAt < STILL_MS ? cur : null;
       drawHills(c, W, H, t, dt, shepherd);
       if (everPointed) drawCursor(c, pointerAt.x, pointerAt.y);
+      demoRAF = requestAnimationFrame(draw);
+      return;
+    }
+    if (scene === "box") {
+      /* The TV box draws no pointer: it is driven by the remote, not a mouse. */
+      const b = demoBox();
+      if (b) drawDemoBox(c, W, H, b);
       demoRAF = requestAnimationFrame(draw);
       return;
     }
