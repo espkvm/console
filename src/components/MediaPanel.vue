@@ -230,6 +230,12 @@ const fetchName = ref("");
 const fetching = computed(() => fetchSt.value?.state === "running");
 let fetchTimer = 0;
 
+/* The device's reasons are lower-case fragments; here one starts a sentence. */
+function sentence(s: string): string {
+  const t = s.trim();
+  return t ? t[0].toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? "" : ".") : t;
+}
+
 /* The file name a link would save as: its last path part, without the query. */
 function nameFromUrl(url: string): string {
   try {
@@ -499,8 +505,7 @@ async function removeImage(name: string) {
           </template>
         </p>
         <p v-if="!storage.writable" class="setting-note setting-note-blocked">
-          {{ storage.writeReason ?? "The card is read-only on this device." }}
-          Format it FAT32 or exFAT.
+          {{ sentence(storage.writeReason ?? "The card is read-only on this device.") }}
         </p>
         <label
           v-if="storage.writable"
