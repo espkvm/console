@@ -119,5 +119,13 @@
   "mqtt_pass": "",
   "wg_private_key": "",
   "ts_auth_key": "",
-  "cec_enable": true
+  "cec_enable": true,
+  "ser_enable": true,
+  "ser_tx": 5,
+  "ser_rx": 4,
+  "ser_baud": 4,
+  "nc_enable": true,
+  "nc_port": 6666,
+  "nc_from": "192.168.1.57",
+  "nc_match": "Kernel panic,Oops,BUG:,Call Trace"
 }

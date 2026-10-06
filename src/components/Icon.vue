@@ -22,6 +22,14 @@ const PATHS = {
     "M12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z",
   ],
   power: ["M12 3v9", "M18.4 6.6a9 9 0 1 1-12.8 0"],
+  /* A terminal: a window with a prompt and a cursor. */
+  terminal: [
+    "M3.5 4.5h17a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 18V6a1.5 1.5 0 0 1 1.5-1.5z",
+    "M6 9l3 3-3 3",
+    "M12 15h5",
+  ],
+  /* A page of log lines. */
+  logs: ["M5 4.5h14v15H5z", "M8 8.5h8M8 12h8M8 15.5h5"],
   /* Three dots in a row: more of something. */
   more: ["M5 12h.01", "M12 12h.01", "M19 12h.01"],
   /* A game controller: the body, a cross on the left, two buttons on the right. */

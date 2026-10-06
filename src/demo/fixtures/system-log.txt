@@ -45,6 +45,7 @@ I (12527) video: capture board reset released on GPIO 23 (active low)
 I (12527) bridge: TC358743 found
 I (12577) tc358743: EDID profile: full mode list
 I (13027) tc358743: SYS_STATUS=0x01 (TMDS=0 HDMI=0 SYNC=0 DDC5V=1)
+W (14027) video: no HDMI signal yet - waiting for the source
 I (13747) net6: IPv6 link-local address FE80::32AE:A4FF:FE1B:9C07
 I (14997) video: HDMI ready SYS_STATUS=0x9f after 1950 ms
 I (15007) video: input 1280x720p60 (htotal 1650 vtotal 750)

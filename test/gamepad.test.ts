@@ -59,3 +59,12 @@ test("a letter key presses the button wearing that letter", () => {
   assert.equal(keyFaces("nintendo").x, "x");
   assert.equal(LABELS.xbox.south, "A");
 });
+
+test("a pad with no layout but the standard's shape is read as standard", () => {
+  const buttons = Array.from({ length: 18 }, () => btn(false));
+  buttons[0] = btn(true);
+  const s = fromGamepad({ mapping: "", buttons, axes: [0, 0, 0, 0] });
+  assert.ok(s);
+  assert.equal(s.buttons, PAD.b);
+  assert.equal(fromGamepad({ mapping: "", buttons: buttons.slice(0, 10), axes: [0, 0] }), null);
+});

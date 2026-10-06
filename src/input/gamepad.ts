@@ -75,9 +75,18 @@ type GamepadLike = {
   axes: readonly number[];
 };
 
-/** A connected controller's state in the pad's terms. Null when it has no standard layout. */
+/**
+ * Can this controller be read as the standard layout? Either the browser says
+ * so, or it gives no layout at all but has the standard's 16 buttons and four
+ * axes - a DualShock 4 in some browsers, whose buttons sit in the same order.
+ */
+export function readable(gp: GamepadLike): boolean {
+  return gp.mapping === "standard" || (gp.mapping === "" && gp.buttons.length >= 16 && gp.axes.length >= 4);
+}
+
+/** A connected controller's state in the pad's terms. Null when its layout is unknown. */
 export function fromGamepad(gp: GamepadLike): PadState | null {
-  if (gp.mapping !== "standard") return null;
+  if (!readable(gp)) return null;
   const down = (i: number) => {
     const b = gp.buttons[i];
     return !!b && (b.pressed || b.value > 0.5);

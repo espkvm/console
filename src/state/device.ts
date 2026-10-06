@@ -1167,6 +1167,45 @@ export async function loadImages(): Promise<StorageInfo> {
   return getJson<StorageInfo>("/api/v1/storage/images");
 }
 
+/** A download the device runs itself, from a URL onto the card or the rescue slot. */
+export interface FetchStatus {
+  state: "idle" | "running" | "done" | "error" | "cancelled";
+  dest?: "card" | "rescue";
+  url?: string;
+  name?: string;
+  bytes: number;
+  /** -1 when the server did not say. */
+  total: number;
+  rateBps: number;
+  message: string;
+}
+
+/** The netboot.xyz boot menu: small enough for the rescue slot. */
+export const NETBOOT_XYZ_ISO = "https://boot.netboot.xyz/ipxe/netboot.xyz.iso";
+
+export function loadFetch(): Promise<FetchStatus> {
+  return getJson<FetchStatus>("/api/v1/storage/fetch");
+}
+
+async function postFetch(path: string, body?: unknown): Promise<void> {
+  const res = await fetch(`/api/v1/storage/fetch${path}`, {
+    method: "POST",
+    headers: { ...CONSOLE_HEADER, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(await errorFromResponse(res, `the download did not start (${res.status})`));
+}
+
+/** Start a download; rejects with the device's reason (no card, too big, busy). */
+export function startFetch(url: string, dest: "card" | "rescue", name?: string): Promise<void> {
+  return postFetch("", { url, dest, ...(name ? { name } : {}) });
+}
+
+export function cancelFetch(): Promise<void> {
+  return postFetch("/cancel");
+}
+
 /* The device reads a body length as 32 bits, so a file of 4 GB and over goes
    in parts of this size, each appended at its offset. */
 const UPLOAD_MAX = 2 ** 32;

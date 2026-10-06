@@ -24,6 +24,8 @@ import MediaPanel from "./components/MediaPanel.vue";
 import PowerWidget from "./components/PowerWidget.vue";
 import RemotePanel from "./components/RemotePanel.vue";
 import GamepadPanel from "./components/GamepadPanel.vue";
+import SerialPanel from "./components/SerialPanel.vue";
+import LogPanel from "./components/LogPanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import VideoWidget from "./components/VideoWidget.vue";
 import ToastHost from "./components/ToastHost.vue";
@@ -593,6 +595,21 @@ watch(gamepadOpen, (open) => {
 });
 const usbPad = computed(() => !!system.value?.usbPad);
 const moreOpen = ref(false);
+/* The target's serial console, offered once the device has its port up. */
+const serialOpen = ref(localStorage.getItem("espkvm.ser") === "1");
+watch(serialOpen, (open) => {
+  try {
+    localStorage.setItem("espkvm.ser", open ? "1" : "0");
+  } catch {
+    /* a private window; it just will not be remembered */
+  }
+});
+const serialReady = computed(() => Boolean(caps.value.serial?.available));
+/* The device's own log, live; opened from the diagnostics popup. */
+const logOpen = ref(false);
+/* The target's log over the network (netconsole), once the receiver is on. */
+const netlogOpen = ref(false);
+const netlogReady = computed(() => Boolean(caps.value.netlog?.available));
 /* The gamepad drawn over the picture: the engage prompt would sit on its
    controls, and a press on the pad takes control anyway. */
 const padLook = ref<"window" | "overlay">("window");
@@ -1847,7 +1864,7 @@ const LED_BITS: Array<[number, string]> = [
           :attached="input.target.value.attached"
           :side="uiRight ? 'right' : 'left'"
         />
-        <DiagWidget :system="system" :side="uiRight ? 'right' : 'left'" />
+        <DiagWidget :system="system" :side="uiRight ? 'right' : 'left'" @live-log="logOpen = true" />
         <button
           type="button"
           :class="['rail-btn', { 'rail-btn-active': settingsOpen }]"
@@ -1878,6 +1895,7 @@ const LED_BITS: Array<[number, string]> = [
         <div class="stage-view">
           <ScreenView
             :status="status"
+            :serial="serialReady && !serialOpen"
             :engaged="engaged"
             :engage-mode="engageMode"
             :fit="fit"
@@ -1891,6 +1909,7 @@ const LED_BITS: Array<[number, string]> = [
                 : ''
             "
             @surface="surface = $event"
+            @open-serial="serialOpen = true"
           />
 
           <button
@@ -2001,6 +2020,9 @@ const LED_BITS: Array<[number, string]> = [
       :caps="caps"
       @close="remoteOpen = false"
     />
+    <SerialPanel v-if="serialOpen && serialReady" @close="serialOpen = false" />
+    <LogPanel v-if="logOpen" @close="logOpen = false" />
+    <LogPanel v-if="netlogOpen && netlogReady" source="netlog" @close="netlogOpen = false" />
     <GamepadPanel
       v-if="gamepadOpen && system?.usbPad"
       :control="input.control"
@@ -2012,6 +2034,18 @@ const LED_BITS: Array<[number, string]> = [
     <footer class="actionbar">
       <div class="actionbar-left">
         <span class="conns" aria-label="Connections">
+          <!-- The serial console is a line to the target like HDMI and USB, so
+               it sits with them, first. Only once the device has the port up. -->
+          <button
+            v-if="serialReady"
+            type="button"
+            :class="['conn', 'conn-on', { 'conn-open': serialOpen }]"
+            :title="serialOpen ? 'Hide the serial console' : 'The target\'s serial console'"
+            aria-label="Serial console"
+            @click="serialOpen = !serialOpen"
+          >
+            <Icon name="terminal" :size="16" />
+          </button>
           <button
             v-for="c in conns"
             :key="c.id"
@@ -2243,6 +2277,18 @@ const LED_BITS: Array<[number, string]> = [
         </button>
         <div v-if="moreOpen" class="ab-more-backdrop" @click="moreOpen = false" />
         <div :class="['ab-more', { 'ab-more-open': moreOpen }]" @click="moreOpen = false">
+        <!-- The target's log received over the network, once the receiver is on. -->
+        <button
+          v-if="netlogReady"
+          type="button"
+          class="btn btn-sm btn-icon"
+          :class="{ 'btn-on': netlogOpen }"
+          aria-label="Target log (netconsole)"
+          :title="netlogOpen ? 'Hide the target log' : 'The target\'s log, received over the network (netconsole)'"
+          @click="netlogOpen = !netlogOpen"
+        >
+          <Icon name="logs" :size="15" />
+        </button>
         <!-- Absent on firmware with no recorder. -->
         <button
           v-if="status && status.screenshotBlocked !== undefined"

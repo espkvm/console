@@ -8,21 +8,29 @@
  * Uploads go to the card where the device can write it, and to the flash rescue
  * slot on every board. Where the card is read-only (a pre-3.0 chip without the
  * slot's IO LDO) the upload is shown disabled with the device's reason.
+ *
+ * The device can also download an image itself, from a URL: netboot.xyz into
+ * the rescue slot in one click, or any link onto the card.
  */
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import {
+  cancelFetch,
   deleteImage,
   formatBytes,
   formatMhz,
   formatDuration,
+  loadFetch,
   loadImages,
+  NETBOOT_XYZ_ISO,
   saveSettings,
+  startFetch,
   uploadImage,
   uploadRescue,
   UploadCancelled,
   RESCUE_MEDIUM,
   WHOLE_SD_MEDIUM,
+  type FetchStatus,
   type StorageInfo,
   type Values,
 } from "../state/device";
@@ -214,6 +222,71 @@ async function onRescueChosen(e: Event) {
   }
 }
 
+/* A download the device runs itself. It goes on when the panel is closed, so
+   opening the panel picks up one already running. */
+const fetchSt = ref<FetchStatus | null>(null);
+const fetchUrl = ref("");
+const fetchName = ref("");
+const fetching = computed(() => fetchSt.value?.state === "running");
+let fetchTimer = 0;
+
+/* The file name a link would save as: its last path part, without the query. */
+function nameFromUrl(url: string): string {
+  try {
+    const last = new URL(url).pathname.split("/").filter(Boolean).pop() ?? "";
+    return decodeURIComponent(last).replace(/[^\w.+-]/g, "_").slice(0, 63);
+  } catch {
+    return "";
+  }
+}
+watch(fetchUrl, (url, old) => {
+  if (!fetchName.value || fetchName.value === nameFromUrl(old)) fetchName.value = nameFromUrl(url);
+});
+
+async function pollFetch() {
+  const was = fetchSt.value?.state;
+  try {
+    fetchSt.value = await loadFetch();
+  } catch {
+    return;
+  }
+  const st = fetchSt.value;
+  if (st.state === "running") {
+    window.clearTimeout(fetchTimer);
+    fetchTimer = window.setTimeout(() => void pollFetch(), 1000);
+  } else if (was === "running") {
+    if (st.state === "done") toast.info(`Downloaded ${st.dest === "rescue" ? "the rescue image" : st.name}`);
+    else if (st.state === "error") toast.error(`Download failed: ${st.message}`);
+    else if (st.state === "cancelled") toast.info("Download cancelled");
+    void refreshImages(true);
+  }
+}
+onMounted(() => void pollFetch());
+onUnmounted(() => window.clearTimeout(fetchTimer));
+
+async function beginFetch(url: string, dest: "card" | "rescue", name?: string) {
+  try {
+    await startFetch(url, dest, name);
+    if (dest === "card") fetchUrl.value = "";
+    await pollFetch();
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  }
+}
+
+async function stopFetch() {
+  try {
+    await cancelFetch();
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  }
+}
+
+const fetchPct = computed(() => {
+  const st = fetchSt.value;
+  return st && st.total > 0 ? Math.round((st.bytes / st.total) * 100) : 0;
+});
+
 async function selectImage(name: string) {
   writes++;
   try {
@@ -375,11 +448,31 @@ async function removeImage(name: string) {
         for full speed.
       </p>
 
+      <div v-if="fetching && fetchSt" class="fetch-progress">
+        <p class="setting-note upload-stats">
+          Downloading {{ fetchSt.dest === "rescue" ? "to the rescue slot" : fetchSt.name }}:
+          {{ formatBytes(fetchSt.bytes) }}<template v-if="fetchSt.total > 0">
+            of {{ formatBytes(fetchSt.total) }}</template
+          ><template v-if="fetchSt.rateBps > 0"> · {{ formatBytes(fetchSt.rateBps) }}/s</template>
+          <template v-if="fetchSt.message"> · {{ fetchSt.message }}</template>
+          <button type="button" class="btn btn-sm btn-quiet" @click="stopFetch">Cancel</button>
+        </p>
+        <progress v-if="fetchSt.total > 0" :value="fetchPct" max="100" />
+      </div>
+
       <p v-if="storage.rescue?.supported" class="setting-note">
-        Need a rescue image? A small one fits the flash slot -
+        Need a rescue image?
         <a href="https://netboot.xyz" target="_blank" rel="noreferrer">netboot.xyz</a>
-        boots a menu of rescue systems and installers over the network. Download it, then use
-        Upload above.
+        fits the flash slot and boots a menu of rescue systems and installers over the network.
+        <button
+          type="button"
+          class="btn-link"
+          :disabled="fetching || uploadingRescue"
+          @click="beginFetch(NETBOOT_XYZ_ISO, 'rescue')"
+        >
+          Download it to the rescue slot
+        </button>
+        - the device fetches it itself.
       </p>
 
       <label class="image-pick image-eject">
@@ -432,7 +525,59 @@ async function removeImage(name: string) {
           <button type="button" class="btn-link" @click="emit('pause-stream')">pause it</button>
           for full speed.
         </p>
+        <form
+          v-if="storage.writable"
+          class="fetch-form"
+          @submit.prevent="beginFetch(fetchUrl.trim(), 'card', fetchName.trim())"
+        >
+          <input
+            v-model="fetchUrl"
+            type="url"
+            required
+            placeholder="https://.../image.iso"
+            aria-label="Image URL"
+            :disabled="fetching"
+          />
+          <input
+            v-model="fetchName"
+            class="mono"
+            required
+            placeholder="name.iso"
+            aria-label="Save as"
+            :disabled="fetching"
+          />
+          <button type="submit" class="btn btn-sm" :disabled="fetching || !fetchUrl.trim()">
+            Download to card
+          </button>
+        </form>
+        <p v-if="storage.writable" class="setting-note">
+          The device downloads the link itself, so it needs internet (or your NAS) - not this
+          browser.
+        </p>
       </template>
     </template>
   </div>
 </template>
+
+<style scoped>
+.fetch-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.fetch-form input[type="url"] {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.fetch-form input.mono {
+  flex: 0 1 10rem;
+  min-width: 0;
+}
+
+.fetch-progress progress {
+  width: 100%;
+}
+</style>

@@ -23,6 +23,8 @@ import Icon from "./Icon.vue";
 
 const props = defineProps<{
   status: VideoStatus | null;
+  /** The serial console is on: with no picture, it may be the way in. */
+  serial?: boolean;
   engaged: boolean;
   engageMode: "click" | "hover";
   fit: "fit" | "stretch" | "actual";
@@ -48,7 +50,7 @@ const props = defineProps<{
   textView?: boolean;
 }>();
 
-const emit = defineEmits<{ surface: [HTMLElement | null] }>();
+const emit = defineEmits<{ surface: [HTMLElement | null]; "open-serial": [] }>();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const img = ref<HTMLImageElement | null>(null);
@@ -1425,6 +1427,9 @@ const fitClass = computed(() =>
             {{ reconnectState === "busy" ? "Reconnecting..." : "Reconnect HDMI" }}
           </button>
           <p v-if="reconnectError" class="muted">{{ reconnectError }}</p>
+          <button v-if="serial" type="button" class="btn btn-sm btn-quiet" @click="emit('open-serial')">
+            Open the serial console
+          </button>
         </div>
         <p v-else-if="tooFast" class="muted">
           The target sends {{ status?.width }}x{{ status?.height }} at {{ status?.inputHz }} Hz, more

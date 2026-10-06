@@ -16,6 +16,8 @@ import systemInfo from "./fixtures/system-info.json";
 import videoStatus from "./fixtures/video-status.json";
 import storageImages from "./fixtures/storage-images.json";
 import usbprobe from "./fixtures/usbprobe.json";
+import systemLogText from "./fixtures/system-log.txt?raw";
+import { DemoSerial } from "./serial";
 import authSession from "./fixtures/auth-session.json";
 import {
   demoAsk,
@@ -179,6 +181,57 @@ function installStart(version: string): string | null {
   return null;
 }
 
+let demoLogNext = 0;
+let demoNetNext = 0;
+const DEMO_NETLOG = [
+  "[    3.412870] netconsole: network logging started",
+  "[    3.520114] systemd[1]: Started Journal Service.",
+  "[    4.101772] EXT4-fs (mmcblk0p2): re-mounted. Quota mode: none.",
+  "[    5.002219] brcmfmac: brcmf_fw_alloc_request: using brcm/brcmfmac43455-sdio for chip BCM4345/6",
+  "[    6.880341] IPv6: ADDRCONF(NETDEV_CHANGE): eth0: link becomes ready",
+  "[    7.113540] bcmgenet fd580000.ethernet eth0: Link is Up - 1Gbps/Full - flow control rx/tx",
+  "",
+].join("\n");
+
+/* A download from a URL, played out over a few seconds: nothing is fetched,
+   but the file shows up on the card (or the rescue slot fills) at the end. */
+type DemoFetch = {
+  state: string;
+  dest: string;
+  url: string;
+  name: string;
+  total: number;
+  startedAt: number;
+  message: string;
+};
+let demoFetch: DemoFetch | null = null;
+const DEMO_FETCH_MS = 6000;
+
+function fetchStatus(): Json {
+  const f = demoFetch;
+  if (!f) return { state: "idle", bytes: 0, total: -1, rateBps: 0, message: "" };
+  if (f.state === "running") {
+    const t = (Date.now() - f.startedAt) / DEMO_FETCH_MS;
+    if (t >= 1) {
+      f.state = "done";
+      f.message = "done";
+      if (f.dest === "rescue") {
+        images = { ...images, rescue: { ...(images.rescue as Json), hasImage: true } };
+      } else {
+        const list = (images.images as Json[]).filter((i) => i.name !== f.name);
+        images = { ...images, images: [...list, { name: f.name, size: f.total }] };
+      }
+    } else {
+      return {
+        ...f,
+        bytes: Math.round(f.total * t),
+        rateBps: f.total / (DEMO_FETCH_MS / 1000),
+      };
+    }
+  }
+  return { ...f, bytes: f.state === "done" ? f.total : 0, rateBps: 0 };
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -338,6 +391,8 @@ async function route(
       case "/api/v1/storage/images":
         syncMedia();
         return json(images);
+      case "/api/v1/storage/fetch":
+        return json(fetchStatus());
       case "/api/v1/system/usbprobe":
         return json(usbprobe);
       case "/api/v1/auth/session":
@@ -359,6 +414,55 @@ async function route(
         return json(runbookStatus());
       case "/api/v1/cec":
         return json(cecStatus());
+      /* netconsole from the made-up Raspberry Pi: its boot, then a line now and
+         again, one of them a kernel warning. */
+      case "/api/v1/netlog/log": {
+        const since = Number(new URLSearchParams(search).get("since") ?? "0");
+        const now = Date.now();
+        let body = "";
+        if (since === 0) {
+          body = DEMO_NETLOG;
+          demoNetNext = now + 5000;
+        } else if (now >= demoNetNext) {
+          demoNetNext = now + 6000 + Math.random() * 6000;
+          const t = (performance.now() / 1000 + 60).toFixed(6).padStart(12, " ");
+          body = Math.random() < 0.3
+            ? `[${t}] WARNING: CPU: 2 PID: 731 at drivers/usb/core/hub.c:5466 hub_event+0x1f4/0x1a10\n`
+            : `[${t}] usb 1-1.3: new high-speed USB device number ${3 + Math.floor(Math.random() * 9)} using xhci_hcd\n`;
+        }
+        return new Response(body, {
+          headers: { "Content-Type": "text/plain", "X-Log-Pos": String(since + body.length) },
+        });
+      }
+      case "/api/v1/netlog":
+        return json({ enabled: true, running: true, port: 6666, rxBytes: 2048, packets: 31, refused: 0, lastFrom: "192.168.1.57" });
+      case "/api/v1/serial":
+        return json({ enabled: true, running: true, tx: 5, rx: 4, baud: 115200, rxBytes: 4096, txBytes: 64 });
+      case "/api/v1/serial/log":
+        return new Response("Debian GNU/Linux 12 raspberrypi ttyS0\n\nraspberrypi login: \n", {
+          headers: { "Content-Type": "text/plain" },
+        });
+      /* The live log: the fixture once, then a line now and again, as a
+         running device would. */
+      case "/api/v1/system/log": {
+        const since = Number(new URLSearchParams(search).get("since") ?? "0");
+        const now = Date.now();
+        let body = "";
+        if (since === 0) {
+          body = systemLogText;
+          demoLogNext = now + 3000;
+        } else if (now >= demoLogNext) {
+          demoLogNext = now + 4000 + Math.random() * 4000;
+          /* After the fixture's last line, which is a minute in. */
+          const ms = 60000 + Math.floor(performance.now());
+          body = Math.random() < 0.25
+            ? `W (${ms}) web: websocket refused: no session\n`
+            : `I (${ms}) video: published 25.0 fps, 9.4 Mbit/s, 1 viewer\n`;
+        }
+        return new Response(body, {
+          headers: { "Content-Type": "text/plain", "X-Log-Pos": String(since + body.length) },
+        });
+      }
       case "/api/v1/notify/status":
         return json({
           enabled: settings.notify_enable === true || settings.notify_enable === 1,
@@ -412,6 +516,27 @@ async function route(
        like it fell back to "ejected" the next time the list is fetched. */
     images = { ...images, active: String(settings.msc_image ?? "") };
     return json(settings);
+  }
+  if (method === "POST" && path === "/api/v1/storage/fetch") {
+    const body = (await bodyJson(init, req)) as { url?: string; dest?: string; name?: string };
+    const url = body.url ?? "";
+    if (!/^https?:\/\//.test(url)) return json({ error: "the URL must start with http:// or https://" }, 409);
+    if (demoFetch?.state === "running") return json({ error: "a download is already running" }, 409);
+    const rescue = body.dest === "rescue";
+    demoFetch = {
+      state: "running",
+      dest: rescue ? "rescue" : "card",
+      url,
+      name: rescue ? "rescue" : body.name || "image.iso",
+      total: rescue ? 2430976 : 64 * 1024 * 1024,
+      startedAt: Date.now(),
+      message: "",
+    };
+    return json(fetchStatus());
+  }
+  if (method === "POST" && path === "/api/v1/storage/fetch/cancel") {
+    if (demoFetch?.state === "running") demoFetch = { ...demoFetch, state: "cancelled", message: "cancelled" };
+    return json(fetchStatus());
   }
   if (method === "POST" && path === "/api/v1/storage/delete") {
     const name = new URLSearchParams(search).get("name") ?? "";
@@ -658,8 +783,19 @@ class DemoSocket extends EventTarget {
   onmessage: ((e: MessageEvent) => void) | null = null;
   onerror: ((e: Event) => void) | null = null;
 
+  /* On /serial: the made-up Raspberry Pi at the other end of the wire. */
+  #serial: DemoSerial | null = null;
+
   constructor(readonly url: string) {
     super();
+    if (url.includes("/serial")) {
+      this.#serial = new DemoSerial((text) => {
+        if (this.readyState !== 1) return;
+        const m = new MessageEvent("message", { data: new TextEncoder().encode(text).buffer });
+        this.onmessage?.(m);
+        this.dispatchEvent(m);
+      });
+    }
     setTimeout(() => {
       this.readyState = 1;
       const e = new Event("open");
@@ -686,6 +822,12 @@ class DemoSocket extends EventTarget {
       (data as ArrayBufferView).byteOffset,
       (data as ArrayBufferView).byteLength,
     );
+    if (this.#serial) {
+      /* 0x01 subscribe, 0x02 + bytes typed - see components/SerialPanel.vue. */
+      if (b[0] === 0x01) this.#serial.start();
+      else if (b[0] === 0x02) this.#serial.input(new TextDecoder().decode(b.slice(1)));
+      return;
+    }
     if (b.length >= 8 && b[0] === 0x03) {
       demoKeys(b[1], Array.from(b.subarray(2, 8)));
     } else if (b.length >= 1 && b[0] === 0x05) {
@@ -758,7 +900,7 @@ export function installDemoBackend(): void {
   const patched = new Proxy(RealWS, {
     construct(target, args: [string | URL, (string | string[])?]) {
       const url = String(args[0]);
-      if (url.includes("/ws") || url.includes("/video")) {
+      if (url.includes("/ws") || url.includes("/video") || url.includes("/serial")) {
         return new DemoSocket(url) as unknown as WebSocket;
       }
       return new target(...args);

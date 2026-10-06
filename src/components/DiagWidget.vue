@@ -15,6 +15,7 @@ import { CONSOLE_HEADER, logUrl, type SystemInfo } from "../state/device";
 const FEEDBACK_URL = "https://github.com/orgs/espkvm/discussions/65";
 
 const props = defineProps<{ system: SystemInfo | null; side: "left" | "right" }>();
+const emit = defineEmits<{ liveLog: [] }>();
 
 const open = ref(false);
 
@@ -114,9 +115,14 @@ async function eraseDump() {
           a file because where it is going is a bug report.
         -->
         <p class="dw-log">
-          <a :href="logUrl()" download="espkvm-log.txt" class="btn btn-sm">
-            Download the log
-          </a>
+          <span class="dw-row">
+            <button type="button" class="btn btn-sm" @click="open = false; emit('liveLog')">
+              Live log
+            </button>
+            <a :href="logUrl()" download="espkvm-log.txt" class="btn btn-sm">
+              Download the log
+            </a>
+          </span>
           <span class="muted">
             The last few hundred lines, including the run before the current one.
             No passwords or keys &mdash; but it does name your network, addresses

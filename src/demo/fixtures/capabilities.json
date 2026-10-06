@@ -123,5 +123,19 @@
     "enabled": true,
     "active": true,
     "setting": "cec_enable"
+  },
+  "serial": {
+    "compiled": true,
+    "available": true,
+    "enabled": true,
+    "active": true,
+    "setting": "ser_enable"
+  },
+  "netlog": {
+    "compiled": true,
+    "available": true,
+    "enabled": true,
+    "active": true,
+    "setting": "nc_enable"
   }
 }

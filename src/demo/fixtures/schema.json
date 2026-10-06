@@ -718,6 +718,58 @@
       "default": 1
     },
     {
+      "key": "ser_enable",
+      "section": "power",
+      "group": "Serial console",
+      "title": "Serial console",
+      "help": "The target's serial port, for a machine with no screen at all - a NAS, a router, a server - or one that shows its BIOS over serial. Wire the target's TX to the RX pin below and its RX to the TX pin, plus ground. 3.3 V logic (a Raspberry Pi, a router's header) goes straight in; a real RS-232 port (9-pin, +-12 V) needs a MAX3232 module in between, or it damages the pin.",
+      "type": "bool",
+      "default": 0
+    },
+    {
+      "key": "ser_tx",
+      "section": "power",
+      "group": "Serial console",
+      "title": "TX pin (to the target's RX)",
+      "help": "The GPIO this device sends on. -1 until you pick one.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": -1,
+      "pin": true
+    },
+    {
+      "key": "ser_rx",
+      "section": "power",
+      "group": "Serial console",
+      "title": "RX pin (from the target's TX)",
+      "help": "The GPIO this device listens on. -1 until you pick one.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": -1,
+      "pin": true
+    },
+    {
+      "key": "ser_baud",
+      "section": "power",
+      "group": "Serial console",
+      "title": "Speed (baud)",
+      "help": "What the target's console runs at; 115200 for Linux and most boards, 9600 or 115200 for a PC BIOS. Always 8 data bits, no parity, one stop bit.",
+      "type": "enum",
+      "choices": [
+        "9600",
+        "19200",
+        "38400",
+        "57600",
+        "115200",
+        "230400",
+        "460800",
+        "921600"
+      ],
+      "default": 4
+    },
+    {
       "key": "aud_enable",
       "section": "audio",
       "title": "Stream HDMI audio",
@@ -726,6 +778,46 @@
       "default": 0,
       "requires": "audio",
       "reboot": true
+    },
+    {
+      "key": "nc_enable",
+      "section": "network",
+      "group": "Netconsole",
+      "title": "Receive the target's log",
+      "help": "Listen for the target's kernel messages over the network: Linux netconsole, or anything that sends plain syslog over UDP. It keeps working when the target's disk is gone, which is when you want it. On the target, for example: modprobe netconsole netconsole=@/,6666@<this device's IP>/. What arrives is unauthenticated UDP - anyone on the network can read it or send lines - so it is kept as text and can only raise a notification, never run anything.",
+      "type": "bool",
+      "default": 0
+    },
+    {
+      "key": "nc_port",
+      "section": "network",
+      "group": "Netconsole",
+      "title": "UDP port",
+      "help": "6666 is netconsole's usual port; 514 is syslog's.",
+      "type": "int",
+      "min": 1,
+      "max": 65535,
+      "default": 6666
+    },
+    {
+      "key": "nc_from",
+      "section": "network",
+      "group": "Netconsole",
+      "title": "Accept from",
+      "help": "The target's IP address; several separated by commas. Empty accepts lines from anyone on the network.",
+      "type": "string",
+      "maxLength": 95,
+      "default": ""
+    },
+    {
+      "key": "nc_match",
+      "section": "network",
+      "group": "Netconsole",
+      "title": "Alert on",
+      "help": "Comma-separated phrases, matched without regard to case. A line holding one sends a notification, at most one every 30 seconds. Empty for none.",
+      "type": "string",
+      "maxLength": 127,
+      "default": "Kernel panic,Oops,BUG:,Call Trace"
     },
     {
       "key": "net_hostname",

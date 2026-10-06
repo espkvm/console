@@ -174,11 +174,15 @@ function flush() {
 
 /* A real controller: polled every frame while the window is open. */
 let raf = 0;
+/* What the browser reports, so the panel can say why a controller does
+   nothing: none seen yet, or one whose layout it does not know. */
+const padUnreadable = ref("");
 function poll() {
   raf = requestAnimationFrame(poll);
   const pads = navigator.getGamepads?.() ?? [];
   let found: PadState | null = null;
   let name = "";
+  let other = "";
   for (const gp of pads) {
     if (!gp) continue;
     const s = fromGamepad(gp);
@@ -187,19 +191,27 @@ function poll() {
       name = gp.id;
       break;
     }
+    other = `${gp.id} (layout "${gp.mapping}", ${gp.buttons.length} buttons, ${gp.axes.length} axes)`;
   }
   pad.value = found;
-  padName.value = name;
+  if (padName.value !== name) padName.value = name;
+  if (padUnreadable.value !== other) padUnreadable.value = found ? "" : other;
   flush();
+}
+function onPadConnected(e: GamepadEvent) {
+  console.info("[gamepad] connected:", e.gamepad.id, "mapping:", JSON.stringify(e.gamepad.mapping),
+    e.gamepad.buttons.length, "buttons", e.gamepad.axes.length, "axes");
 }
 
 onMounted(async () => {
+  window.addEventListener("gamepadconnected", onPadConnected);
   emit("look", look.value);
   await nextTick();
   popup.value?.focus();
   raf = requestAnimationFrame(poll);
 });
 onUnmounted(() => {
+  window.removeEventListener("gamepadconnected", onPadConnected);
   cancelAnimationFrame(raf);
   /* Nothing may stay held after the window goes. */
   props.control.pad(IDLE.buttons, IDLE.hat, IDLE.lx, IDLE.ly, IDLE.rx, IDLE.ry);
@@ -383,6 +395,13 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
       >
         <h3>Gamepad</h3>
         <span v-if="padName" class="pill pill-on" :title="padName">controller</span>
+        <span
+          v-else-if="padUnreadable"
+          class="pill pill-off"
+          :title="`The browser shows ${padUnreadable}, in a layout this panel cannot read`"
+        >
+          controller?
+        </span>
         <button
           type="button"
           class="btn btn-sm btn-quiet gp-look"
@@ -510,7 +529,8 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
       <p class="gp-hint">
         Keys here: arrows, Enter = confirm, Esc = back, the button letters, Q/E and 1/3 for the
         shoulders, &minus;/=, H = home, WASD and IJKL for the sticks. A controller plugged into
-        this computer works too.
+        this computer works too: press any button on it once, the browser only shows it after
+        that.
       </p>
     </section>
   </Teleport>
