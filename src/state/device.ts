@@ -139,6 +139,9 @@ export interface VideoStatus {
   frames?: number;
   /** Milliseconds since the last frame arrived; null before the first. */
   frameAgeMs?: number | null;
+  /** H.264 frames are rearranged on the CPU on this board: fine at 720p,
+   *  a few fps at 1080p. */
+  h264Cpu?: boolean;
   /** The recorder. Absent on firmware without one. */
   record?: RecordStatus;
   /** Why a screenshot cannot be saved now, or null when it can. */

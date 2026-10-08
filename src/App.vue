@@ -1207,6 +1207,37 @@ const restartOutcome = ref<{ bad: boolean; text: string } | null>(null);
  * someone goes looking for the switch. Ask once, in this browser, and take
  * "not now" for an answer.
  */
+/*
+ * On a board that rearranges H.264 frames on the CPU (the M5Stack Unit PoE-P4),
+ * 1080p runs at about 5 fps: the capture alone fills most of the PSRAM's
+ * bandwidth. MJPEG, or a 720p mode, is much faster there - say so once. The
+ * bridge there holds its own EDID, so the mode is the target's to change.
+ */
+const SLOW_H264_KEY = "espkvm.slowH264Dismissed";
+const slowH264Dismissed = ref(false);
+try {
+  slowH264Dismissed.value = localStorage.getItem(SLOW_H264_KEY) === "1";
+} catch {
+  /* no storage: show it, it can be dismissed for this visit */
+}
+const showSlowH264 = computed(() => {
+  const st = status.value;
+  return (
+    !slowH264Dismissed.value &&
+    !!st?.signal &&
+    st.h264Cpu === true &&
+    st.codec === "h264" &&
+    st.width * st.height > 1280 * 720
+  );
+});
+function dismissSlowH264() {
+  slowH264Dismissed.value = true;
+  try {
+    localStorage.setItem(SLOW_H264_KEY, "1");
+  } catch {
+    /* fine: gone for this visit */
+  }
+}
 const UPD_ASK_KEY = "espkvm.updAsked";
 const updAskDismissed = ref(true);
 try {
@@ -1700,6 +1731,17 @@ const LED_BITS: Array<[number, string]> = [
     >
       <span>{{ restartOutcome.text }}</span>
       <button type="button" class="btn btn-sm" @click="restartOutcome = null">Dismiss</button>
+    </div>
+    <div v-if="showSlowH264" class="update-banner" role="status">
+      <span>
+        H.264 at {{ status?.width }}x{{ status?.height }} runs at only a few fps on this board.
+        MJPEG is faster here. So is H.264 at 720p, or at 30 Hz instead of 60 - set that in the
+        target's display settings.
+      </span>
+      <button type="button" class="btn btn-sm btn-primary" @click="setCodec('mjpeg')">
+        Use MJPEG
+      </button>
+      <button type="button" class="btn btn-sm" @click="dismissSlowH264">Dismiss</button>
     </div>
     <div v-if="showUpdAsk" class="update-banner" role="status">
       <span>

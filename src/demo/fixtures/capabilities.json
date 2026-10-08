@@ -137,5 +137,11 @@
     "enabled": true,
     "active": true,
     "setting": "nc_enable"
+  },
+  "edid": {
+    "compiled": true,
+    "available": true,
+    "enabled": true,
+    "active": true
   }
 }
