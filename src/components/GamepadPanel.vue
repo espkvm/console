@@ -14,6 +14,7 @@
  * phone emulators do it - see-through controls at the edges, one finger per
  * control, the picture still visible and touchable between them.
  */
+import { haptic } from "../ui/haptic";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 
 import type { Control } from "../input/control";
@@ -229,6 +230,7 @@ function capture(e: PointerEvent) {
 
 /* Buttons on screen: held while the pointer is down on them. */
 function btnDown(e: PointerEvent, name: PadButton) {
+  haptic();
   capture(e);
   ptrButtons.value |= PAD[name];
   flush();
@@ -238,6 +240,7 @@ function btnUp(name: PadButton) {
   flush();
 }
 function dirDown(e: PointerEvent, dir: string) {
+  haptic();
   capture(e);
   ptrDirs.value = new Set([...ptrDirs.value, dir]);
   flush();
@@ -295,6 +298,7 @@ function crossMove(e: PointerEvent) {
 }
 let crossPointer: number | null = null;
 function crossDown(e: PointerEvent) {
+  haptic();
   capture(e);
   crossPointer = e.pointerId;
   crossMove(e);

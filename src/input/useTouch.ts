@@ -16,6 +16,7 @@
  * both act on one touch.
  */
 
+import { hapticTravel, hapticTravelReset } from "../ui/haptic";
 import { onScopeDispose, watchEffect, type Ref } from "vue";
 
 import type { Control } from "./control";
@@ -94,6 +95,7 @@ export function useTouch(opts: TouchOptions) {
       lastY = t.clientY;
 
       if (e.touches.length === 1) {
+        hapticTravelReset();
         startT = performance.now();
         startX = t.clientX;
         startY = t.clientY;
@@ -135,6 +137,7 @@ export function useTouch(opts: TouchOptions) {
       const t = e.touches[0];
       const rawDx = t.clientX - lastX;
       const rawDy = t.clientY - lastY;
+      hapticTravel(Math.hypot(rawDx, rawDy));
       lastX = t.clientX;
       lastY = t.clientY;
       if (!moved && Math.hypot(t.clientX - startX, t.clientY - startY) > TAP_MOVE_PX) {

@@ -122,6 +122,8 @@ const PATHS = {
   video: ["M3 7h12v10H3z", "M15 10.5l6-3.5v10l-6-3.5"],
   image: ["M3 5h18v14H3z", "M8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z", "M21 15l-5-5-11 9"],
   download: ["M12 4v11", "M7 10l5 5 5-5", "M5 20h14"],
+  /* A chevron pointing down: pull something out from the top. */
+  "chevron-down": ["M6 9l6 6 6-6"],
   trash: ["M4 7h16", "M10 11v6M14 11v6", "M6 7l1 13h10l1-13", "M9 7V4h6v3"],
   captions: ["M3 5h18v14H3z", "M7 15h4M13 15h4M7 11h2M11 11h6"],
   external: ["M14 4h6v6", "M20 4l-9 9", "M18 14v6H4V6h6"],

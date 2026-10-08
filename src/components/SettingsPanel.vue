@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import UiFeatureList from "./UiFeatureList.vue";
+import { hapticTry } from "../ui/haptic";
 import Icon from "./Icon.vue";
 /*
  * The settings panel renders itself from the schema the device serves, so a
@@ -64,6 +66,8 @@ const props = defineProps<{
   firmware?: string;
 }>();
 
+/* What the browser said to the vibration "Try it" button. */
+const hapticResult = ref("");
 const emit = defineEmits<{ values: [Values]; passwordChanged: [] }>();
 
 /*
@@ -320,7 +324,9 @@ const pinMap = computed(() => {
 });
 
 const active = ref("");
-const currentSection = computed(() => active.value || sections.value[0] || "video");
+/* The first tab until one is picked - by its id: the list holds whole sections,
+   and handing one over as the id matched no setting and drew an empty pane. */
+const currentSection = computed(() => active.value || sections.value[0]?.id || "video");
 const busy = ref(false);
 
 const rows = computed(() => props.schema.filter((s) => s.section === currentSection.value));
@@ -942,6 +948,15 @@ async function doRevertCert() {
                   @change="writeSecret(s.key, $event.target as HTMLInputElement)"
                 />
 
+                <!-- Which of the console's controls are shown: a tick per entry in
+                     ui/features.ts over the list of hidden ids the device keeps. -->
+                <UiFeatureList
+                  v-else-if="s.key === 'ui_hidden'"
+                  :value="String(values[s.key] ?? '')"
+                  :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
+                  @change="write(s.key, $event)"
+                />
+
                 <!-- The time zone: one list of cities over the POSIX string the device takes. -->
                 <select
                   v-else-if="s.key === 'sched_tz'"
@@ -993,6 +1008,13 @@ async function doRevertCert() {
               </p>
               <p v-else-if="s.help && helpOpen.has(s.key)" class="setting-note">
                 {{ s.help }}
+              </p>
+
+              <p v-if="s.key === 'ui_haptic_level'" class="setting-note">
+                <button type="button" class="btn btn-sm" @click="hapticResult = hapticTry(s.choices?.[Number(values[s.key] ?? 0)])">
+                  Try it
+                </button>
+                {{ hapticResult }}
               </p>
 
               <div

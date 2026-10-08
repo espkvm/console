@@ -53,7 +53,11 @@ export function installKeyboardInset(): () => void {
   if (!vv) return () => {};
 
   const apply = () => {
-    const h = consoleHeight(window.innerHeight, vv.height);
+    /* In full screen there is no browser chrome for dvh to follow, and Chrome on
+       Android was seen to leave dvh taller than the screen after going full
+       screen: the bottom bar sat below the edge, and the page does not scroll.
+       There the visible area itself is the answer, every time. */
+    const h = document.fullscreenElement ? Math.round(vv.height) : consoleHeight(window.innerHeight, vv.height);
     const root = document.documentElement;
     if (h === null) {
       root.style.removeProperty("--app-h");
@@ -67,15 +71,28 @@ export function installKeyboardInset(): () => void {
     if (el.scrollTop > 1) el.scrollTop = 1;
   };
 
+  /* The sizes settle a moment after the switch, so measure again then too. */
+  let late = 0;
+  const onFullscreen = () => {
+    apply();
+    window.clearTimeout(late);
+    late = window.setTimeout(apply, 350);
+  };
+
   apply();
   vv.addEventListener("resize", apply);
   vv.addEventListener("scroll", apply);
-  window.addEventListener("orientationchange", apply);
+  window.addEventListener("orientationchange", onFullscreen);
+  window.addEventListener("resize", apply);
+  document.addEventListener("fullscreenchange", onFullscreen);
 
   return () => {
+    window.clearTimeout(late);
     vv.removeEventListener("resize", apply);
     vv.removeEventListener("scroll", apply);
-    window.removeEventListener("orientationchange", apply);
+    window.removeEventListener("orientationchange", onFullscreen);
+    window.removeEventListener("resize", apply);
+    document.removeEventListener("fullscreenchange", onFullscreen);
     document.documentElement.style.removeProperty("--app-h");
   };
 }

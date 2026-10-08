@@ -95,6 +95,9 @@ function liveStatus(): Json {
     ...DEMO_STATUS,
     signal: m.signal,
     textMode: m.textMode,
+    /* 60 frames a second since the page opened, the last one just now. */
+    frames: Math.floor(performance.now() * 0.06),
+    frameAgeMs: m.signal ? Math.floor(performance.now() % 17) : 4200,
     fps: Math.round(drift(24, 1.6, 11) * 10) / 10,
     kbps: Math.round(drift(8500, 900, 9)),
     record: { ...((videoStatus as Json).record as Json), ...demoRecordStatus() },
@@ -105,7 +108,7 @@ function liveStatus(): Json {
    is kept here, so the console's verdict after its reload is the true one. */
 const VERSION_KEY = "espkvm-demo-version";
 const OTHER_KEY = "espkvm-demo-other";
-const NEXT_VERSION = "v.0.52.3";
+const NEXT_VERSION = "v.0.60.1";
 const fixtureOta = (systemInfo as { ota: { version: string }[] }).ota;
 function stored(key: string, fallback: string): string {
   try {
@@ -813,8 +816,8 @@ class DemoSocket extends EventTarget {
     }, 0);
   }
   send(data: unknown): void {
-    /* Mouse and the rest are swallowed; a keyboard report is typed at the fake
-       machine, so the demo's shell answers the visitor. Frame 0x03 is a
+    /* A keyboard report is typed at the fake machine, so the demo's shell
+       answers the visitor; a relative mouse report moves its pointer. Frame 0x03 is a
        modifier byte and six usage codes - see input/control.ts. */
     if (!(data instanceof ArrayBuffer) && !ArrayBuffer.isView(data)) return;
     const b = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(
@@ -828,7 +831,13 @@ class DemoSocket extends EventTarget {
       else if (b[0] === 0x02) this.#serial.input(new TextDecoder().decode(b.slice(1)));
       return;
     }
-    if (b.length >= 8 && b[0] === 0x03) {
+    if (b.length >= 6 && b[0] === 0x02) {
+      /* A relative mouse report (the phone's touchpad, pointer lock): the demo
+         machine's pointer moves by it - see onHid in ScreenView. */
+      const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+      (window as unknown as { __espkvmDemoHid?: (dx: number, dy: number, buttons: number) => void })
+        .__espkvmDemoHid?.(dv.getInt16(2, true), dv.getInt16(4, true), b[1]);
+    } else if (b.length >= 8 && b[0] === 0x03) {
       demoKeys(b[1], Array.from(b.subarray(2, 8)));
     } else if (b.length >= 1 && b[0] === 0x05) {
       /* Release all - sent when control is handed back. The machine tracks what

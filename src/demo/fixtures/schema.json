@@ -718,6 +718,75 @@
       "default": 1
     },
     {
+      "key": "btn_gpio",
+      "section": "power",
+      "group": "Button on the box",
+      "title": "Button GPIO",
+      "help": "A push button on a free pin: the M5Stack Unit Button on a Grove port (its yellow wire), or any switch to ground. -1 for none. Not tried with real hardware yet.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": -1,
+      "pin": true
+    },
+    {
+      "key": "btn_press",
+      "section": "power",
+      "group": "Button on the box",
+      "title": "A short press",
+      "help": "What a short press does: the target's power button, a hard power off, reset, Wake-on-LAN, a runbook (named below), saving the dashcam's last seconds as a clip, or a screenshot to the card.",
+      "type": "enum",
+      "choices": [
+        "nothing",
+        "power",
+        "power off (hold)",
+        "reset",
+        "wake (WoL)",
+        "runbook",
+        "save clip",
+        "screenshot"
+      ],
+      "default": 0
+    },
+    {
+      "key": "btn_hold",
+      "section": "power",
+      "group": "Button on the box",
+      "title": "Held for 1.5 s",
+      "help": "What holding it does. It fires as soon as it has been held long enough, so you know it took.",
+      "type": "enum",
+      "choices": [
+        "nothing",
+        "power",
+        "power off (hold)",
+        "reset",
+        "wake (WoL)",
+        "runbook",
+        "save clip",
+        "screenshot"
+      ],
+      "default": 0
+    },
+    {
+      "key": "btn_runbook",
+      "section": "power",
+      "group": "Button on the box",
+      "title": "Runbook to run",
+      "help": "The name of the runbook, for either action set to \"runbook\".",
+      "type": "string",
+      "maxLength": 47,
+      "default": ""
+    },
+    {
+      "key": "btn_active_high",
+      "section": "power",
+      "group": "Button on the box",
+      "title": "Button reads high when pressed",
+      "help": "Off for a button that connects the pin to ground, which is the usual kind and the M5Stack Unit Button. On for one that connects it to 3V3.",
+      "type": "bool",
+      "default": 0
+    },
+    {
       "key": "ser_enable",
       "section": "power",
       "group": "Serial console",
@@ -1375,14 +1444,65 @@
     },
     {
       "key": "ui_side",
-      "section": "system",
-      "group": "Console",
+      "section": "ui",
+      "group": "Layout",
       "title": "Panel side",
       "help": "Which side of the screen the button rail and its panels sit on.",
       "type": "enum",
       "choices": [
         "left",
         "right"
+      ],
+      "default": 0
+    },
+    {
+      "key": "ui_fs_hide",
+      "section": "ui",
+      "group": "Full screen",
+      "title": "Hide the bars in full screen",
+      "help": "In full screen the status strip, the rail and the bottom bar slide away and the picture takes the whole screen. They come back over it with the mouse at an edge (after a moment while you have control), the small tab at the top, or a tap of the right Ctrl key on its own, and go again a few seconds after you leave them.",
+      "type": "bool",
+      "default": 1
+    },
+    {
+      "key": "ui_hidden",
+      "section": "ui",
+      "group": "Buttons",
+      "title": "Shown in the console",
+      "help": "Untick a control to take its button out of the console, for everyone who signs in. It only hides the button: the feature itself stays as its own settings have it. Stored as the ids of the hidden controls; the console keeps the list of what can be hidden.",
+      "type": "string",
+      "maxLength": 255,
+      "default": ""
+    },
+    {
+      "key": "ui_haptic_keys",
+      "section": "ui",
+      "group": "Vibration on a phone",
+      "title": "On key presses",
+      "help": "A short tick under the finger on each press of the on-screen keyboard, the arrow keys and the gamepad buttons, like a phone's own keyboard. Android only: Safari on an iPhone cannot vibrate.",
+      "type": "bool",
+      "default": 1
+    },
+    {
+      "key": "ui_haptic_pad",
+      "section": "ui",
+      "group": "Vibration on a phone",
+      "title": "On the touchpad",
+      "help": "In touch mode, a faint tick every few millimetres the finger travels, the way the touchpads of the Steam Controller feel. A third of the length of a key press, so fainter.",
+      "type": "bool",
+      "default": 1
+    },
+    {
+      "key": "ui_haptic_level",
+      "section": "ui",
+      "group": "Vibration on a phone",
+      "title": "Strength",
+      "help": "A browser cannot set how strong a vibration is, only how long, so stronger means a longer tick: about 12, 25 or 45 ms.",
+      "type": "enum",
+      "choices": [
+        "light",
+        "medium",
+        "strong"
       ],
       "default": 0
     },
@@ -1414,7 +1534,10 @@
         "SH1106 128x32",
         "SH1106 96x16",
         "SH1106 64x48",
-        "SSD1315 128x64 (untested)"
+        "SSD1315 128x64 (untested)",
+        "SSD1315 72x40 (M5Stack Mini OLED)",
+        "SH1107 128x64 (M5Stack Unit OLED)",
+        "SSD1309 128x64 (M5Stack Unit Glass2, untested)"
       ],
       "default": 0
     },
@@ -1582,9 +1705,14 @@
       "blurb": "The optional screen on the device."
     },
     {
+      "id": "ui",
+      "title": "UI",
+      "blurb": "How the console in the browser looks and feels."
+    },
+    {
       "id": "system",
       "title": "System",
-      "blurb": "The clock, updates, logging and the console itself."
+      "blurb": "The clock, updates and logging."
     }
   ]
 }

@@ -4,7 +4,10 @@
  * doing, a rail of panels that slide over the picture rather than displacing
  * it, and the target's screen filling everything else.
  */
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { setUiHidden } from "./ui/features";
+import { useImmersive } from "./ui/immersive";
+import { setHaptic } from "./ui/haptic";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 
 import Icon from "./components/Icon.vue";
 import AutomationPanel from "./components/AutomationPanel.vue";
@@ -621,6 +624,19 @@ const padOverlay = computed(() => gamepadOpen.value && !!system.value?.usbPad &&
    old fixed 1.6 felt glued down); the slider's 10-400% then tunes it from
    precise to very fast. Acceleration in useTouch adds more on quick flicks. */
 const touchSensitivity = computed(() => (Number(values.value.mouse_sens ?? 100) / 100) * 4);
+/* Full screen without the bars (ui/immersive.ts), when Settings -> UI says so. */
+const fsHideBars = computed(() => values.value.ui_fs_hide !== false);
+const { immersive, barsShown, show: showBars } = useImmersive({ enabled: fsHideBars, engaged });
+/* Settings -> UI -> which controls are shown (see ui/features.ts). */
+watchEffect(() => setUiHidden(String(values.value.ui_hidden ?? "")));
+/* Settings -> UI -> Vibration on a phone. */
+watchEffect(() =>
+  setHaptic(
+    enumName(schema.value, values.value, "ui_haptic_level") ?? undefined,
+    values.value.ui_haptic_keys !== false,
+    values.value.ui_haptic_pad !== false,
+  ),
+);
 const layout = computed(() => enumName(schema.value, values.value, "kbd_layout") ?? DEFAULT_LAYOUT);
 
 const input = useInput({
@@ -1661,7 +1677,17 @@ const LED_BITS: Array<[number, string]> = [
     @changed="onPasswordChanged"
   />
 
-  <div v-else class="console">
+  <div v-else :class="['console', { immersive, 'bars-shown': barsShown }]">
+    <button
+      v-if="immersive && !barsShown"
+      type="button"
+      class="immersive-handle"
+      aria-label="Show the console's bars"
+      title="Show the bars (or the mouse at an edge, or a tap of the right Ctrl key)"
+      @click="showBars"
+    >
+      <Icon name="chevron-down" :size="14" />
+    </button>
     <div v-if="firmwareChanged" class="update-banner" role="alert">
       <span>The device was updated. Reload to get the matching console.</span>
       <button type="button" class="btn btn-sm" @click="reloadConsole()">Reload</button>
@@ -2041,6 +2067,7 @@ const LED_BITS: Array<[number, string]> = [
             type="button"
             :class="['conn', 'conn-on', { 'conn-open': serialOpen }]"
             :title="serialOpen ? 'Hide the serial console' : 'The target\'s serial console'"
+            data-ui="serial"
             aria-label="Serial console"
             @click="serialOpen = !serialOpen"
           >
@@ -2206,6 +2233,7 @@ const LED_BITS: Array<[number, string]> = [
           type="button"
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': oskOpen }"
+          data-ui="keyboard"
           aria-label="On-screen keyboard"
           :title="oskOpen ? 'Hide the on-screen keyboard' : 'Show a keyboard on the page - for keys this computer cannot send'"
           @click="oskOpen = !oskOpen"
@@ -2218,6 +2246,7 @@ const LED_BITS: Array<[number, string]> = [
           type="button"
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': remoteOpen }"
+          data-ui="cec"
           aria-label="Remote control (HDMI-CEC)"
           :title="remoteOpen ? 'Hide the remote' : `A remote for ${cecSource.name || 'the HDMI source'}, over HDMI-CEC`"
           @click="remoteOpen = !remoteOpen"
@@ -2230,6 +2259,7 @@ const LED_BITS: Array<[number, string]> = [
           type="button"
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': gamepadOpen }"
+          data-ui="gamepad"
           aria-label="Gamepad"
           :title="gamepadOpen ? 'Hide the gamepad' : 'A gamepad for a console (Switch, Steam Deck)'"
           @click="gamepadOpen = !gamepadOpen"
@@ -2240,6 +2270,7 @@ const LED_BITS: Array<[number, string]> = [
           type="button"
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': touchMode }"
+          data-ui="touch"
           aria-label="Touch mode"
           :aria-pressed="touchMode"
           :title="touchMode ? 'Touch mode: screen is a trackpad' : 'Use the screen as a trackpad'"
@@ -2250,6 +2281,7 @@ const LED_BITS: Array<[number, string]> = [
         <button
           type="button"
           class="btn btn-sm btn-icon"
+          data-ui="pause"
           :aria-label="paused ? 'Resume the video stream' : 'Pause the video stream'"
           :title="
             updateHoldsStream
@@ -2283,6 +2315,7 @@ const LED_BITS: Array<[number, string]> = [
           type="button"
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': netlogOpen }"
+          data-ui="netlog"
           aria-label="Target log (netconsole)"
           :title="netlogOpen ? 'Hide the target log' : 'The target\'s log, received over the network (netconsole)'"
           @click="netlogOpen = !netlogOpen"
@@ -2294,6 +2327,7 @@ const LED_BITS: Array<[number, string]> = [
           v-if="status && status.screenshotBlocked !== undefined"
           type="button"
           class="btn btn-sm btn-icon"
+          data-ui="screenshot"
           aria-label="Save a screenshot to the microSD card"
           :title="status.screenshotBlocked ?? 'Save a screenshot to the microSD card (SCREENSHOTS)'"
           :disabled="!!status.screenshotBlocked || shotBusy"
@@ -2306,6 +2340,7 @@ const LED_BITS: Array<[number, string]> = [
           v-if="record && clipState"
           type="button"
           :class="['btn', 'btn-sm', 'rec-btn', { 'rec-on': clipState.on }]"
+          data-ui="clip"
           :aria-label="clipState.title"
           :title="record.on && !record.event ? 'The dashcam waits while a recording runs' : clipState.title"
           :disabled="clipBusy || (record.on && !record.event)"
@@ -2318,6 +2353,7 @@ const LED_BITS: Array<[number, string]> = [
           v-if="record"
           type="button"
           :class="['btn', 'btn-sm', 'rec-btn', { 'rec-on': record.on }]"
+          data-ui="record"
           :aria-label="record.on ? 'Stop recording' : 'Record to the microSD card'"
           :title="
             record.on
@@ -2340,6 +2376,7 @@ const LED_BITS: Array<[number, string]> = [
               ? 'Select text on the screen with the mouse, as on a page'
               : 'The target is not showing a text screen'
           "
+          data-ui="select"
           aria-label="Select text on the screen"
           :aria-pressed="selectingText"
           @click="toggleSelectText()"
@@ -2355,6 +2392,7 @@ const LED_BITS: Array<[number, string]> = [
               ? 'Copy everything on the screen as text'
               : 'The target is not showing a text screen'
           "
+          data-ui="copy"
           aria-label="Copy the screen as text"
           @click="copyScreenText()"
         >
@@ -2363,6 +2401,7 @@ const LED_BITS: Array<[number, string]> = [
         <button
           type="button"
           class="btn btn-sm btn-icon"
+          data-ui="scale"
           :aria-label="`Scale: ${fit === 'fit' ? 'fit' : fit === 'stretch' ? 'stretch' : '1:1'}`"
           :title="
             fit === 'fit'
@@ -2380,6 +2419,7 @@ const LED_BITS: Array<[number, string]> = [
         </button>
         <button
           v-if="keyLockSupported"
+          data-ui="keylock"
           type="button"
           class="btn btn-sm"
           :class="{ 'btn-on': keyLockWanted }"
@@ -2397,6 +2437,7 @@ const LED_BITS: Array<[number, string]> = [
         <button
           type="button"
           class="btn btn-sm btn-icon"
+          data-ui="fullscreen"
           aria-label="Fullscreen"
           @click="toggleFullscreen()"
         >

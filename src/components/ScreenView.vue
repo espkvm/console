@@ -733,6 +733,9 @@ function startDemoScreen() {
 
   const onMove = (e: PointerEvent) => {
     if (!props.engaged) return;
+    /* Pointer lock (relative mode) freezes the page's own cursor; the moves
+       arrive as relative reports instead - see onHid below. */
+    if (document.pointerLockElement) return;
     const p = toCanvas(e);
     if (!p) return;
     if (Math.hypot(p.x - target.x, p.y - target.y) > 1) movedAt = performance.now();
@@ -744,11 +747,34 @@ function startDemoScreen() {
     (window as unknown as { __espkvmDemoCrash?: () => void }).__espkvmDemoCrash?.();
 
   const onDown = (e: PointerEvent) => {
-    if (!props.engaged) return;
-    clickT = performance.now();
+    if (!props.engaged || document.pointerLockElement) return;
     const p = toCanvas(e);
     if (!p) return;
-    const { x, y } = p;
+    pressAt(p.x, p.y);
+  };
+
+  /* The relative reports the console sends - the phone's touchpad, or pointer
+     lock - moving the demo machine's own pointer, the way they move a real
+     target's. Absolute ones need nothing: the page's cursor already says where. */
+  let hidAt = -1e9;
+  let hidButtons = 0;
+  const HID_DRIVES_MS = 3000;
+  const onHid = (dx: number, dy: number, buttons: number) => {
+    const now = performance.now();
+    hidAt = now;
+    if (dx || dy) {
+      target.x = Math.min(W, Math.max(0, target.x + (dx * W) / 1280));
+      target.y = Math.min(H, Math.max(0, target.y + (dy * H) / 720));
+      movedAt = now;
+    }
+    hasPointer = true;
+    if (buttons & 1 && !(hidButtons & 1)) pressAt(target.x, target.y);
+    hidButtons = buttons;
+  };
+  (window as unknown as { __espkvmDemoHid?: typeof onHid }).__espkvmDemoHid = onHid;
+
+  const pressAt = (x: number, y: number) => {
+    clickT = performance.now();
     const scene = demoScene();
     /* Petting the black sheep is a mistake, and so is the red one in the dock. */
     if (scene === "hills") {
@@ -780,6 +806,7 @@ function startDemoScreen() {
   demoCleanup = () => {
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerdown", onDown);
+    delete (window as unknown as { __espkvmDemoHid?: typeof onHid }).__espkvmDemoHid;
   };
 
   const t0 = performance.now();
@@ -802,8 +829,9 @@ function startDemoScreen() {
     lastText = "";
     /* The eased pointer is caught up here, before the branches, because every
        picture guest draws it - not just the constellation. */
-    if (!props.engaged) hasPointer = false;
-    const driving = props.engaged && hasPointer;
+    const byHid = t - hidAt < HID_DRIVES_MS;
+    if (!props.engaged && !byHid) hasPointer = false;
+    const driving = (props.engaged || byHid) && hasPointer;
     /* The scene's focus eases along whatever it is given - the visitor's hand
        while they drive, its own wandering when they do not. */
     cur.x += (target.x - cur.x) * 0.18;

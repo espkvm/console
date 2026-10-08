@@ -1,4 +1,4 @@
---- boot: v.0.52.2 ---
+--- boot: v.0.60.0 ---
 W (1437) espkvm: boot: after software restart (rst 0x0c); running ota_0 (confirmed)
 I (1467) kvm_cfg: 120 settings loaded
 I (1467) temperature_sensor: Range [20°C ~ 100°C], error < 2°C

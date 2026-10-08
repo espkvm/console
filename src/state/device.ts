@@ -135,6 +135,10 @@ export interface VideoStatus {
   knowsDdc5v?: boolean;
   /** How long the picture has been one flat colour, in ms; 0 when it is not. */
   flatMs?: number;
+  /** Frames the capture delivered since boot, encoded or not. */
+  frames?: number;
+  /** Milliseconds since the last frame arrived; null before the first. */
+  frameAgeMs?: number | null;
   /** The recorder. Absent on firmware without one. */
   record?: RecordStatus;
   /** Why a screenshot cannot be saved now, or null when it can. */

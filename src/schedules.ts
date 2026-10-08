@@ -4,7 +4,15 @@
  * the editor can refuse a bad one before it is saved. The reference is at
  * https://espkvm.io/scripts/.
  */
-export type ScheduleAction = "wol" | "power" | "reset" | "poweroff" | "runbook" | "restart";
+export type ScheduleAction =
+  | "wol"
+  | "power"
+  | "reset"
+  | "poweroff"
+  | "runbook"
+  | "clip"
+  | "screenshot"
+  | "restart";
 
 export interface Schedule {
   name: string;
@@ -21,6 +29,8 @@ export const SCHEDULE_ACTIONS: { value: ScheduleAction; label: string }[] = [
   { value: "reset", label: "Reset" },
   { value: "poweroff", label: "Force off (hold power)" },
   { value: "runbook", label: "Run a runbook" },
+  { value: "clip", label: "Save a dashcam clip" },
+  { value: "screenshot", label: "Screenshot to the card" },
   { value: "restart", label: "Restart ESP-KVM" },
 ];
 

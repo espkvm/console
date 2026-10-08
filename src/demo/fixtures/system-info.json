@@ -1,6 +1,6 @@
 {
   "project": "espkvm",
-  "version": "v.0.52.2",
+  "version": "v.0.60.0",
   "built": "Sep 21 2026 12:00:00",
   "idf": "v6.1",
   "partition": "ota_0",
@@ -8,14 +8,14 @@
   "ota": [
     {
       "label": "ota_0",
-      "version": "v.0.52.2",
+      "version": "v.0.60.0",
       "state": "valid",
       "running": true,
       "boot": true
     },
     {
       "label": "ota_1",
-      "version": "v.0.52.1",
+      "version": "v.0.59.0",
       "state": "valid",
       "running": false,
       "boot": false

@@ -26,6 +26,7 @@ import {
 } from "../input/keymap";
 import type { Control } from "../input/control";
 import { useFloating } from "../ui/floating";
+import { haptic } from "../ui/haptic";
 import Icon from "./Icon.vue";
 
 const props = defineProps<{ control: Control; leds: number }>();
@@ -402,6 +403,7 @@ let delayTimer = 0;
 let repeatTimer = 0;
 
 function press(key: Key) {
+  haptic();
   if (key.mod) {
     pressMod(key.mod);
     return;
@@ -432,6 +434,7 @@ onUnmounted(() => {
 });
 
 function combo(c: { mods: number; code: string }) {
+  haptic();
   const usage = usageForCode(c.code);
   if (!usage) return;
   props.control.keyboard(c.mods, [usage]);

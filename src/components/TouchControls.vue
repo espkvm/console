@@ -11,9 +11,11 @@
  */
 import { onUnmounted, ref } from "vue";
 
+
 import { charToHid } from "../layouts";
 import { usageForCode } from "../input/keymap";
 import type { Control } from "../input/control";
+import { haptic } from "../ui/haptic";
 
 const props = defineProps<{ control: Control; layout: string }>();
 
@@ -26,6 +28,7 @@ const field = ref<HTMLInputElement | null>(null);
 const oskOpen = ref(false);
 
 function tap(button: number) {
+  haptic();
   props.control.mouseRelative(button, 0, 0);
   props.control.mouseRelative(0, 0, 0);
 }
@@ -105,6 +108,7 @@ let repeatTimer = 0;
 let repeatInterval = 0;
 
 function padPress(code: string) {
+  haptic();
   const hid = usageForCode(code);
   if (!hid) return;
   sendKey(hid);

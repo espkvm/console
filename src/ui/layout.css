@@ -590,3 +590,88 @@
   background: color-mix(in srgb, var(--bg-sunken) 75%, transparent);
   pointer-events: none;
 }
+
+/* ---- full screen without the bars (ui/immersive.ts) --------------------- */
+
+/* The bars leave the flow and slide off the edges; shown, they come back over
+   the picture rather than beside it, so the video keeps its size. */
+.console.immersive .statusbar,
+.console.immersive .actionbar,
+.console.immersive .rail {
+  position: fixed;
+  z-index: 30;
+  transition: transform 0.18s ease;
+}
+
+.console.immersive .statusbar {
+  top: 0;
+  left: 0;
+  right: 0;
+  transform: translateY(-100%);
+}
+
+.console.immersive .actionbar {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  transform: translateY(100%);
+}
+
+.console.immersive .rail {
+  top: var(--bar-height);
+  bottom: var(--bar-height);
+  left: 0;
+  transform: translateX(-100%);
+}
+
+.console.immersive .layout-right .rail {
+  left: auto;
+  right: 0;
+  transform: translateX(100%);
+}
+
+.console.immersive.bars-shown .statusbar,
+.console.immersive.bars-shown .actionbar,
+.console.immersive.bars-shown .rail {
+  transform: none;
+  box-shadow: 0 0 24px rgb(0 0 0 / 45%);
+}
+
+/* The way back for a finger: a small tab at the top edge. */
+.immersive-handle {
+  position: fixed;
+  z-index: 31;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 64px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: color-mix(in srgb, var(--bg-raised) 70%, transparent);
+  color: var(--text-muted);
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.immersive-handle:hover,
+.immersive-handle:focus-visible {
+  opacity: 1;
+}
+
+@media (max-width: 640px) {
+  /* On a phone the rail is a row under the status strip. */
+  .console.immersive .rail {
+    top: var(--bar-height);
+    bottom: auto;
+    left: 0;
+    right: 0;
+    transform: translateY(calc(-100% - var(--bar-height)));
+  }
+
+  .console.immersive .layout-right .rail {
+    transform: translateY(calc(-100% - var(--bar-height)));
+  }
+}
