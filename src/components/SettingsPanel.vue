@@ -64,7 +64,23 @@ const props = defineProps<{
   ts?: { keyExpiry?: number; keyExpired?: boolean };
   /** Firmware version, written into an exported file so it can be read later. */
   firmware?: string;
+  /** Finds where the captured screen sits on a multi-screen desktop and saves
+      it; reports progress, resolves with what it found. */
+  findScreen?: (progress: (text: string) => void) => Promise<string>;
 }>();
+
+/* The "Find this screen" button under the several-screens settings. */
+const screenResult = ref("");
+const findingScreen = ref(false);
+async function runFindScreen() {
+  if (!props.findScreen) return;
+  findingScreen.value = true;
+  try {
+    screenResult.value = await props.findScreen((t) => (screenResult.value = t));
+  } finally {
+    findingScreen.value = false;
+  }
+}
 
 /* What the browser said to the vibration "Try it" button. */
 const hapticResult = ref("");
@@ -1008,6 +1024,19 @@ async function doRevertCert() {
               </p>
               <p v-else-if="s.help && helpOpen.has(s.key)" class="setting-note">
                 {{ s.help }}
+              </p>
+
+              <p v-if="s.key === 'ptr_desk_w' && findScreen" class="setting-note">
+                <button
+                  type="button"
+                  class="btn btn-sm"
+                  :disabled="findingScreen"
+                  title="Moves the target's pointer across its whole desktop and fills these four in from where it shows up here. Needs the pointer visible and a still screen."
+                  @click="runFindScreen"
+                >
+                  {{ findingScreen ? "Wait..." : "Find this screen" }}
+                </button>
+                {{ screenResult }}
               </p>
 
               <p v-if="s.key === 'ui_haptic_level'" class="setting-note">

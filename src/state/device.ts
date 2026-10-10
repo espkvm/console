@@ -139,6 +139,12 @@ export interface VideoStatus {
   frames?: number;
   /** Milliseconds since the last frame arrived; null before the first. */
   frameAgeMs?: number | null;
+  /** Latency through the device over the last second, ms: landed -> taken,
+   *  published -> sent, landed -> sent, and the worst landed -> sent. */
+  lagMs?: { wait: number; send: number; total: number; totalMax: number };
+  /** Share of the configured quality in use, 25..100: lower while a viewer's
+   *  link cannot keep up. */
+  linkPct?: number;
   /** H.264 frames are rearranged on the CPU on this board: fine at 720p,
    *  a few fps at 1080p. */
   h264Cpu?: boolean;

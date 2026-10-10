@@ -744,7 +744,10 @@
         "wake (WoL)",
         "runbook",
         "save clip",
-        "screenshot"
+        "screenshot",
+        "hotspot on/off",
+        "next network mode",
+        "Ethernet / WiFi"
       ],
       "default": 0
     },
@@ -763,7 +766,10 @@
         "wake (WoL)",
         "runbook",
         "save clip",
-        "screenshot"
+        "screenshot",
+        "hotspot on/off",
+        "next network mode",
+        "Ethernet / WiFi"
       ],
       "default": 0
     },

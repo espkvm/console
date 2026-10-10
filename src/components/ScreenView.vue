@@ -50,7 +50,7 @@ const props = defineProps<{
   textView?: boolean;
 }>();
 
-const emit = defineEmits<{ surface: [HTMLElement | null]; "open-serial": [] }>();
+const emit = defineEmits<{ surface: [HTMLElement | null]; "open-serial": []; wake: [] }>();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const img = ref<HTMLImageElement | null>(null);
@@ -1440,6 +1440,16 @@ const fitClass = computed(() =>
         </p>
         <p v-else-if="noSignal" class="muted">{{ noSignalNote }}</p>
         <div v-if="!videoBlocked && !paused && noSignal" class="screen-reconnect">
+          <!-- A screen that went dark after idling sends no signal at all; one
+               nudge of the mouse wakes it, the way a hand on the desk would. -->
+          <button
+            type="button"
+            class="btn btn-sm"
+            title="Moves the target's mouse one pixel and back, which wakes a screen that went dark"
+            @click="emit('wake')"
+          >
+            Wake the target
+          </button>
           <template v-if="reconnectState === 'counting'">
             <p class="muted">Reconnecting the HDMI in {{ reconnectLeft }} s.</p>
             <button type="button" class="btn btn-sm" @click="reconnectNow">Reconnect now</button>

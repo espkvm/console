@@ -19,6 +19,8 @@
  * Frame layout is defined in components/kvm_web/http_server.c.
  */
 
+import { patchAnnexB } from "./spsPatch";
+
 const HEADER_LEN = 12;
 const MAGIC = 0x4b;
 const TYPE_JPEG = 1;
@@ -53,6 +55,17 @@ const RESYNC_MIN_GAP_MS = 500;
 const MAX_DECODER_ERRORS = 3;
 
 /** Anything a canvas can draw and that must be released afterwards. */
+/*
+ * How long a frame spends in this browser, from arriving to being handed over
+ * for drawing, smoothed. Read by the Video readout beside the device's own
+ * figure, so a slow round trip can be split into its parts.
+ */
+export const browserLag = { ms: 0 };
+function noteLag(arrivedMs: number) {
+  const d = performance.now() - arrivedMs;
+  browserLag.ms = browserLag.ms ? browserLag.ms * 0.9 + d * 0.1 : d;
+}
+
 export type Drawable = (ImageBitmap | VideoFrame) & { close(): void };
 
 export interface FrameInfo {
@@ -248,9 +261,11 @@ export class VideoStream {
     if (this.#decodingJpeg) return;
     this.#decodingJpeg = true;
     const meta = this.#lastMeta;
+    const arrived = performance.now();
     try {
       const blob = new Blob([buffer.slice(HEADER_LEN)], { type: "image/jpeg" });
       const bitmap = await createImageBitmap(blob);
+      noteLag(arrived);
       this.#handlers.onFrame({ image: bitmap, ...meta });
     } catch {
       /* A corrupt frame is not worth reporting; the next one will do. */
@@ -281,6 +296,8 @@ export class VideoStream {
     if (document.visibilityState === "hidden") return;
 
     const { keyframe, sps } = inspectAnnexB(payload);
+    /* Say frames are never reordered, or the decoder holds several back. */
+    if (sps) payload = patchAnnexB(payload);
 
     /* Stall watchdog: input is flowing (we are here) but the decoder has produced
        nothing for too long, so it is wedged. Tear it down here - before the SPS
@@ -355,6 +372,8 @@ export class VideoStream {
           /* A frame came out: the decoder is alive, so refresh the watchdog clock
              and clear the rebuild count. */
           this.#lastOutputAt = performance.now();
+          /* The chunk's timestamp is when it was handed in, in microseconds. */
+          noteLag(frame.timestamp / 1000);
           this.#stallRebuilds = 0;
           this.#decoderErrors = 0;
           const meta = this.#lastMeta;

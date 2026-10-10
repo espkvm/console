@@ -188,7 +188,24 @@ export class Control {
     if (this.#ws?.readyState === WebSocket.OPEN) this.#ws.send(data.buffer as ArrayBuffer);
   }
 
+  /*
+   * A target with several screens: its absolute pointer spans the whole
+   * desktop, and the picture is one screen of it. With a window set, a
+   * position on the picture (0..ABS_MAX) is turned into one on the desktop.
+   */
+  #window: { deskW: number; deskH: number; x: number; y: number; w: number; h: number } | null = null;
+
+  setDesktopWindow(win: { deskW: number; deskH: number; x: number; y: number; w: number; h: number } | null) {
+    this.#window = win && win.deskW > 0 && win.w > 0 && win.h > 0 ? win : null;
+  }
+
   mouseAbsolute(buttons: number, x: number, y: number, wheel = 0, pan = 0) {
+    const win = this.#window;
+    if (win) {
+      const deskH = win.deskH > 0 ? win.deskH : win.h;
+      x = ((win.x + (x / ABS_MAX) * win.w) / win.deskW) * ABS_MAX;
+      y = ((win.y + (y / ABS_MAX) * win.h) / deskH) * ABS_MAX;
+    }
     const b = new Uint8Array(8);
     const dv = new DataView(b.buffer);
     dv.setUint8(0, MSG_MOUSE_ABS);

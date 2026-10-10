@@ -30,6 +30,9 @@ import GamepadPanel from "./components/GamepadPanel.vue";
 import SerialPanel from "./components/SerialPanel.vue";
 import LogPanel from "./components/LogPanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
+import { pictureOf } from "./ui/picture";
+import { findScreen } from "./ui/screenCalib";
+import { measureLatency } from "./ui/latency";
 import VideoWidget from "./components/VideoWidget.vue";
 import ToastHost from "./components/ToastHost.vue";
 import KeyboardPanel from "./components/KeyboardPanel.vue";
@@ -650,6 +653,33 @@ const input = useInput({
   onDisengage: () => (engaged.value = false),
 });
 
+/* Several screens on the target: see ptr_desk_w in the settings. The capture
+   size is the screen's own size. */
+const findingScreen = ref(false);
+watchEffect(() => {
+  const v = values.value;
+  const deskW = Number(v.ptr_desk_w ?? 0);
+  /* While the screen is being looked for the pointer must go uncorrected; the
+     status poll would otherwise put the old window back mid-sweep. */
+  if (findingScreen.value) {
+    input.control.setDesktopWindow(null);
+    return;
+  }
+  const st = status.value;
+  input.control.setDesktopWindow(
+    deskW > 0 && st && st.width > 0
+      ? {
+          deskW,
+          deskH: Number(v.ptr_desk_h ?? 0),
+          x: Number(v.ptr_scr_x ?? 0),
+          y: Number(v.ptr_scr_y ?? 0),
+          w: st.width,
+          h: st.height,
+        }
+      : null,
+  );
+});
+
 useTouch({
   surface,
   control: input.control,
@@ -675,6 +705,140 @@ watch(heldByOther, (held) => {
 watch([locked, mustChange], ([lock, change]) => {
   if (lock || change) engaged.value = false;
 });
+/* The whole-way delay, from the Video readout: see ui/latency.ts. */
+const latencyText = ref<string | null>(null);
+const measuringLatency = ref(false);
+async function measureDelay() {
+  const canvas = pictureOf(surface.value);
+  if (!canvas) {
+    latencyText.value = "There is no picture to watch yet";
+    return;
+  }
+  if (padAlone.value) {
+    latencyText.value = `The target sees ${padAloneLabel.value} only - no mouse to move`;
+    return;
+  }
+  if (input.controlState.value === "held") {
+    latencyText.value = "Another session is in control; take control first";
+    return;
+  }
+  /* Always: the console assumes control is its own until told otherwise, and
+     the device drops input from a session that is not in control. */
+  input.control.takeControl();
+  measuringLatency.value = true;
+  try {
+    /* A moment to let go of the mouse: a hand on it moves the pointer too. */
+    for (let s = 5; s > 0; s--) {
+      latencyText.value = `Starting in ${s} - hands off the mouse`;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    const r = await measureLatency(input.control, canvas, (n, of) => {
+      latencyText.value = `Measuring ${n} of ${of}...`;
+    });
+    latencyText.value = `${r.median} ms (${r.min}-${r.max}; each: ${r.samples.join(", ")})`;
+  } catch (err) {
+    latencyText.value =
+      err instanceof Error ? err.message.charAt(0).toUpperCase() + err.message.slice(1) : "Could not measure";
+  } finally {
+    measuringLatency.value = false;
+  }
+}
+
+/*
+ * A gamepad-only USB mode leaves the target with no keyboard and no mouse. That
+ * is right for a Switch, and baffling once the device is plugged into a
+ * computer again - the pointer simply does not move. Say so where it shows.
+ */
+const padAlone = computed(() => {
+  const name = enumName(schema.value, values.value, "usb_pad") ?? "";
+  return name.endsWith("_alone") ? name.replace("_alone", "") : null;
+});
+const padAloneLabel = computed(() => (padAlone.value === "xinput" ? "an Xbox 360 gamepad" : "a Switch gamepad"));
+const bringingBack = ref(false);
+async function bringBackKeyboard() {
+  const index = enumIndex(schema.value, "usb_pad", padAlone.value ?? "off");
+  if (index === null) return;
+  bringingBack.value = true;
+  try {
+    values.value = await saveSettings({ usb_pad: index });
+    await runRestart("Restarting with the keyboard and mouse", restartDevice, { kind: "manual" });
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "the device would not take that");
+  } finally {
+    bringingBack.value = false;
+  }
+}
+
+/*
+ * A screen that went dark after idling sends no HDMI at all, and the console
+ * then shows "No signal" for a machine that is fine. One nudge of the mouse -
+ * a pixel there and back, so the pointer ends where it was - wakes it. Done
+ * once by itself when the console opens to no signal, and on the button.
+ */
+function wakeTarget(auto: boolean) {
+  if (padAlone.value) return;
+  if (input.controlState.value === "held") {
+    if (!auto) toast.info("Another session is in control; take control to wake the target");
+    return;
+  }
+  input.control.mouseRelative(0, 1, 0);
+  setTimeout(() => input.control.mouseRelative(0, -1, 0), 60);
+  if (!auto) toast.info("Nudged the mouse - a dark screen should wake in a few seconds");
+}
+let wokeOnOpen = false;
+let noSignalSince = 0;
+watch(
+  () => status.value?.signal,
+  (sig) => {
+    if (sig !== false) {
+      noSignalSince = 0;
+      return;
+    }
+    if (wokeOnOpen) return;
+    if (!noSignalSince) noSignalSince = Date.now();
+    setTimeout(() => {
+      if (!wokeOnOpen && status.value?.signal === false && Date.now() - noSignalSince >= 3000) {
+        wokeOnOpen = true;
+        wakeTarget(true);
+      }
+    }, 3100);
+  },
+  { immediate: true },
+);
+
+/* Several screens: find where the captured one sits, and save it. */
+async function findThisScreen(progress: (t: string) => void): Promise<string> {
+  const canvas = pictureOf(surface.value);
+  if (!canvas) return "There is no picture to watch yet";
+  if (padAlone.value) return `The target sees ${padAloneLabel.value} only - no mouse to move`;
+  if (input.controlState.value === "held") return "Another session is in control; take control first";
+  /* Always: the console assumes control is its own until told otherwise, and
+     the device drops input from a session that is not in control. */
+  input.control.takeControl();
+  /* Sweep in the target's own coordinates, not through the current setting. */
+  findingScreen.value = true;
+  try {
+    for (let s = 5; s > 0; s--) {
+      progress(`Starting in ${s} - hands off the mouse`);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    const win = await findScreen(input.control, canvas, (n, of) => progress(`Looking ${n} of ${of}...`));
+    const next = win
+      ? { ptr_desk_w: win.deskW, ptr_desk_h: win.deskH, ptr_scr_x: win.x, ptr_scr_y: win.y }
+      : { ptr_desk_w: 0, ptr_desk_h: 0, ptr_scr_x: 0, ptr_scr_y: 0 };
+    values.value = await saveSettings(next);
+    return win
+      ? `Found: desktop ${win.deskW}x${win.deskH}, this screen at ${win.x}, ${win.y}. Saved.`
+      : "This is the target's only screen - nothing to correct.";
+  } catch (err) {
+    const m = err instanceof Error ? err.message : "could not find the screen";
+    return m.charAt(0).toUpperCase() + m.slice(1);
+  } finally {
+    /* The watch puts the saved window back. */
+    findingScreen.value = false;
+  }
+}
+
 function takeControl() {
   input.control.takeControl();
 }
@@ -1732,6 +1896,15 @@ const LED_BITS: Array<[number, string]> = [
       <span>{{ restartOutcome.text }}</span>
       <button type="button" class="btn btn-sm" @click="restartOutcome = null">Dismiss</button>
     </div>
+    <div v-if="padAlone" class="update-banner" role="status">
+      <span>
+        Keyboard and mouse are off: the target sees {{ padAloneLabel }} only (Settings - Input -
+        Gamepad). Right for a console, not for a computer.
+      </span>
+      <button type="button" class="btn btn-sm btn-primary" :disabled="bringingBack" @click="bringBackKeyboard">
+        Bring them back
+      </button>
+    </div>
     <div v-if="showSlowH264" class="update-banner" role="status">
       <span>
         H.264 at {{ status?.width }}x{{ status?.height }} runs at only a few fps on this board.
@@ -1861,8 +2034,11 @@ const LED_BITS: Array<[number, string]> = [
         :text-available="textModeLikely"
         :video-blocked="videoBlocked"
         :h264-blocked="h264Blocked"
+        :latency="latencyText"
+        :measuring="measuringLatency"
         @set-codec="setCodec"
         @prefer-text="textPreferred = $event"
+        @measure="measureDelay"
       />
 
       <span class="statusbar-spacer" />
@@ -1978,6 +2154,7 @@ const LED_BITS: Array<[number, string]> = [
             "
             @surface="surface = $event"
             @open-serial="serialOpen = true"
+            @wake="wakeTarget(false)"
           />
 
           <button
@@ -2522,6 +2699,7 @@ const LED_BITS: Array<[number, string]> = [
         :wg-public-key="system?.wg?.publicKey ?? ''"
         :ts="system?.ts"
         :firmware="system?.version"
+        :find-screen="findThisScreen"
         @values="values = $event"
         @password-changed="onPasswordChanged"
       />

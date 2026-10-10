@@ -22,6 +22,7 @@ import Icon from "./Icon.vue";
 import { computed, onUnmounted, ref } from "vue";
 
 import type { VideoStatus } from "../state/device";
+import { browserLag } from "../video/stream";
 
 const props = defineProps<{
   status: VideoStatus | null;
@@ -36,11 +37,15 @@ const props = defineProps<{
   h264Blocked: string | null;
   /** Why there is no video at all - a capture board that never answered. */
   videoBlocked?: string | null;
+  /** The last whole-way measurement, or what went wrong; null before one. */
+  latency?: string | null;
+  measuring?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: "set-codec", codec: "mjpeg" | "h264"): void;
   (e: "prefer-text", on: boolean): void;
+  (e: "measure"): void;
 }>();
 
 /* The codec is what the picture is made of. It stays lit while the text view is
@@ -52,6 +57,11 @@ function pickCodec(codec: "mjpeg" | "h264") {
   if (showing.value === codec) return;
   emit("set-codec", codec);
 }
+
+/* The browser's share, sampled while the readout is open. */
+const browserMs = ref(0);
+const lagTimer = setInterval(() => (browserMs.value = Math.round(browserLag.ms)), 1000);
+onUnmounted(() => clearInterval(lagTimer));
 
 const open = ref(false);
 const signal = computed(() => Boolean(props.status?.signal));
@@ -223,9 +233,27 @@ function rate(kbps: number): string {
               {{ status.encoderBusyPct }}%
             </dd>
           </div>
+          <div v-if="status.linkPct && status.linkPct < 100" class="fact">
+            <dt title="A viewer's link could not keep up, so the device is sending less until it can">
+              Quality, for a slow link
+            </dt>
+            <dd class="mono warn">{{ status.linkPct }}%</dd>
+          </div>
           <div class="fact">
             <dt title="Mean time one frame took to encode">Encode time</dt>
             <dd class="mono">{{ (status.encodeUs / 1000).toFixed(1) }} ms</dd>
+          </div>
+          <div v-if="status.lagMs && status.lagMs.total > 0" class="fact">
+            <dt title="From a frame landing in the device until it was sent, averaged over a second; the worst in brackets">
+              Through the device
+            </dt>
+            <dd class="mono">{{ status.lagMs.total }} ms ({{ status.lagMs.totalMax }})</dd>
+          </div>
+          <div v-if="open && browserMs > 0" class="fact">
+            <dt title="From a frame arriving in this browser until it is ready to draw (decoding), smoothed">
+              In this browser
+            </dt>
+            <dd class="mono">{{ browserMs }} ms</dd>
           </div>
           <div class="fact">
             <dt>Mode changes</dt>
@@ -247,6 +275,21 @@ function rate(kbps: number): string {
           </div>
         </dl>
         <p v-else class="muted">No status from the device yet.</p>
+
+        <!-- The delay a person feels: the pointer moved on the target until this
+             page shows it. Needs a visible pointer and a still screen. -->
+        <div class="vw-lat">
+          <button
+            type="button"
+            class="btn btn-sm"
+            :disabled="measuring || !signal"
+            title="Moves the target's mouse pointer a few times and times how long until it shows here. Use a still screen with the pointer visible."
+            @click="emit('measure')"
+          >
+            {{ measuring ? "Wait..." : "Measure the delay" }}
+          </button>
+          <span v-if="latency" class="vw-lat-out mono">{{ latency }}</span>
+        </div>
       </div>
     </Teleport>
   </div>
@@ -255,6 +298,18 @@ function rate(kbps: number): string {
 <style scoped>
 .vw {
   position: relative;
+}
+
+.vw-lat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.vw-lat-out {
+  font-size: 12px;
 }
 
 /* One row of two, so which one is in force reads at a glance rather than from

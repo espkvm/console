@@ -12,7 +12,19 @@ export const FILE_VERSION = 1;
 
 /* What makes a device itself: two boxes with one hostname sign two certificates
    with the same subject and a browser trusts neither. Held back on import. */
-export const IDENTITY_KEYS = ["net_hostname", "net_ip", "net_mask", "net_gw", "net_dns"];
+export const IDENTITY_KEYS = [
+  "net_hostname",
+  "net_ip",
+  "net_mask",
+  "net_gw",
+  "net_dns",
+  /* Where the captured screen sits on the target's desktop: a fact about one
+     computer's screens, wrong on a box plugged into another. */
+  "ptr_desk_w",
+  "ptr_desk_h",
+  "ptr_scr_x",
+  "ptr_scr_y",
+];
 
 export interface SettingsFile {
   kind: string;
@@ -148,8 +160,8 @@ export function describePlan(plan: ImportPlan, applied: boolean): string[] {
   if (plan.same.length) lines.push(`${plan.same.length} already had the value in the file.`);
   if (plan.identity.length) {
     lines.push(
-      `Left alone as this device's own identity: ${plan.identity.join(", ")}. ` +
-        "Two devices with one hostname or one address collide.",
+      `Left alone as this device's own: ${plan.identity.join(", ")}. ` +
+        "Two devices with one hostname or one address collide, and the screen layout belongs to the computer it is plugged into.",
     );
   }
   if (plan.unknown.length) {
