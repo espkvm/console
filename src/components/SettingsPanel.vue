@@ -759,6 +759,10 @@ async function toggle(key: string, e: Event) {
 async function writeSecret(key: string, el: HTMLInputElement) {
   const value = el.value;
   if (!value) return;
+  if (key === "vnc_pass" && !/^[\x20-\x7e]{1,8}$/.test(value)) {
+    toast.error("VNC password must be 1 to 8 printable ASCII characters");
+    return;
+  }
   el.value = "";
   await write(key, value);
 }
