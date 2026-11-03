@@ -20,6 +20,7 @@ import {
 import { isModifierCode, modifierMask, usageForCode } from "./keymap";
 import { mediaUsage } from "./mediaKeys";
 import { pictureRect } from "../video/picture";
+import { createWheel } from "./wheel";
 
 export interface InputOptions {
   engaged: Ref<boolean>;
@@ -28,6 +29,8 @@ export interface InputOptions {
   /** From the device's mouse_mode setting. */
   pointerMode: Ref<"absolute" | "relative">;
   invertScroll: Ref<boolean>;
+  /** Wheel speed, 1 as is. */
+  scrollSpeed?: Ref<number>;
   /** Element showing the target's screen; pointer coordinates map onto it. */
   surface: Ref<HTMLElement | null>;
   /** How the picture is sized inside that element - only "stretch" enlarges it. */
@@ -240,10 +243,11 @@ export function useInput(opts: InputOptions) {
       else control.mouseAbsolute(0, lastPos.x, lastPos.y);
     };
 
+    const wheel = createWheel();
     const onWheel = (e: WheelEvent) => {
       if (!tracking()) return;
       e.preventDefault();
-      const clicks = Math.round(-e.deltaY / 100) * (opts.invertScroll.value ? -1 : 1);
+      const clicks = wheel(e, opts.scrollSpeed?.value ?? 1) * (opts.invertScroll.value ? -1 : 1);
       if (clicks === 0) return;
       if (relative()) {
         control.mouseRelative(0, 0, 0, clicks);

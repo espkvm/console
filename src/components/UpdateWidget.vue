@@ -284,7 +284,7 @@ watch(updateUrl, () => void checkForUpdate());
 watch([release, () => props.system?.installId], ([rel, id]) => {
   if (!rel) return;
   const s = props.system;
-  reportSeen(seenUrl(updateUrl.value, id, s?.boardId, s?.version), id);
+  reportSeen(seenUrl(updateUrl.value, id, s?.boardId, s?.version, s?.chipRev), id);
 });
 
 /**

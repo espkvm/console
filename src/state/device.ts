@@ -156,6 +156,8 @@ export interface VideoStatus {
   screenshotBlocked?: string | null;
   /** The active device profile's id. Absent on firmware without profiles. */
   profile?: number;
+  /** The target's HDD LED: lit or blinking now. null when it is not wired, absent on older firmware. */
+  hdd?: boolean | null;
 }
 
 export interface RecordStatus {
@@ -231,6 +233,8 @@ export interface SystemInfo {
   crashDumpBytes?: number;
   /** This install's random id, sent with the update check (see seen.ts). */
   installId?: string;
+  /** The P4's silicon revision, major * 100 + minor (301 = v3.1). Sent with installId. */
+  chipRev?: number;
   /** The gamepad the USB device carries (Settings -> Input -> Gamepad, from boot): "" none. */
   usbPad?: "" | "switch" | "xinput" | "xbox";
   /** espkvm-agent: the USB serial port is up in agent mode, and an agent said hello on it. */

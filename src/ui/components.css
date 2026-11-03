@@ -1759,6 +1759,21 @@
 }
 
 /* A heading the device asked for, inside a section. */
+/* The group the overview of features opened Settings at, marked for a moment. */
+.settings-group-flash {
+  animation: settings-group-flash 1.6s ease-out;
+}
+
+@keyframes settings-group-flash {
+  0%,
+  40% {
+    background: color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 .settings-group {
   margin: var(--space-3) 0 0;
   color: var(--text-muted);
@@ -1840,6 +1855,15 @@
 
 .settings-window-head .icon-btn {
   margin-left: auto;
+}
+
+/* Settings opened from the overview of features: the way back to it. */
+.settings-window-head .settings-back {
+  margin-left: auto;
+}
+
+.settings-window-head .settings-back + .icon-btn {
+  margin-left: 0;
 }
 
 /* In the window the sections stand in a column beside the settings; in the rail
@@ -1940,4 +1964,52 @@
   color: var(--accent);
   text-transform: none;
   letter-spacing: 0;
+}
+
+/* A button's name, shown on a long press on a phone (ui/touchLabels.ts). */
+.touch-label {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-overlay);
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+  font-size: var(--text-sm);
+  pointer-events: none;
+}
+
+/* The last keys sent to the target, newest on the right and brightest. It takes
+   only the room left in the bar (width 0, then grow), so it never wraps the bar
+   onto a second row: when space runs out the oldest keys are cut on the left. */
+.actionbar-left-grow {
+  flex: 1 1 auto;
+}
+
+.key-echo {
+  display: inline-flex;
+  flex: 1 1 auto;
+  width: 0;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, #000 32px);
+  font-size: var(--text-xs);
+}
+
+.key-echo-key {
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.key-echo-key:last-child {
+  border-color: var(--accent);
+  color: var(--text);
 }

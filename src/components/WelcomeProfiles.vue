@@ -17,7 +17,7 @@ import { createProfile, dismissAsk, presetIcon, profiles } from "../state/profil
 import { toast } from "../state/toasts";
 import { formatHidden, parseHidden } from "../ui/features";
 
-const props = defineProps<{ values: Values }>();
+const props = defineProps<{ values: Values; step?: string }>();
 const emit = defineEmits<{ values: [Values]; done: [] }>();
 
 const SERVER = "server";
@@ -91,6 +91,7 @@ async function finish(apply: boolean) {
 
 <template>
   <section class="wp" role="dialog" aria-labelledby="wp-title">
+    <small v-if="step" class="wp-step">{{ step }}</small>
     <h2 id="wp-title">What will this device be plugged into?</h2>
     <p class="wp-sub">
       Pick everything that fits. Each device gets a profile with settings that suit it, used
@@ -142,6 +143,12 @@ async function finish(apply: boolean) {
   background: var(--bg-overlay);
   color: var(--text);
   box-shadow: 0 12px 40px rgb(0 0 0 / 35%);
+}
+
+.wp-step {
+  margin-bottom: calc(-1 * var(--space-3));
+  color: var(--text-muted);
+  font-size: var(--text-xs, 0.75rem);
 }
 
 .wp h2 {

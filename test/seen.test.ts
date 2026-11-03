@@ -16,3 +16,10 @@ test("a fork, a bad id or a broken url is not", () => {
   assert.equal(seenUrl("https://fw.espkvm.io/firmware/manifest.json", "ABC", "x", "v1"), null);
   assert.equal(seenUrl("not a url", ID, "x", "v1"), null);
 });
+
+test("the chip revision goes as major.minor", () => {
+  const u = seenUrl("https://fw.espkvm.io/firmware/funcev/manifest.json", ID, "funcev", "v.0.76.0", 302);
+  assert.equal(u, `${SEEN_URL}?id=${ID}&board=funcev&ver=v.0.76.0&rev=3.2`);
+  const old = seenUrl("https://fw.espkvm.io/firmware/p4-eth/manifest.json", ID, "p4-eth", "v.0.76.0", 1);
+  assert.equal(old, `${SEEN_URL}?id=${ID}&board=p4-eth&ver=v.0.76.0&rev=0.1`);
+});

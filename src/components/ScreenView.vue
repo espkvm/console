@@ -12,7 +12,7 @@
  * being locked out of the picture because a transport changed would be worse
  * than using the older one.
  */
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 
 import { textSpans } from "../screen/textSpans";
 import { drawDemoBox, type DemoBoxView } from "./demoBox";
@@ -961,6 +961,13 @@ function surfaceEl(): HTMLElement | null {
 }
 
 watch([canvas, img, useWebsocket], () => emit("surface", surfaceEl()));
+
+watchEffect(() => {
+  drawn.counting = useWebsocket.value && !props.paused;
+});
+onUnmounted(() => {
+  drawn.counting = false;
+});
 
 /** How long to leave a WebSocket that produced nothing before trying again. */
 const WS_RETRY_MS = 5000;

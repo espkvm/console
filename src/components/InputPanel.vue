@@ -96,17 +96,39 @@ function releaseAll() {
 
 async function paste() {
   if (!navigator.clipboard?.readText) {
-    toast.error("Clipboard access needs HTTPS or localhost");
+    toast.error("Clipboard access needs HTTPS. Type the text in the box below instead.");
     return;
   }
   let text: string;
   try {
     text = await navigator.clipboard.readText();
   } catch {
-    toast.error("Clipboard read was denied");
+    toast.error("Clipboard read was denied. Type the text in the box below instead.");
     return;
   }
-  if (!text) return;
+  await typeText(text);
+}
+
+/* Text typed into the box here, for when the clipboard cannot be read. */
+const draft = ref("");
+
+async function typeDraft() {
+  if (await typeText(draft.value)) draft.value = "";
+}
+
+/* Progress of the text being typed, and a way to stop a long one half way. */
+const typed = ref(0);
+const typeTotal = ref(0);
+let stopTyping = false;
+
+function stop() {
+  stopTyping = true;
+}
+
+/** Type @p text on the target. True when all of it went. */
+async function typeText(text: string): Promise<boolean> {
+  text = text.replace(/\r/g, "");
+  if (!text || pasting.value) return false;
 
   /* Silently dropping characters would leave the operator believing the paste
      succeeded. Name the ones this layout cannot produce. */
@@ -115,10 +137,15 @@ async function paste() {
     toast.error(`Layout ${layout.value} cannot type: ${missing.slice(0, 12).join(" ")}`);
   }
 
+  const chars = [...text];
   pasting.value = true;
+  stopTyping = false;
+  typed.value = 0;
+  typeTotal.value = chars.length;
   try {
-    for (const ch of text) {
-      if (ch === "\r") continue;
+    for (const ch of chars) {
+      if (stopTyping) break;
+      typed.value++;
       const row = charToHid(layout.value, ch) as { mod: number; hid: number } | null;
       if (!row) continue;
       props.control.keyboard(row.mod, [row.hid]);
@@ -127,8 +154,11 @@ async function paste() {
       await sleep(typeDelay.value);
     }
   } finally {
+    props.control.keyboard(0, []);
     pasting.value = false;
   }
+  if (stopTyping) toast.info(`Stopped after ${typed.value} of ${typeTotal.value} characters`);
+  return !stopTyping;
 }
 
 /* ---- user macros -------------------------------------------------------- */
@@ -295,9 +325,23 @@ async function runMacro(m: UserMacro) {
       Sent as key positions using the <strong>{{ layout }}</strong> layout, which must match
       what the target has active. Change it under Settings -> Input.
     </p>
-    <button type="button" class="btn btn-sm" :disabled="pasting" @click="paste">
-      {{ pasting ? "Typing..." : "Paste from clipboard" }}
-    </button>
+    <div v-if="pasting" class="type-progress">
+      <progress :max="typeTotal" :value="typed"></progress>
+      <small class="mono">{{ typed }} / {{ typeTotal }}</small>
+      <button type="button" class="btn btn-sm" @click="stop">Stop</button>
+    </div>
+    <template v-else>
+      <button type="button" class="btn btn-sm" @click="paste">Paste from clipboard</button>
+      <textarea
+        v-model="draft"
+        rows="3"
+        class="type-draft"
+        spellcheck="false"
+        autocomplete="off"
+        placeholder="Or type or paste text here"
+      ></textarea>
+      <button type="button" class="btn btn-sm" :disabled="!draft" @click="typeDraft">Type it</button>
+    </template>
 
     <h3>Stuck input</h3>
     <p class="setting-note">
@@ -308,3 +352,22 @@ async function runMacro(m: UserMacro) {
     <button type="button" class="btn btn-sm" @click="releaseAll">Release all inputs</button>
   </div>
 </template>
+
+<style scoped>
+.type-draft {
+  width: 100%;
+  margin-top: var(--space-2);
+  resize: vertical;
+}
+
+.type-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.type-progress progress {
+  flex: 1;
+  min-width: 0;
+}
+</style>

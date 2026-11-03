@@ -11,7 +11,7 @@ import Icon from "./Icon.vue";
  * device's own reason, rather than hidden. Hiding it would leave the operator
  * wondering whether the feature exists at all.
  */
-import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 
 import {
   type SettingSection,
@@ -49,6 +49,7 @@ import { runRestart } from "../state/restart";
 import { TIME_ZONES, browserZone, zoneName, zoneOptions } from "../state/timezones";
 import { toast } from "../state/toasts";
 import TwoFactor from "./TwoFactor.vue";
+import ViewerAccount from "./ViewerAccount.vue";
 import ScreenLayout from "./ScreenLayout.vue";
 import ProfileBar from "./ProfileBar.vue";
 import {
@@ -86,6 +87,10 @@ const props = defineProps<{
       the whole panel and put the saved value back into a field being typed in. */
   screenW?: number;
   screenH?: number;
+  /** The section to show, when Settings is opened at one (from the overview). */
+  startSection?: string;
+  /** A group in it to scroll to and mark for a moment. */
+  startGroup?: string;
 }>();
 
 /* The "Find this screen" button under the several-screens settings. */
@@ -103,7 +108,7 @@ async function runFindScreen() {
 
 /* What the browser said to the vibration "Try it" button. */
 const hapticResult = ref("");
-const emit = defineEmits<{ values: [Values]; passwordChanged: [] }>();
+const emit = defineEmits<{ values: [Values]; passwordChanged: []; tour: [] }>();
 
 /*
  * A viewing token, for a dashboard that can only be given a URL.
@@ -375,7 +380,33 @@ const pinMap = computed(() => {
   return rows;
 });
 
-const active = ref("");
+const active = ref(props.startSection ?? "");
+const root = ref<HTMLElement | null>(null);
+/* The heading of the group asked for: scrolled to the top and marked for a
+   moment, once the section is drawn. */
+async function showGroup(name: string) {
+  if (!name) return;
+  await nextTick();
+  const head = [...(root.value?.querySelectorAll<HTMLElement>(".settings-group") ?? [])].find(
+    (h) => h.dataset.group === name,
+  );
+  if (!head) return;
+  head.scrollIntoView({ block: "start", behavior: "smooth" });
+  head.classList.remove("settings-group-flash");
+  void head.offsetWidth; /* restart the animation */
+  head.classList.add("settings-group-flash");
+}
+watch(
+  () => [props.startSection, props.startGroup] as const,
+  ([id, group]) => {
+    if (id) {
+      active.value = id;
+      query.value = "";
+      void showGroup(group ?? "");
+    }
+  },
+);
+onMounted(() => void showGroup(props.startGroup ?? ""));
 /* The first tab until one is picked - by its id: the list holds whole sections,
    and handing one over as the id matched no setting and drew an empty pane. */
 const currentSection = computed(() => active.value || sections.value[0]?.id || "video");
@@ -877,7 +908,7 @@ async function doRevertCert() {
 </script>
 
 <template>
-  <div class="settings">
+  <div ref="root" class="settings">
     <div class="tabs" role="tablist">
       <button
         v-for="s in sections"
@@ -961,7 +992,7 @@ async function doRevertCert() {
           </div>
 
           <template v-for="block in grouped" :key="block.name || 'first'">
-            <h3 v-if="block.name" class="settings-group">
+            <h3 v-if="block.name" class="settings-group" :data-group="block.name">
               {{ block.name }}
               <a
                 v-if="GROUP_DOCS[block.name]"
@@ -1420,6 +1451,12 @@ async function doRevertCert() {
           </div>
         </div>
 
+        <div v-if="currentSection === 'system' && !query.trim()" class="firmware">
+          <h3>What this device can do</h3>
+          <p class="setting-note">Every feature on one page, with a button to its settings.</p>
+          <button type="button" class="btn btn-sm" @click="emit('tour')">Show</button>
+        </div>
+
         <div v-if="currentSection === 'security' && signedIn" class="firmware">
           <h3>Session</h3>
           <p class="setting-note">
@@ -1535,6 +1572,8 @@ async function doRevertCert() {
             </button>
           </div>
         </div>
+
+        <ViewerAccount v-if="currentSection === 'security' && signedIn" />
 
         <div v-if="currentSection === 'security'" class="firmware">
           <h3>Device certificate</h3>

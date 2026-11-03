@@ -2,7 +2,8 @@
  * Counting the devices in use, with the operator's consent: when the update
  * check is on and asks the project's own address, the browser also tells
  * check.espkvm.io this device's random id (installId, made on the device, not
- * taken from the hardware), its board and its version - at most once a day.
+ * taken from the hardware), its board, its version and the chip revision - at
+ * most once a day.
  * The device itself still never reaches out. A failed report changes nothing.
  */
 
@@ -17,6 +18,7 @@ export function seenUrl(
   id: string | undefined,
   board: string | undefined,
   version: string | undefined,
+  chipRev?: number,
 ): string | null {
   let host = "";
   try {
@@ -26,6 +28,7 @@ export function seenUrl(
   }
   if (!OWN_HOSTS.has(host) || !id || !/^[0-9a-f]{32}$/.test(id)) return null;
   const q = new URLSearchParams({ id, board: board ?? "", ver: version ?? "" });
+  if (chipRev !== undefined) q.set("rev", `${Math.floor(chipRev / 100)}.${chipRev % 100}`);
   return `${SEEN_URL}?${q}`;
 }
 

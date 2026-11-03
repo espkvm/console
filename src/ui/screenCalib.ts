@@ -1,5 +1,6 @@
 /*
- * Find where the captured screen sits on a target's desktop.
+ * Find where the captured screen sits on a target's desktop, or where the
+ * desktop sits in the picture when the target puts black borders round it.
  *
  * With more than one screen, the absolute pointer spans the whole desktop, so
  * the picture is only part of it. Rather than ask for four numbers in pixels -
@@ -261,16 +262,22 @@ export async function sweep(
   ) {
     return null;
   }
-  /* The desktop must hold this whole screen. When it does not, something
-     moved the pointer during the sweep - a hand on the mouse - and saving it
-     would send every click to the wrong place. */
-  if (x < -16 || y < -16 || x + w > deskW + 16 || y + h > deskH + 16) {
+  /* On each side, either the desktop holds this whole screen (several screens),
+     or the picture holds the whole desktop (black borders round a desktop the
+     target scaled to fit, such as 4:3 in a 16:9 mode). Anything else means
+     something moved the pointer during the sweep - a hand on the mouse - and
+     saving it would send every click to the wrong place. */
+  const fits = (at: number, desk: number, shown: number) =>
+    (at >= -16 && at + shown <= desk + 16) || (-at >= -16 && -at + desk <= shown + 16);
+  if (!fits(x, deskW, w) || !fits(y, deskH, h)) {
     throw new Error(
       `the figures came out impossible (desktop ${deskW}x${deskH}, this screen at ${x}, ${y}) - ` +
         "keep the mouse still and the screen still while it looks, and try again",
     );
   }
-  return { deskW, deskH, x: Math.max(0, x), y: Math.max(0, y) };
+  /* A few pixels either way of an edge is the fit's noise, not a border. */
+  const snap = (v: number) => (Math.abs(v) < 4 ? 0 : v);
+  return { deskW, deskH, x: snap(x), y: snap(y) };
 }
 
 /** The sweep on the console's own picture and pointer. */

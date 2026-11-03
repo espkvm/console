@@ -26,6 +26,7 @@ import { toast } from "../state/toasts";
 import { copyToClipboard } from "../ui/clipboard";
 import { inputRtt } from "../input/control";
 import { browserLag, drawn, transport } from "../video/stream";
+import { createLiveness, type Liveness } from "../video/liveness";
 import { videoHistory } from "../state/videoHistory";
 import Sparkline from "./Sparkline.vue";
 
@@ -51,6 +52,8 @@ const emit = defineEmits<{
   (e: "set-codec", codec: "mjpeg" | "h264"): void;
   (e: "prefer-text", on: boolean): void;
   (e: "measure"): void;
+  /* Once a second: whether frames arrive, for the dot next to "Online". */
+  (e: "liveness", state: Liveness): void;
 }>();
 
 /* The codec is what the picture is made of. It stays lit while the text view is
@@ -74,8 +77,20 @@ const inputMs = ref(0);
 const shownFps = ref(0);
 let shownAt = performance.now();
 let shownFrom = drawn.frames;
+/* Whether the picture is moving, told to the dot next to "Online". */
+const nextLiveness = createLiveness();
 const lagTimer = setInterval(() => {
   const now = performance.now();
+  const liveness: Liveness = props.textView
+    ? "unknown"
+    : nextLiveness({
+        drawn: drawn.frames - shownFrom,
+        deviceFps: props.status?.fps ?? 0,
+        counting: drawn.counting,
+        signal: Boolean(props.status?.signal),
+        visible: document.visibilityState === "visible",
+      });
+  emit("liveness", liveness);
   shownFps.value = ((drawn.frames - shownFrom) * 1000) / (now - shownAt);
   shownAt = now;
   shownFrom = drawn.frames;

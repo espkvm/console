@@ -23,14 +23,16 @@ defineProps<{ os: string }>();
   </svg>
 
   <!-- Linux: penguin -->
-  <svg v-else-if="os === 'linux'" class="os-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M12 2.6c-2.4 0-3.7 1.9-3.7 4.6 0 1.6.1 2.6-.7 3.9-.9 1.4-2.5 3-3.2 4.9-.4 1 .1 1.6.9 1.4.3.7 1 1.3 2 1.6 1.9.6 3.3.6 4.7.6s2.8 0 4.7-.6c1-.3 1.7-.9 2-1.6.8.2 1.3-.4.9-1.4-.7-1.9-2.3-3.5-3.2-4.9-.8-1.3-.7-2.3-.7-3.9 0-2.7-1.3-4.6-3.7-4.6z" />
-    <ellipse cx="12" cy="15.4" rx="2.4" ry="3.1" fill="#fff" opacity="0.9" />
-    <circle cx="10.4" cy="7.2" r="1.1" fill="#fff" />
-    <circle cx="13.6" cy="7.2" r="1.1" fill="#fff" />
-    <circle cx="10.5" cy="7.3" r="0.5" fill="#0e1116" />
-    <circle cx="13.5" cy="7.3" r="0.5" fill="#0e1116" />
-    <path d="M11 9.1l1 .9 1-.9-1-.7z" fill="#e3a33c" />
+  <svg v-else-if="os === 'linux'" class="os-icon" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 2.8c-2.3 0-3.5 1.8-3.5 4.3 0 1.5-.2 2.4-1 3.6-1.1 1.7-2 3.5-2 5.3 0 2.6 2.9 3.8 6.5 3.8s6.5-1.2 6.5-3.8c0-1.8-.9-3.6-2-5.3-.8-1.2-1-2.1-1-3.6 0-2.5-1.2-4.3-3.5-4.3z" fill="#1b1f24" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" />
+    <ellipse cx="12" cy="15.6" rx="3.3" ry="3.6" fill="#f4f4f4" />
+    <ellipse cx="10.7" cy="7.2" rx="0.95" ry="1.15" fill="#fff" />
+    <ellipse cx="13.3" cy="7.2" rx="0.95" ry="1.15" fill="#fff" />
+    <circle cx="10.9" cy="7.4" r="0.45" fill="#1b1f24" />
+    <circle cx="13.1" cy="7.4" r="0.45" fill="#1b1f24" />
+    <path d="M10.3 9.3q1.7-.9 3.4 0-1.7 1.5-3.4 0z" fill="#f2b632" />
+    <ellipse cx="8.8" cy="20" rx="2.6" ry="1.2" fill="#f2b632" />
+    <ellipse cx="15.2" cy="20" rx="2.6" ry="1.2" fill="#f2b632" />
   </svg>
 
   <!-- Android: robot head -->

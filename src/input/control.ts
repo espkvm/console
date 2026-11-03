@@ -14,12 +14,13 @@
  *   device -> client
  *     0x81 status      flags:u8 (bit0 target attached, bit1 bus alive), leds:u8
  *     0x82 pong
- *     0x83 control      state:u8 (0 held by another, 1 you hold it, 2 free)
+ *     0x83 control      state:u8 (0 held by another, 1 you hold it, 2 free, 3 view-only sign-in)
  *
  * The device serves one control client at a time and drops whatever was held
  * down when the socket closes, so reconnecting is always safe.
  */
 import { sendMove } from "./moveChannel";
+import { noteKeys } from "./keyEcho";
 
 export const ABS_MAX = 32767;
 
@@ -66,7 +67,8 @@ export interface TargetState {
 export type ConnectionState = "connecting" | "open" | "closed";
 
 /** Who holds the single control session: this client, nobody, or someone else. */
-export type ControlState = "you" | "free" | "held";
+/** "viewonly": signed in as the viewer, so control can never be taken. */
+export type ControlState = "you" | "free" | "held" | "viewonly";
 
 /** What the device is doing to itself, told to every console at once. */
 export interface UpdateState {
@@ -157,7 +159,9 @@ export class Control {
         });
       } else if (b[0] === MSG_CONTROL && b.length >= 2) {
         this.#inControl = b[1] === 1;
-        this.#handlers.onControl(b[1] === 1 ? "you" : b[1] === 2 ? "free" : "held");
+        this.#handlers.onControl(
+          b[1] === 1 ? "you" : b[1] === 2 ? "free" : b[1] === 3 ? "viewonly" : "held",
+        );
       } else if (b[0] === MSG_UPDATE && b.length >= 3) {
         const phases = ["receiving", "verifying", "restarting", "failed"] as const;
         const phase = phases[b[1]] ?? "receiving";
@@ -272,6 +276,7 @@ export class Control {
     b[1] = modifier & 0xff;
     for (let i = 0; i < 6; i++) b[2 + i] = keys[i] ?? 0;
     this.#send(b);
+    noteKeys(modifier, keys);
   }
 
   consumer(usage: number) {

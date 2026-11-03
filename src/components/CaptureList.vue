@@ -26,7 +26,8 @@ import { toast } from "../state/toasts";
 import Icon from "./Icon.vue";
 import RecordingPlayer from "./RecordingPlayer.vue";
 
-const props = defineProps<{ changed?: number; record?: RecordStatus | null }>();
+/* watchOnly: a view-only sign-in can play and download, not start or delete. */
+const props = defineProps<{ changed?: number; record?: RecordStatus | null; watchOnly?: boolean }>();
 const emit = defineEmits<{ started: [] }>();
 
 const captures = ref<Captures | null>(null);
@@ -156,7 +157,7 @@ async function remove(path: string) {
       </button>
     </div>
 
-    <div v-if="record" class="capture-timelapse">
+    <div v-if="record && !watchOnly" class="capture-timelapse">
       <span class="muted">Timelapse</span>
       <select v-model.number="every" aria-label="One frame">
         <option v-for="o in EVERY" :key="o.s" :value="o.s">{{ o.label }}</option>
@@ -290,7 +291,7 @@ async function remove(path: string) {
                 <Icon name="captions" :size="15" />
               </a>
               <button
-                v-if="captures.canDelete"
+                v-if="captures.canDelete && !watchOnly"
                 type="button"
                 class="btn btn-sm btn-icon btn-quiet"
                 aria-label="Delete"
@@ -344,7 +345,7 @@ async function remove(path: string) {
                 <Icon name="download" :size="15" />
               </a>
               <button
-                v-if="captures.canDelete"
+                v-if="captures.canDelete && !watchOnly"
                 type="button"
                 class="btn btn-sm btn-icon btn-quiet"
                 aria-label="Delete"
@@ -358,7 +359,7 @@ async function remove(path: string) {
         </ul>
       </template>
 
-      <p v-if="!captures.canDelete && (videos.length || shots.length)" class="setting-note">
+      <p v-if="!captures.canDelete && !watchOnly && (videos.length || shots.length)" class="setting-note">
         Files cannot be deleted while a recording runs.
       </p>
     </template>

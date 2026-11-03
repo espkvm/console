@@ -46,6 +46,8 @@ export interface ProfileList {
   reboot?: boolean;
   /** A new device: ask once which devices it will see. Older firmware: absent. */
   welcome?: boolean;
+  /** The firmware version the overview of features was last closed on; "" never. Older firmware: absent. */
+  tourSeen?: string;
   /** A preset id for the device attached now, which has no profile yet. */
   suggest?: string;
 }
@@ -110,8 +112,10 @@ export function selectProfile(id: number): Promise<ProfileList> {
   return call("/select", { id });
 }
 
-/** End the first-run question, or stop offering a preset. */
-export function dismissAsk(what: { welcome: true } | { preset: string }): Promise<ProfileList> {
+/** End the first-run question or the overview, or stop offering a preset. */
+export function dismissAsk(
+  what: { welcome: true } | { tour: string } | { preset: string },
+): Promise<ProfileList> {
   return call("/dismiss", what);
 }
 

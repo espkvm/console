@@ -44,6 +44,8 @@ export interface TouchOptions {
   control: Control;
   active: Ref<boolean>;
   invertScroll: Ref<boolean>;
+  /** Scroll speed, 1 as is. */
+  scrollSpeed?: Ref<number>;
   /** Pointer travel per finger travel; higher moves the cursor faster. */
   sensitivity: Ref<number>;
   zoom: Ref<Zoom>;
@@ -269,7 +271,7 @@ export function useTouch(opts: TouchOptions) {
         }
         /* Vertical travel scrolls. */
         const y = e.touches[0].clientY;
-        scrollAccum += lastY - y;
+        scrollAccum += (lastY - y) * (opts.scrollSpeed?.value ?? 1);
         lastY = y;
         lastX = e.touches[0].clientX;
         let clicks = (scrollAccum / SCROLL_PX_PER_CLICK) | 0;

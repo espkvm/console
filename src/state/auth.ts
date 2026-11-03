@@ -18,6 +18,10 @@ export interface SessionState {
   viewToken?: boolean;
   /** Two-factor sign-in is on: a code from an authenticator app follows the password. */
   twoFactor?: boolean;
+  /** Signed in as the viewer: this console can watch and nothing else. */
+  viewOnly?: boolean;
+  /** A viewer password is set, so the "viewer" sign-in works. */
+  viewer?: boolean;
   /**
    * Set while the device is on its open setup hotspot with no password yet: the
    * first password must come with one of these ways onto a network, because
@@ -141,4 +145,13 @@ export async function changePassword(
 ): Promise<boolean> {
   const body = await postJson("/api/v1/auth/password", { current, next, ...setup });
   return body.restart === true;
+}
+
+/**
+ * Set the viewer's password, or remove it with @p next empty. Needs your own
+ * password. Every view-only sign-in ends either way.
+ */
+export async function setViewerPassword(current: string, next: string): Promise<boolean> {
+  const body = await postJson("/api/v1/auth/viewer", { current, next });
+  return body.viewer === true;
 }

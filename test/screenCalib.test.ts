@@ -22,12 +22,22 @@ interface Desk {
   jitterMs?: number;
   buttons?: Rect[];
   clock?: Rect;
+  /** Black borders: the picture is this much wider and taller than the desktop, centred. */
+  bars?: { x: number; y: number };
 }
 
 function sim(d: Desk): Probe {
   const deskW = Math.max(...d.screens.map((s) => s.x + s.w));
   const deskH = Math.max(...d.screens.map((s) => s.y + s.h));
-  const view = d.screens[d.shown];
+  const shownScreen = d.screens[d.shown];
+  const view = d.bars
+    ? {
+        x: shownScreen.x - d.bars.x,
+        y: shownScreen.y - d.bars.y,
+        w: shownScreen.w + 2 * d.bars.x,
+        h: shownScreen.h + 2 * d.bars.y,
+      }
+    : shownScreen;
   let t = 0;
   let moves = 0;
   const events: { at: number; x: number; y: number }[] = [{ at: -1e9, x: -1, y: -1 }];
@@ -50,7 +60,10 @@ function sim(d: Desk): Probe {
   for (let y = 0; y < view.h; y++) {
     for (let x = 0; x < view.w; x++) {
       const i = (y * view.w + x) * 4;
-      background[i] = background[i + 1] = background[i + 2] = 90 + ((x * 7 + y * 13) % 40);
+      const dx = x + view.x;
+      const dy = y + view.y;
+      const onDesk = dx >= 0 && dy >= 0 && dx < deskW && dy < deskH;
+      background[i] = background[i + 1] = background[i + 2] = onDesk ? 90 + ((x * 7 + y * 13) % 40) : 0;
       background[i + 3] = 255;
     }
   }
@@ -144,4 +157,14 @@ test("a taller screen beside a shorter one", async () => {
     await sweep(sim({ screens: [tall, short], shown: 1, lagMs: 400 })),
     [1280, 480, 640, 0],
   );
+});
+
+test("black borders round a 4:3 desktop in a 16:9 picture", async () => {
+  const screen = { x: 0, y: 0, w: 480, h: 360 };
+  assertWindow(await sweep(sim({ screens: [screen], shown: 0, bars: { x: 80, y: 0 } })), [480, 360, -80, 0]);
+});
+
+test("borders on every side", async () => {
+  const screen = { x: 0, y: 0, w: 512, h: 288 };
+  assertWindow(await sweep(sim({ screens: [screen], shown: 0, bars: { x: 64, y: 36 } })), [512, 288, -64, -36]);
 });

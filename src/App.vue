@@ -7,17 +7,24 @@
 import { setUiHidden } from "./ui/features";
 import { useImmersive } from "./ui/immersive";
 import { setHaptic } from "./ui/haptic";
+import { pageTitle } from "./ui/title";
+import { keyEcho, keyEchoOn } from "./input/keyEcho";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 
 import Icon from "./components/Icon.vue";
 import AutomationPanel from "./components/AutomationPanel.vue";
 import RegionOverlay from "./components/RegionOverlay.vue";
 import WelcomeProfiles from "./components/WelcomeProfiles.vue";
+import FeatureTour from "./components/FeatureTour.vue";
+import ShortcutHelp from "./components/ShortcutHelp.vue";
+import ViewersWidget from "./components/ViewersWidget.vue";
+import { TOUR_FEATURES, featureShown, newSince, tourDue } from "./ui/tour";
 import CaptureList from "./components/CaptureList.vue";
 import InputPanel from "./components/InputPanel.vue";
 import LoginView from "./components/LoginView.vue";
 import RestartOverlay from "./components/RestartOverlay.vue";
 import { installNoPagePull } from "./input/noPagePull";
+import { installTouchLabels } from "./ui/touchLabels";
 import { installPagePin } from "./input/keepPagePinned";
 import { installKeyboardInset } from "./input/keyboardInset";
 import { ScreenTextStream } from "./screen/textStream";
@@ -38,6 +45,7 @@ import { pictureOf } from "./ui/picture";
 import { findScreen } from "./ui/screenCalib";
 import { measureLatency } from "./ui/latency";
 import VideoWidget from "./components/VideoWidget.vue";
+import type { Liveness } from "./video/liveness";
 import ToastHost from "./components/ToastHost.vue";
 import KeyboardPanel from "./components/KeyboardPanel.vue";
 import TouchControls from "./components/TouchControls.vue";
@@ -534,6 +542,26 @@ const pointerMode = computed(
     "absolute",
 );
 const invertScroll = computed(() => Boolean(values.value.scroll_inv));
+const scrollSpeed = computed(() => Number(values.value.scroll_speed ?? 100) / 100);
+/* Your own cursor over the picture while in control (absolute mode; relative
+   hides it through pointer lock anyway). A PNG, which every browser can make
+   a cursor from, and the plain arrow behind it if one still cannot. */
+const DOT_CURSOR =
+  "url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABy0lEQVR42pWTP2tUURDFf3PvdZO4aKIoFiEBQWwMWMhWgoiCkDZfQCxSW9qk9SNExMJaAiJWChYWSiKoECyMf5CIRAJBWVx28+J7795jkX3ZJK4bnPLOnDvnnJmBASHJJBn/G5K8JLfvI9+vNvQBOzOLAG++aLQWcGbWBKIkMzMN6uwAskJXJT2WtCHpp6TFUroxUFYFLkvNSlIm6ckn6dF76fumJElF1D1JbmGhJ8cqzWYWs0KXhwPPX6wS55dQ+zceA2+kmSni9QvUYmQuBLtdYfYYNRy41SrQnVeoTIRjh7GxEaw+hH/wjrC8TvKem6tNjQFJkrmuMXH5K6NAY+kb1trCj9SgTBATOIMhj3v6AYCTp+qc75rpdhgc8jggZDmYgbTbn+23rAQBZtSqnDMzSXLnJmgBnxuTJG+kJPC23d07yAp08TQy6HRyVrr4VDEwMyu3cubH67iZKWIzI7Vz2Cxgo40aE+TXzuCBhyfqttY1sTfPnTEm7gbH7Nt1ePaRlJfQmMRNn4WUeN12TB+FJqA9S7V7QSTNSVpTL35Jui/peFU78IAAXq7oyGauS1mhKz86Gt+fP/CY/nFgf4HtACaVyTKz1K/uD3VVLWDZkR8uAAAAAElFTkSuQmCC) 8 8, default";
+watchEffect(() => {
+  const el = surface.value;
+  if (!el) return;
+  const style = enumName(schema.value, values.value, "ptr_cursor") ?? "arrow";
+  const on = engaged.value && pointerMode.value === "absolute";
+  el.style.cursor = !on || style === "arrow" ? "" : style === "dot" ? DOT_CURSOR : "none";
+});
+
+/* The strip of keys sent, in the bottom bar. */
+const keysShown = computed(() => Boolean(values.value.ui_keys));
+watchEffect(() => {
+  keyEchoOn.value = keysShown.value;
+  if (!keysShown.value) keyEcho.value = [];
+});
 /* Which side the rail and its panels sit on, from the ui_side setting. */
 const uiRight = computed(() => enumName(schema.value, values.value, "ui_side") === "right");
 
@@ -620,11 +648,93 @@ const cecSource = computed(() => {
  * no profile gets a line offering one. Both answers are kept on the device.
  */
 const welcomeClosed = ref(false);
-const showWelcome = computed(() => !!profiles.value?.welcome && !welcomeClosed.value);
+/* Not for the viewer: it cannot save the answers, so they would come back on
+   every load. */
+const signedInToWatch = computed(() => Boolean(session.value?.viewOnly));
+const showWelcome = computed(
+  () => !!profiles.value?.welcome && !welcomeClosed.value && !signedInToWatch.value,
+);
+/*
+ * Then what the device can do (ui/tour.ts): right after the question on a new
+ * device, on its own on a device updated from before it, and again after an
+ * update that adds a feature to it. Settings -> System opens it any time. A
+ * button to a panel (on a phone) or to the picture folds it into a small
+ * button until that is closed.
+ */
+const firmwareVersion = computed(() => system.value?.version ?? "");
+/* Only what this board has: a new feature it lacks is no reason to come up. */
+const tourList = computed(() => TOUR_FEATURES.filter((f) => featureShown(f, caps.value)));
+const tourDueNow = computed(
+  () =>
+    Object.keys(caps.value).length > 0 &&
+    tourDue(tourList.value, profiles.value?.tourSeen, firmwareVersion.value),
+);
+const tourFresh = computed(() =>
+  newSince(tourList.value, profiles.value?.tourSeen ?? "", firmwareVersion.value).map((f) => f.title),
+);
+const tourClosed = ref(false);
+const tourAgain = ref(false);
+const welcomeSeenHere = ref(false);
+watch(showWelcome, (on) => {
+  if (on) welcomeSeenHere.value = true;
+});
+const showTour = computed(
+  () =>
+    !showWelcome.value &&
+    (tourAgain.value || (tourDueNow.value && !tourClosed.value && !signedInToWatch.value)),
+);
+const tourStep = computed(() => {
+  if (tourAgain.value) return "";
+  if (welcomeSeenHere.value) return "Step 2 of 2";
+  return tourFresh.value.length ? `New in ${firmwareVersion.value.replace(/^v\.?/, "")}` : "";
+});
+const tourFoldedBy = ref<"" | "panel" | "select">("");
+function closeTour() {
+  tourAgain.value = false;
+  tourClosed.value = true;
+  tourFoldedBy.value = "";
+  const seen = profiles.value?.tourSeen;
+  if (seen !== undefined && firmwareVersion.value && seen !== firmwareVersion.value) {
+    dismissAsk({ tour: firmwareVersion.value }).catch(() => {});
+  }
+}
+function openTour() {
+  settingsOpen.value = false;
+  tourFoldedBy.value = "";
+  tourAgain.value = true;
+}
+function tourPanel(id: Exclude<PanelId, null>) {
+  panel.value = id;
+  if (window.matchMedia("(max-width: 640px)").matches) tourFoldedBy.value = "panel";
+}
+function tourSelect() {
+  if (!selectingText.value) void toggleSelectText();
+  tourFoldedBy.value = "select";
+}
+watch(panel, (id) => {
+  if (!id && tourFoldedBy.value === "panel") tourFoldedBy.value = "";
+});
+watch(selectingText, (on) => {
+  if (!on && tourFoldedBy.value === "select") tourFoldedBy.value = "";
+});
+/* A section, and a group in it, to open Settings at, from the overview. */
+const settingsSection = ref("");
+const settingsGroup = ref("");
+function openSettingsAt(section: string, group: string) {
+  settingsSection.value = section;
+  settingsGroup.value = group;
+  settingsOpen.value = true;
+}
+watch(settingsOpen, (open) => {
+  if (!open) {
+    settingsSection.value = "";
+    settingsGroup.value = "";
+  }
+});
 const suggestLater = ref("");
 const suggested = computed(() => {
   const id = profiles.value?.suggest;
-  if (!id || id === suggestLater.value || showWelcome.value) return null;
+  if (!id || id === suggestLater.value || showWelcome.value || showTour.value) return null;
   return profiles.value?.presets.find((p) => p.id === id) ?? null;
 });
 const suggestBusy = ref(false);
@@ -745,6 +855,7 @@ const input = useInput({
   engageMode,
   pointerMode,
   invertScroll,
+  scrollSpeed,
   surface,
   fit,
   touchActive: touchMode,
@@ -811,6 +922,7 @@ const { stickAt } = useTouch({
   control: input.control,
   active: touchMode,
   invertScroll,
+  scrollSpeed,
   sensitivity: touchSensitivity,
   zoom,
   fit,
@@ -820,7 +932,17 @@ const { stickAt } = useTouch({
 
 /* Another browser is driving this target. Input from here is ignored until the
    operator takes control, so say so instead of leaving a dead pointer. */
-const heldByOther = computed(() => input.controlState.value === "held");
+/* Signed in as the viewer: control can never be had here. Treated like the
+   held case everywhere input is guarded, with its own words. */
+const viewOnly = computed(
+  () => input.controlState.value === "viewonly" || Boolean(session.value?.viewOnly),
+);
+const heldByOther = computed(() => input.controlState.value === "held" || viewOnly.value);
+const NO_CONTROL_TEXT = computed(() =>
+  viewOnly.value
+    ? "This sign-in can only watch"
+    : "Another session is in control; take control first",
+);
 
 /* A real controller as a mouse; it gives way to the gamepad window, which
    sends it to the target as a pad. */
@@ -858,8 +980,8 @@ async function measureDelay() {
     latencyText.value = `The target sees ${padAloneLabel.value} only - no mouse to move`;
     return;
   }
-  if (input.controlState.value === "held") {
-    latencyText.value = "Another session is in control; take control first";
+  if (heldByOther.value) {
+    latencyText.value = NO_CONTROL_TEXT.value;
     return;
   }
   /* Always: the console assumes control is its own until told otherwise, and
@@ -931,8 +1053,8 @@ async function bringBackKeyboard() {
  */
 function wakeTarget(auto: boolean) {
   if (padAlone.value) return;
-  if (input.controlState.value === "held") {
-    if (!auto) toast.info("Another session is in control; take control to wake the target");
+  if (heldByOther.value) {
+    if (!auto) toast.info(viewOnly.value ? NO_CONTROL_TEXT.value : "Another session is in control; take control to wake the target");
     return;
   }
   input.control.mouseRelative(0, 1, 0);
@@ -978,7 +1100,7 @@ async function findThisScreen(progress: (t: string) => void): Promise<string> {
   const canvas = pictureOf(surface.value);
   if (!canvas) return "There is no picture to watch yet";
   if (padAlone.value) return `The target sees ${padAloneLabel.value} only - no mouse to move`;
-  if (input.controlState.value === "held") return "Another session is in control; take control first";
+  if (heldByOther.value) return NO_CONTROL_TEXT.value;
   /* Always: the console assumes control is its own until told otherwise, and
      the device drops input from a session that is not in control. */
   input.control.takeControl();
@@ -1016,6 +1138,32 @@ const codec = computed(
   () => status.value?.codec || enumName(schema.value, values.value, "vid_codec") || "-",
 );
 const online = computed(() => status.value !== null);
+/* Whether frames arrive, from the video widget: the "Online" dot pulses while
+   they do and turns amber when the device sends but nothing reaches the tab. */
+const liveness = ref<Liveness>("unknown");
+const livePulse = ref(0);
+function onLiveness(l: Liveness) {
+  liveness.value = l;
+  if (l === "live") livePulse.value++;
+}
+watch(online, (on) => {
+  if (!on) liveness.value = "unknown";
+});
+const ONLINE_TITLE: Record<Liveness, string> = {
+  live: "The device answers, and frames are arriving",
+  still: "The device answers. The target's screen is not changing, so it sends next to nothing",
+  stalled: "The device answers and sends frames, but none reach this tab. It reconnects by itself, or reload the page.",
+  unknown: "The device answers",
+};
+
+/* The tab says which device this is, and when it is unreachable or has no picture. */
+watchEffect(() => {
+  document.title = pageTitle({
+    host: system.value?.net?.hostname,
+    online: online.value,
+    signal: status.value?.signal,
+  });
+});
 
 /*
  * H.264 is not on every board, and the device says so rather than the console
@@ -1821,6 +1969,7 @@ onMounted(async () => {
   installNoPagePull();
   installPagePin();
   installKeyboardInset();
+  installTouchLabels();
   document.documentElement.dataset.theme = theme.value;
   /* Start in touch mode on a device whose primary pointer is a finger. */
   if (window.matchMedia?.("(pointer: coarse)").matches) touchMode.value = true;
@@ -1894,8 +2043,35 @@ function onGlobalKey(e: KeyboardEvent) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const t = e.target as HTMLElement | null;
   if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-  if (e.key === "f" || e.key === "F") void toggleFullscreen();
+  if (e.key === "?") {
+    shortcutsOpen.value = !shortcutsOpen.value;
+    return;
+  }
+  if (shortcutsOpen.value) {
+    if (e.key === "Escape") shortcutsOpen.value = false;
+    return;
+  }
+  switch (e.key.toLowerCase()) {
+    case "f":
+      void toggleFullscreen();
+      break;
+    case "i":
+      if (!signedInToWatch.value) togglePanel("input");
+      break;
+    case "m":
+      if (caps.value.msc?.available && !signedInToWatch.value) togglePanel("media");
+      break;
+    case "a":
+      if (caps.value.runbooks?.available && !signedInToWatch.value) togglePanel("automation");
+      break;
+    case "r":
+      if (record.value) togglePanel("captures");
+      break;
+  }
 }
+
+/* The list of shortcuts ("?"). */
+const shortcutsOpen = ref(false);
 
 function reload() {
   location.reload();
@@ -2278,10 +2454,18 @@ const LED_BITS: Array<[number, string]> = [
       </svg>
 
       <!-- Whether the device answers at all, then what its picture is doing. -->
-      <span class="stat">
-        <span :class="['dot', online ? 'dot-ok' : 'dot-bad']" />
+      <span class="stat" :title="online ? ONLINE_TITLE[liveness] : undefined">
+        <span
+          :key="liveness === 'live' ? livePulse : liveness"
+          :class="[
+            'dot',
+            !online ? 'dot-bad' : liveness === 'stalled' ? 'dot-warn' : 'dot-ok',
+            { 'dot-pulse': online && liveness === 'live' },
+          ]"
+        />
         {{ online ? "Online" : "Unreachable" }}
       </span>
+      <ViewersWidget v-if="online" :view-only="viewOnly" />
       <VideoWidget
         v-if="online"
         :status="status"
@@ -2294,6 +2478,7 @@ const LED_BITS: Array<[number, string]> = [
         :latency="latencyText"
         :measuring="measuringLatency"
         @set-codec="setCodec"
+        @liveness="onLiveness"
         @prefer-text="textPreferred = $event"
         @measure="measureDelay"
       />
@@ -2314,7 +2499,9 @@ const LED_BITS: Array<[number, string]> = [
 
     <div :class="['body', { 'layout-right': uiRight }]">
       <nav class="rail" aria-label="Panels">
+        <!-- A view-only sign-in gets no controls: the device refuses them anyway. -->
         <button
+          v-if="!signedInToWatch"
           type="button"
           :class="['rail-btn', { 'rail-btn-active': panel === 'input' }]"
           aria-label="Input"
@@ -2323,6 +2510,7 @@ const LED_BITS: Array<[number, string]> = [
           <Icon name="keyboard" :size="18" />
         </button>
         <button
+          v-if="!signedInToWatch"
           type="button"
           :class="['rail-btn', { 'rail-btn-active': panel === 'media', asking: askingMedia }]"
           aria-label="Virtual media"
@@ -2333,6 +2521,7 @@ const LED_BITS: Array<[number, string]> = [
           <Icon name="disc" :size="18" />
         </button>
         <button
+          v-if="!signedInToWatch"
           type="button"
           :class="['rail-btn', { 'rail-btn-active': panel === 'automation' }]"
           aria-label="Automation"
@@ -2359,6 +2548,8 @@ const LED_BITS: Array<[number, string]> = [
           :atx="system?.atx ?? null"
           :wol-mac="wolMac"
           :side="uiRight ? 'right' : 'left'"
+          :hdd="status?.hdd"
+          :watch-only="signedInToWatch"
         />
         <OsWidget
           :probe="usbProbe"
@@ -2369,6 +2560,7 @@ const LED_BITS: Array<[number, string]> = [
         />
         <DiagWidget :system="system" :side="uiRight ? 'right' : 'left'" @live-log="logOpen = true" />
         <button
+          v-if="!signedInToWatch"
           type="button"
           :class="['rail-btn', { 'rail-btn-active': settingsOpen }]"
           aria-label="Settings"
@@ -2433,7 +2625,7 @@ const LED_BITS: Array<[number, string]> = [
                 ? "Pointer follows the mouse. Click to send keystrokes."
                 : "Click to control the target"
             }}
-            <span class="screen-engage-hint">Esc gives control back</span>
+            <span class="screen-engage-hint">Esc gives control back. ? lists the shortcuts.</span>
           </button>
 
           <!-- While the keys are ours, say so and say the way out: a captured
@@ -2447,7 +2639,7 @@ const LED_BITS: Array<[number, string]> = [
                notice has to survive that pause like the engage button and the
                touch pad above do, or a text-mode operator whose keys are being
                dropped is told nothing and has no way to take control back. -->
-          <div v-if="heldByOther && (!paused || textView)" class="screen-notice">
+          <div v-if="heldByOther && !viewOnly && (!paused || textView)" class="screen-notice">
             <p>Another session is in control of this target.</p>
             <button type="button" class="btn" @click="takeControl">Take control</button>
           </div>
@@ -2473,8 +2665,26 @@ const LED_BITS: Array<[number, string]> = [
           <WelcomeProfiles
             v-if="showWelcome && !areaDrawing"
             :values="values"
+            :step="tourDueNow ? 'Step 1 of 2' : ''"
             @values="values = $event"
             @done="welcomeClosed = true"
+          />
+          <FeatureTour
+            v-if="showTour && !areaDrawing"
+            :caps="caps"
+            :values="values"
+            :password-set="!!session?.required"
+            :profile-count="profiles?.profiles.filter((p) => p.id !== 0).length ?? 0"
+            :record="!!record"
+            :text-mode="textModeLikely"
+            :step="tourStep"
+            :fresh="tourFresh"
+            :folded="!!tourFoldedBy"
+            @settings="openSettingsAt"
+            @panel="tourPanel"
+            @select="tourSelect"
+            @unfold="tourFoldedBy = ''"
+            @done="closeTour"
           />
           <RegionOverlay
             v-if="areaDrawing"
@@ -2534,6 +2744,7 @@ const LED_BITS: Array<[number, string]> = [
               v-else-if="panel === 'captures'"
               :changed="capturesChanged"
               :record="record"
+              :watch-only="signedInToWatch"
               @started="refreshStatus"
             />
           </div>
@@ -2575,7 +2786,7 @@ const LED_BITS: Array<[number, string]> = [
     />
 
     <footer class="actionbar">
-      <div class="actionbar-left">
+      <div class="actionbar-left" :class="{ 'actionbar-left-grow': keysShown }">
         <span class="conns" aria-label="Connections">
           <!-- The serial console is a line to the target like HDMI and USB, so
                it sits with them, first. Only once the device has the port up. -->
@@ -2749,6 +2960,7 @@ const LED_BITS: Array<[number, string]> = [
           </span>
         </span>
         <span
+          v-if="!signedInToWatch"
           class="ctrl-status"
           :class="{ 'ctrl-status-on': engaged }"
           :title="engaged ? 'Controlling - Esc releases' : 'Not controlling'"
@@ -2756,9 +2968,14 @@ const LED_BITS: Array<[number, string]> = [
         >
           <Icon name="pointer" :size="15" />
         </span>
+        <!-- The last keys that went to the target (Settings -> Console). -->
+        <span v-if="keysShown" class="key-echo mono hide-narrow" aria-live="off" title="Keys sent to the target">
+          <span v-for="k in keyEcho" :key="k.id" class="key-echo-key">{{ k.label }}</span>
+        </span>
       </div>
       <div class="actionbar-right">
         <button
+          v-if="!signedInToWatch"
           type="button"
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': oskOpen }"
@@ -2771,7 +2988,7 @@ const LED_BITS: Array<[number, string]> = [
         </button>
         <!-- Only while a source answers over HDMI-CEC. -->
         <button
-          v-if="cecSource"
+          v-if="cecSource && !signedInToWatch"
           type="button"
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': remoteOpen }"
@@ -2784,7 +3001,7 @@ const LED_BITS: Array<[number, string]> = [
         </button>
         <!-- Only while the device shows a gamepad over USB. -->
         <button
-          v-if="usbPad"
+          v-if="usbPad && !signedInToWatch"
           type="button"
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': gamepadOpen }"
@@ -2797,7 +3014,7 @@ const LED_BITS: Array<[number, string]> = [
         </button>
         <!-- Only while the browser sees a controller it can read. -->
         <button
-          v-if="padMouse.connected.value && !padToPad"
+          v-if="padMouse.connected.value && !padToPad && !signedInToWatch"
           type="button"
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': padMouseOn }"
@@ -2814,6 +3031,7 @@ const LED_BITS: Array<[number, string]> = [
           <Icon name="pointer" :size="15" />
         </button>
         <button
+          v-if="!signedInToWatch"
           type="button"
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': touchMode }"
@@ -2872,7 +3090,7 @@ const LED_BITS: Array<[number, string]> = [
         </button>
         <!-- Absent on firmware with no recorder. -->
         <button
-          v-if="status && status.screenshotBlocked !== undefined"
+          v-if="status && status.screenshotBlocked !== undefined && !signedInToWatch"
           type="button"
           class="btn btn-sm btn-icon"
           data-ui="screenshot"
@@ -2886,7 +3104,7 @@ const LED_BITS: Array<[number, string]> = [
         </button>
         <!-- The dashcam's button: shown while it keeps the past. -->
         <button
-          v-if="record && clipState"
+          v-if="record && clipState && !signedInToWatch"
           type="button"
           :class="['btn', 'btn-sm', 'rec-btn', { 'rec-on': clipState.on }]"
           data-ui="clip"
@@ -2899,7 +3117,7 @@ const LED_BITS: Array<[number, string]> = [
           <span>{{ clipState.label }}</span>
         </button>
         <button
-          v-if="record"
+          v-if="record && !signedInToWatch"
           type="button"
           :class="['btn', 'btn-sm', 'rec-btn', { 'rec-on': record.on }]"
           data-ui="record"
@@ -2971,7 +3189,7 @@ const LED_BITS: Array<[number, string]> = [
           />
         </button>
         <button
-          v-if="keyLockSupported"
+          v-if="keyLockSupported && !signedInToWatch"
           data-ui="keylock"
           type="button"
           class="btn btn-sm"
@@ -3020,6 +3238,12 @@ const LED_BITS: Array<[number, string]> = [
       </div>
     </footer>
 
+    <ShortcutHelp
+      v-if="shortcutsOpen"
+      :key-lock="keyLockWanted"
+      :watch-only="signedInToWatch"
+      @close="shortcutsOpen = false"
+    />
     <ToastHost />
   </div>
 
@@ -3036,6 +3260,14 @@ const LED_BITS: Array<[number, string]> = [
     <div class="settings-window">
       <header class="settings-window-head">
         <h2>Settings</h2>
+        <button
+          v-if="showTour && !tourFoldedBy"
+          type="button"
+          class="btn btn-sm settings-back"
+          @click="settingsOpen = false"
+        >
+          &larr; Back to the overview
+        </button>
         <button
           type="button"
           class="icon-btn"
@@ -3057,8 +3289,11 @@ const LED_BITS: Array<[number, string]> = [
         :find-screen="findThisScreen"
         :screen-w="status?.width ?? 0"
         :screen-h="status?.height ?? 0"
+        :start-section="settingsSection"
+        :start-group="settingsGroup"
         @values="values = $event"
         @password-changed="onPasswordChanged"
+        @tour="openTour"
       />
     </div>
   </div>

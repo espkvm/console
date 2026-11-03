@@ -119,6 +119,15 @@ let profileWelcome = (() => {
     return true;
   }
 })();
+/* The overview of what the device can do, the same way. */
+const TOUR_KEY = "espkvm.demo.tour";
+let profileTourSeen = (() => {
+  try {
+    return localStorage.getItem(TOUR_KEY) ?? "";
+  } catch {
+    return "";
+  }
+})();
 const declinedPresets = new Set<string>();
 
 /* The same rule as suggestion() in kvm_profiles.c: a device that names itself
@@ -135,6 +144,7 @@ function demoSuggest(): string | undefined {
 function profilesJson(): Json {
   return {
     welcome: profileWelcome,
+    tourSeen: profileTourSeen,
     suggest: demoSuggest(),
     active: profileActive,
     manual: profileManual,
@@ -248,6 +258,14 @@ async function demoProfiles(path: string, body: Json): Promise<Response> {
           localStorage.setItem(WELCOME_KEY, "done");
         } catch {
           /* asked again next time */
+        }
+      }
+      if (typeof body.tour === "string") {
+        profileTourSeen = body.tour;
+        try {
+          localStorage.setItem(TOUR_KEY, body.tour);
+        } catch {
+          /* shown again next time */
         }
       }
       if (typeof body.preset === "string") {
@@ -652,6 +670,14 @@ async function route(
         return json(usbprobe);
       case "/api/v1/auth/session":
         return json(authSession);
+      /* This tab, and a colleague watching from another desk. */
+      case "/api/v1/viewers":
+        return json({
+          viewers: [
+            { ip: "192.168.1.20", control: true, viewOnly: false, you: true },
+            { ip: "192.168.1.57", control: false, viewOnly: true, you: false },
+          ],
+        });
       case "/api/v1/captures":
         return json(demoCaptures());
       case "/api/v1/captures/search":

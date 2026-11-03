@@ -3,7 +3,8 @@
  * Several screens on the target: a small drawing of the whole desktop and
  * where the captured screen sits in it, from the four saved numbers. Shows at
  * a glance whether "Find this screen" got it right. The other monitors' own
- * shapes are not known, only the desktop around them.
+ * shapes are not known, only the desktop around them. With black borders it is
+ * the other way round: the desktop sits inside the picture.
  */
 import { computed } from "vue";
 
@@ -45,13 +46,18 @@ const fit = computed(() => {
   };
 });
 
-/* A screen that does not fit inside the desktop cannot be right. */
+/* On each side the desktop holds the screen (several screens) or the picture
+   holds the desktop (black borders). Anything else cannot be right. */
+const holds = (at: number, desk: number, shown: number) => at >= 0 && at + shown <= desk;
+const inside = (at: number, desk: number, shown: number) => at <= 0 && -at + desk <= shown;
 const outside = computed(
   () =>
-    props.x < 0 ||
-    props.y < 0 ||
-    props.x + props.w > props.deskW ||
-    props.y + props.h > props.deskH,
+    !(holds(props.x, props.deskW, props.w) || inside(props.x, props.deskW, props.w)) ||
+    !(holds(props.y, props.deskH, props.h) || inside(props.y, props.deskH, props.h)),
+);
+/* Black borders: the desktop is smaller than the picture on some side. */
+const bordered = computed(
+  () => !outside.value && (props.deskW < props.w || props.deskH < props.h),
 );
 /* The desktop is this one screen: nothing else to point at. */
 const alone = computed(() => props.deskW === props.w && props.deskH === props.h);
@@ -74,7 +80,7 @@ const alone = computed(() => props.deskW === props.w && props.deskH === props.h)
         :height="fit.desk.h"
       />
       <text
-        v-if="!alone"
+        v-if="!alone && !bordered"
         class="label faint"
         :x="fit.desk.x + 6"
         :y="fit.desk.y + fit.desk.h - 6"
@@ -95,12 +101,21 @@ const alone = computed(() => props.deskW === props.w && props.deskH === props.h)
         :y="fit.scr.y + fit.scr.h / 2 + 4"
         text-anchor="middle"
       >
-        this screen
+        {{ bordered ? "desktop" : "this screen" }}
+      </text>
+      <text
+        v-if="bordered"
+        class="label faint"
+        :x="fit.scr.x + 6"
+        :y="fit.scr.y + fit.scr.h - 6"
+      >
+        picture
       </text>
     </svg>
     <figcaption>
       Desktop {{ deskW }}&times;{{ deskH }}; this screen {{ w }}&times;{{ h }} at
       {{ x }}, {{ y }}.
+      <span v-if="bordered">The rest of the picture is black borders.</span>
       <span v-if="outside" class="warn">
         It does not fit inside the desktop: run "Find this screen" again.
       </span>

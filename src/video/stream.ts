@@ -81,7 +81,12 @@ export const transport = { via: "", bufferMs: 0, lost: 0, nacks: 0, rttMs: 0 };
  * Frames drawn in this tab, counted by the screen. The device's own fps is what
  * it encoded, and a slow link or browser may show far fewer of them.
  */
-export const drawn = { frames: 0 };
+export const drawn = {
+  frames: 0,
+  /** The picture comes through the stream that counts frames: not paused, not the
+      multipart fallback, whose frames the page cannot see. */
+  counting: false,
+};
 
 export type Drawable = (ImageBitmap | VideoFrame) & { close(): void };
 

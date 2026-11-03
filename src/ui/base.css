@@ -214,6 +214,26 @@ input[type="checkbox"] {
   background: var(--danger);
 }
 
+/* Played again each second while frames arrive. */
+.dot-pulse {
+  animation: dot-pulse 0.9s ease-out;
+}
+
+@keyframes dot-pulse {
+  from {
+    box-shadow: 0 0 0 0 rgb(63 185 80 / 70%);
+  }
+  to {
+    box-shadow: 0 0 0 5px rgb(63 185 80 / 0%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot-pulse {
+    animation: none;
+  }
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

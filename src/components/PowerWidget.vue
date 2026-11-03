@@ -30,6 +30,10 @@ const props = defineProps<{
   /** The target's MAC, from settings - empty means Wake-on-LAN has nothing to send to. */
   wolMac: string;
   side: "left" | "right";
+  /** The target's disk is working (HDD LED wired); null or absent when not wired. */
+  hdd?: boolean | null;
+  /** A view-only sign-in: the lights, no buttons. */
+  watchOnly?: boolean;
 }>();
 
 const open = ref(false);
@@ -46,7 +50,8 @@ const on = computed(() => Boolean(props.atx?.on));
 /* The button says what it knows at a glance, the way the diagnostics one does. */
 const title = computed(() => {
   if (!available.value) return props.caps.atx?.reason ?? "Power control is off";
-  if (hasAtx.value && known.value) return `Target power: ${on.value ? "on" : "off"}`;
+  const disk = props.hdd ? ", disk working" : "";
+  if (hasAtx.value && known.value) return `Target power: ${on.value ? "on" : "off"}${disk}`;
   return "Power";
 });
 
@@ -109,7 +114,10 @@ async function wake() {
       @click="open = !open"
     >
       <Icon name="power" :size="18" />
-      <span v-if="hasAtx && known" :class="['pw-dot', on ? 'pw-dot-on' : 'pw-dot-off']" />
+      <span v-if="(hasAtx && known) || hdd" class="pw-leds">
+        <span v-if="hasAtx && known" :class="['pw-dot', on ? 'pw-dot-on' : 'pw-dot-off']" />
+        <span v-if="hdd" class="pw-dot pw-hdd" />
+      </span>
     </button>
 
     <template v-if="open">
@@ -122,7 +130,8 @@ async function wake() {
           </span>
         </div>
 
-        <template v-if="hasAtx">
+        <p v-if="watchOnly" class="pw-note">This sign-in can only watch.</p>
+        <template v-if="hasAtx && !watchOnly">
           <button type="button" class="pw-item" :disabled="busy" @click="press">
             Press power
             <small>A short press, as on the front panel</small>
@@ -137,7 +146,7 @@ async function wake() {
           </button>
         </template>
 
-        <template v-if="hasWol">
+        <template v-if="hasWol && !watchOnly">
           <button
             v-if="wolMac"
             type="button"
@@ -153,7 +162,7 @@ async function wake() {
           </p>
         </template>
 
-        <template v-if="hasCec">
+        <template v-if="hasCec && !watchOnly">
           <button type="button" class="pw-item" :disabled="busy" @click="hdmi('wake')">
             Wake over HDMI
             <small>HDMI-CEC; TV boxes and consoles, not most PCs</small>
@@ -173,12 +182,19 @@ async function wake() {
   position: relative;
 }
 
-/* A dot on the button when a LED is wired, so the target's state is on the rail
-   rather than one click away. */
-.pw-dot {
+/* The wired LEDs as dots right of the icon, power above the disk like on a
+   case, so the target's state is on the rail rather than one click away. */
+.pw-leds {
   position: absolute;
-  right: 6px;
-  top: 6px;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pw-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -190,6 +206,27 @@ async function wake() {
 
 .pw-dot-off {
   background: var(--text-faint);
+}
+
+/* The target's disk at work. */
+.pw-hdd {
+  background: var(--warn, #e3b341);
+  animation: pw-blink 0.5s steps(2, jump-none) infinite;
+}
+
+@keyframes pw-blink {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pw-hdd {
+    animation: none;
+  }
 }
 
 .pw-backdrop {
