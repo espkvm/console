@@ -29,6 +29,7 @@ export const UI_FEATURES: UiFeature[] = [
   { id: "pause", label: "Pause the stream", group: "Picture" },
   { id: "scale", label: "Scale", group: "Picture" },
   { id: "fullscreen", label: "Full screen", group: "Picture" },
+  { id: "pip", label: "Picture in a small window", group: "Picture" },
   { id: "sound", label: "Sound", group: "Picture" },
   { id: "select", label: "Select text on the screen", group: "Screen text" },
   { id: "copy", label: "Copy the screen as text", group: "Screen text" },

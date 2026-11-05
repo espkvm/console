@@ -93,6 +93,7 @@ export class RtcStream {
     v.playsInline = true;
     v.autoplay = true;
     v.setAttribute("aria-hidden", "true");
+    v.dataset.espkvmRtc = ""; /* ui/pip.ts reads it */
     v.style.cssText =
       "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none";
     document.body.appendChild(v);

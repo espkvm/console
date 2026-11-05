@@ -786,6 +786,93 @@ export async function getCec(): Promise<CecStatus> {
   return getJson<CecStatus>("/api/v1/cec");
 }
 
+/** One tailnet peer and how traffic reaches it. */
+export interface TailscalePeer {
+  ip: string;
+  name: string;
+  /** Owner's Tailscale login, "" when the netmap did not say. */
+  user: string;
+  userName: string;
+  /** The netmap's view; null when it did not say. */
+  online: boolean | null;
+  path: "direct" | "relay";
+  /** The direct address in use, "" over the relay. */
+  endpoint: string;
+  /** The peer's home relay region ("fra"). */
+  relay: string;
+  /** Last probe round trip in ms, absent before the first. */
+  ms?: number;
+  msDirect?: boolean;
+}
+
+export interface TailscaleStatus {
+  state: "off" | "waiting" | "connecting" | "login" | "refused" | "up";
+  address: string;
+  name: string;
+  /** Open this to approve the device, while state is "login". */
+  loginUrl: string;
+  error: string;
+  keyExpiry: number;
+  keyExpired: boolean;
+  relay: { region: string; up: boolean };
+  peers: TailscalePeer[];
+}
+
+export interface PushBrowser {
+  id: number;
+  name: string;
+  /** The push service, e.g. "fcm.googleapis.com". */
+  host: string;
+  /** Unix seconds, 0 when the device had no clock. */
+  added: number;
+}
+
+export interface PushInfo {
+  /** The device's VAPID public key, base64url. */
+  key: string;
+  browsers: PushBrowser[];
+}
+
+export async function getPush(): Promise<PushInfo> {
+  return getJson<PushInfo>("/api/v1/push");
+}
+
+async function pushPost(path: string, body: unknown): Promise<{ id?: number }> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...CONSOLE_HEADER },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(await errorFromResponse(res, `Push request failed (${res.status})`));
+  return res.json();
+}
+
+/** Hand a browser's push subscription to the device. Returns its id there. */
+export async function pushSubscribe(sub: PushSubscriptionJSON, name: string): Promise<number> {
+  const r = await pushPost("/api/v1/push/subscribe", { ...sub, name });
+  return r.id ?? -1;
+}
+
+export async function pushRemove(which: { id: number } | { endpoint: string }): Promise<void> {
+  await pushPost("/api/v1/push/remove", which);
+}
+
+export async function getTailscale(): Promise<TailscaleStatus> {
+  return getJson<TailscaleStatus>("/api/v1/tailscale");
+}
+
+/** Forget this device's tailnet keys and auth key. */
+export async function tailscaleLogout(): Promise<void> {
+  const res = await fetch("/api/v1/tailscale/logout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...CONSOLE_HEADER },
+    body: "{}",
+  });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(await errorFromResponse(res, `Tailscale logout failed (${res.status})`));
+}
+
 async function cecPost(path: string, body: unknown): Promise<Response> {
   const res = await fetch(`/api/v1/cec/${path}`, {
     method: "POST",

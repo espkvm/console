@@ -1081,6 +1081,16 @@
       "reboot": true
     },
     {
+      "key": "net_mdns_ident",
+      "section": "network",
+      "group": "Address",
+      "title": "Say on the network that this is an ESP-KVM",
+      "help": "Adds the product and the board to the mDNS announcement, and an _espkvm._tcp service, so a discovery tool or a script can find every ESP-KVM on the network. Off, only the hostname is announced. The firmware version is never announced.",
+      "type": "bool",
+      "default": 0,
+      "reboot": true
+    },
+    {
       "key": "net_dhcp",
       "section": "network",
       "group": "Address",
@@ -1339,7 +1349,7 @@
       "section": "vpn",
       "group": "Tailscale",
       "title": "Auth key",
-      "help": "A Tailscale auth key (tskey-auth-...) that authorises this device to join. Generate one in the Tailscale admin console; a reusable key survives re-registration across reboots.",
+      "help": "Optional. A Tailscale auth key (tskey-auth-...) that authorises this device to join. Empty, the device shows a link to sign in with your Tailscale account instead. Generate a key in the Tailscale admin console; a reusable key survives re-registration across reboots.",
       "type": "string",
       "maxLength": 63,
       "default": "",
@@ -1358,11 +1368,43 @@
       "requires": "tailscale"
     },
     {
+      "key": "ts_only",
+      "section": "vpn",
+      "group": "Tailscale",
+      "title": "Console only over Tailscale",
+      "help": "While the device is on the tailnet, the console answers only to tailnet addresses (100.64.0.0/10). The setup hotspot still works, and while Tailscale is down the console answers everywhere again, so a broken tailnet cannot lock you out.",
+      "type": "bool",
+      "default": 0,
+      "requires": "tailscale"
+    },
+    {
+      "key": "ts_trust",
+      "section": "vpn",
+      "group": "Tailscale",
+      "title": "Sign in these tailnet users",
+      "help": "Tailscale logins, separated by commas (alice@example.com). A browser on a device of one of these users is signed in as the owner without a password or a code. Works once a password of your own is set. Signing out there signs straight back in.",
+      "type": "string",
+      "maxLength": 127,
+      "default": "",
+      "requires": "tailscale"
+    },
+    {
+      "key": "ts_trust_view",
+      "section": "vpn",
+      "group": "Tailscale",
+      "title": "Let these tailnet users watch",
+      "help": "Tailscale logins, separated by commas. These are signed in as the viewer: they see the screen and cannot type, click or change anything.",
+      "type": "string",
+      "maxLength": 127,
+      "default": "",
+      "requires": "tailscale"
+    },
+    {
       "key": "ts_control_url",
       "section": "vpn",
       "group": "Tailscale",
       "title": "Control server",
-      "help": "Coordination server for a self-hosted control plane (Headscale, Ionscale). Empty uses Tailscale's own (controlplane.tailscale.com). Host only, no scheme - e.g. headscale.example.com.",
+      "help": "Coordination server for a self-hosted control plane (Headscale, Ionscale). Empty uses Tailscale's own (controlplane.tailscale.com). A host (headscale.example.com) or a URL (https://headscale.example.com:8443), which then sets TLS and the port too.",
       "type": "string",
       "maxLength": 63,
       "default": "",

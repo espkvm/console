@@ -6,7 +6,9 @@
  * but the page still got the pull when a drag began somewhere with nothing to
  * scroll. A touchmove that is cancelled cannot become a page pull at all, so
  * this decides per gesture: if the drag belongs to a scrollable box that can
- * still move that way, leave it alone; otherwise cancel it.
+ * still move that way, leave it alone; otherwise cancel it. A sideways drag is
+ * never a pull, so it is left alone too: cancelling it killed the sideways
+ * scroll of the settings tabs on a phone.
  *
  * The video surface has its own handlers and is left out of this entirely.
  */
@@ -28,6 +30,8 @@ function scroller(from: EventTarget | null): HTMLElement | null {
 export function installNoPagePull(): () => void {
   let box: HTMLElement | null = null;
   let lastY = 0;
+  let lastX = 0;
+  let sideways: boolean | null = null; /* decided on the first move */
   let owned = false;
 
   const onStart = (e: TouchEvent) => {
@@ -41,6 +45,8 @@ export function installNoPagePull(): () => void {
     owned = !(t.target instanceof HTMLElement && t.target.closest(".stage-touch"));
     box = scroller(t.target);
     lastY = t.clientY;
+    lastX = t.clientX;
+    sideways = null;
   };
 
   const onMove = (e: TouchEvent) => {
@@ -52,7 +58,15 @@ export function installNoPagePull(): () => void {
       return;
     }
     const dy = t.clientY - lastY;
+    const dx = t.clientX - lastX;
     lastY = t.clientY;
+    lastX = t.clientX;
+    if (sideways === null && (dx || dy)) {
+      sideways = Math.abs(dx) > Math.abs(dy);
+    }
+    if (sideways) {
+      return;
+    }
     if (!box) {
       e.preventDefault(); /* nothing here scrolls - the page must not either */
       return;

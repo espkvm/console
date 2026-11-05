@@ -676,6 +676,34 @@ async function route(
           viewers: [
             { ip: "192.168.1.20", control: true, viewOnly: false, you: true },
             { ip: "192.168.1.57", control: false, viewOnly: true, you: false },
+            {
+              ip: "100.101.7.12",
+              control: false,
+              viewOnly: false,
+              you: false,
+              tailnet: { name: "studio-mac.tail0d1e.ts.net", user: "anna@example.com", userName: "Anna" },
+            },
+          ],
+        });
+      case "/api/v1/push":
+        return json({
+          key: "BGsLxjs11QPAgYqUbtPIdemo0000000000000000000000000000000000000000000000000000000000000000",
+          browsers: [{ id: 0, name: "Chrome on Android", host: "fcm.googleapis.com", added: 1793800000 }],
+        });
+      case "/api/v1/tailscale":
+        return json({
+          state: "up",
+          address: "100.88.4.20",
+          name: "espkvm.tail0d1e.ts.net",
+          loginUrl: "",
+          error: "",
+          keyExpiry: 0,
+          keyExpired: false,
+          relay: { region: "fra", up: true },
+          peers: [
+            { ip: "100.101.7.12", name: "studio-mac.tail0d1e.ts.net", user: "anna@example.com", userName: "Anna", online: true, path: "direct", endpoint: "192.168.1.31:41641", relay: "fra", ms: 3, msDirect: true },
+            { ip: "100.70.2.9", name: "pixel-8.tail0d1e.ts.net", user: "anna@example.com", userName: "Anna", online: true, path: "relay", endpoint: "", relay: "ams", ms: 48, msDirect: false },
+            { ip: "100.92.55.3", name: "nas.tail0d1e.ts.net", user: "anna@example.com", userName: "Anna", online: false, path: "relay", endpoint: "", relay: "fra" },
           ],
         });
       case "/api/v1/captures":

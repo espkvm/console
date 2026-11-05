@@ -49,6 +49,8 @@ import { runRestart } from "../state/restart";
 import { TIME_ZONES, browserZone, zoneName, zoneOptions } from "../state/timezones";
 import { toast } from "../state/toasts";
 import TwoFactor from "./TwoFactor.vue";
+import PushBrowsers from "./PushBrowsers.vue";
+import TailscaleStatus from "./TailscaleStatus.vue";
 import ViewerAccount from "./ViewerAccount.vue";
 import ScreenLayout from "./ScreenLayout.vue";
 import ProfileBar from "./ProfileBar.vue";
@@ -421,16 +423,10 @@ const rows = computed(() => props.schema.filter((s) => s.section === currentSect
  * Off/WireGuard/Tailscale selector, and only the chosen backend's fields are
  * shown (nothing when Off).
  */
-const VPN_WG_KEYS = new Set([
-  "wg_address",
-  "wg_private_key",
-  "wg_peer_key",
-  "wg_endpoint",
-  "wg_keepalive",
-  "wg_sntp",
-  "wg_sntp_srv",
-]);
-const VPN_TS_KEYS = new Set(["ts_auth_key", "ts_hostname", "ts_ctrl_tls"]);
+/* Every setting of the chosen VPN, by its prefix. A list of keys kept here
+   went stale: the certificate, the key warning and the control server were
+   left out of the tab and only search found them. */
+const VPN_PREFIX = { wg: "wg_", ts: "ts_" } as const;
 
 type VpnMode = "off" | "wg" | "ts";
 const vpnMode = computed<VpnMode>(() =>
@@ -443,7 +439,7 @@ const tsKeyNote = computed(() => {
   const ts = props.ts;
   if (!ts) return "";
   if (ts.keyExpired) {
-    return "The tailnet key has run out - the device is off the tailnet until a fresh auth key is saved here.";
+    return "The tailnet key has run out. The device is off the tailnet until you sign in again or save a fresh auth key.";
   }
   if (!ts.keyExpiry) return "";
   const when = new Date(ts.keyExpiry * 1000);
@@ -457,9 +453,7 @@ const displayRows = computed(() => {
     const mode = vpnMode.value;
     list = list.filter((r) => {
       if (r.key === "wg_enable" || r.key === "ts_enable") return false;
-      if (mode === "wg") return VPN_WG_KEYS.has(r.key);
-      if (mode === "ts") return VPN_TS_KEYS.has(r.key);
-      return false;
+      return mode !== "off" && r.key.startsWith(VPN_PREFIX[mode]);
     });
   }
   /* Generic conditional visibility: a setting carrying showIf appears only while
@@ -614,6 +608,16 @@ function guardWheel(e: WheelEvent) {
  * there". So only write when something was typed, and wipe the field afterwards
  * so the secret does not linger in the DOM.
  */
+/* A save that failed (the device restarting, say) leaves the value as it
+   was, and Vue does not touch a box whose bound value did not change: put
+   the box back by hand, or it shows On next to an "Off". */
+async function toggle(key: string, e: Event) {
+  const box = e.target as HTMLInputElement;
+  await write(key, box.checked);
+  await nextTick(); /* props.values follow the parent on its next render */
+  box.checked = Boolean(props.values[key]);
+}
+
 async function writeSecret(key: string, el: HTMLInputElement) {
   const value = el.value;
   if (!value) return;
@@ -1071,9 +1075,7 @@ async function doRevertCert() {
                     type="checkbox"
                     :checked="Boolean(values[s.key])"
                     :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
-                    @change="
-                      write(s.key, ($event.target as HTMLInputElement).checked)
-                    "
+                    @change="toggle(s.key, $event)"
                   />
                   <span class="muted">{{ values[s.key] ? "On" : "Off" }}</span>
                 </label>
@@ -1410,6 +1412,9 @@ async function doRevertCert() {
               Reading the pin map...
             </p>
           </div>
+
+          <TailscaleStatus v-if="currentSection === 'vpn' && vpnMode === 'ts'" />
+          <PushBrowsers v-if="currentSection === 'notify'" />
 
           <!-- A tailnet key lasts six months at most, so the date is worth
                saying out loud rather than leaving in the admin console. -->

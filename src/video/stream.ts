@@ -19,6 +19,7 @@
  * Frame layout is defined in components/kvm_web/http_server.c.
  */
 
+import { pictureWatched, WATCH_EVENT } from "../ui/pip";
 import { patchAnnexB } from "./spsPatch";
 
 const HEADER_LEN = 12;
@@ -173,6 +174,7 @@ export class VideoStream {
   constructor(handlers: Handlers) {
     this.#handlers = handlers;
     document.addEventListener("visibilitychange", this.#onVisibility);
+    window.addEventListener(WATCH_EVENT, this.#onVisibility);
     this.#connect();
   }
 
@@ -185,7 +187,7 @@ export class VideoStream {
    */
   #visibilityChanged() {
     if (this.#stopped) return;
-    if (document.visibilityState === "hidden") {
+    if (!pictureWatched()) {
       this.#resetDecoder();
       this.#hadKeyframe = false;
       return;
@@ -205,6 +207,7 @@ export class VideoStream {
   stop() {
     this.#stopped = true;
     document.removeEventListener("visibilitychange", this.#onVisibility);
+    window.removeEventListener(WATCH_EVENT, this.#onVisibility);
     if (this.#firstFrameTimer !== null) clearTimeout(this.#firstFrameTimer);
     this.#resetDecoder();
     this.#ws?.close();
@@ -330,9 +333,9 @@ export class VideoStream {
       return;
     }
 
-    /* Hidden tab: nothing is drawn, so nothing is decoded. #visibilityChanged
-       asks for a keyframe when it comes back. */
-    if (document.visibilityState === "hidden") return;
+    /* Hidden tab and no small window: nothing is drawn, so nothing is
+       decoded. #visibilityChanged asks for a keyframe when it comes back. */
+    if (!pictureWatched()) return;
 
     const { keyframe, sps } = inspectAnnexB(payload);
     /* Say frames are never reordered, or the decoder holds several back. */

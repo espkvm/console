@@ -18,6 +18,8 @@ interface Viewer {
   control: boolean;
   viewOnly: boolean;
   you: boolean;
+  /** Over Tailscale: the device and its owner. */
+  tailnet?: { name: string; user: string; userName: string };
 }
 
 const viewers = ref<Viewer[]>([]);
@@ -60,6 +62,15 @@ const title = computed(() => {
   return n === 1 ? "One more console is open" : `${n} more consoles are open`;
 });
 
+/* "spev, laptop" over the tailnet, else the address. */
+function who(v: Viewer): string {
+  const t = v.tailnet;
+  if (!t) return v.ip;
+  const device = t.name.split(".")[0];
+  const person = t.userName || t.user.split("@")[0];
+  return person ? `${person}, ${device}` : device;
+}
+
 function describe(v: Viewer): string {
   const who = v.you ? "You" : v.viewOnly ? "Viewer" : "Owner";
   return v.control ? `${who}, in control` : v.viewOnly ? `${who}, watching` : who;
@@ -95,7 +106,7 @@ function describe(v: Viewer): string {
         <h3>Open consoles</h3>
         <ul>
           <li v-for="(v, i) in viewers" :key="i">
-            <span class="mono">{{ v.ip }}</span>
+            <span :class="{ mono: !v.tailnet }" :title="v.tailnet ? `${v.ip} over Tailscale` : undefined">{{ who(v) }}</span>
             <small>{{ describe(v) }}</small>
           </li>
         </ul>

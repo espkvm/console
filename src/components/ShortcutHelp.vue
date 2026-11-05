@@ -14,6 +14,7 @@ const emit = defineEmits<{ close: [] }>();
 
 const CONSOLE: [string, string][] = [
   ["F", "Full screen on or off"],
+  ["P", "The picture in a small window on top (Chrome, Edge)"],
   ["I", "Input: key combinations, macros, paste"],
   ["M", "Virtual media"],
   ["A", "Automation"],

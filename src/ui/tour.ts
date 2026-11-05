@@ -182,8 +182,9 @@ export const TOUR_FEATURES: TourFeature[] = [
   {
     icon: "vpn",
     title: "Remote access",
-    line: "Tailscale or WireGuard, to reach the device from outside without opening ports.",
+    line: "Tailscale or WireGuard, to reach the device from outside without opening ports. Tailscale needs only a sign-in.",
     caps: ["tailscale", "wireguard"],
+    since: "0.77.0",
     actions: [{ label: "VPN", section: "vpn" }],
     docs: DOCS + "SETUP.md#reaching-it-from-outside-tailscale-or-wireguard",
     state: (c) => {
@@ -202,8 +203,9 @@ export const TOUR_FEATURES: TourFeature[] = [
   {
     icon: "info",
     title: "Notifications",
-    line: "A message to Telegram or a webhook when a phrase shows up on the screen or the screen goes blank.",
+    line: "A message to Telegram, a webhook or this browser when a phrase shows up on the screen or the screen goes blank.",
     caps: ["notify"],
+    since: "0.77.0",
     actions: [{ label: "Notifications", section: "notify" }],
     docs: DOCS + "NOTIFICATIONS.md",
     state: (c) => settingOn(c, "notify_enable"),

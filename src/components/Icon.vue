@@ -51,6 +51,8 @@ const PATHS = {
     "M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4",
   ],
   close: ["M6 6l12 12M18 6L6 18"],
+  /* A screen with a small window in its corner. */
+  pip: ["M21 10V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5", "M14 14h7v6h-7z"],
   /* A speaker with sound waves, and the same speaker crossed out. */
   volume: ["M11 5 6 9H2v6h4l5 4V5z", "M15.5 8.5a5 5 0 0 1 0 7", "M19 5a10 10 0 0 1 0 14"],
   "volume-off": ["M11 5 6 9H2v6h4l5 4V5z", "M22 9l-6 6M16 9l6 6"],

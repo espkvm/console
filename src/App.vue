@@ -42,6 +42,7 @@ import AgentPanel from "./components/AgentPanel.vue";
 import LogPanel from "./components/LogPanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import { pictureOf } from "./ui/picture";
+import { pipSupported, pipWindow, togglePip } from "./ui/pip";
 import { findScreen } from "./ui/screenCalib";
 import { measureLatency } from "./ui/latency";
 import VideoWidget from "./components/VideoWidget.vue";
@@ -2055,6 +2056,9 @@ function onGlobalKey(e: KeyboardEvent) {
     case "f":
       void toggleFullscreen();
       break;
+    case "p":
+      void openPip();
+      break;
     case "i":
       if (!signedInToWatch.value) togglePanel("input");
       break;
@@ -2226,6 +2230,18 @@ watch(engaged, (on) => {
   if (on) window.addEventListener("beforeunload", confirmClose);
   else window.removeEventListener("beforeunload", confirmClose);
 });
+
+async function openPip() {
+  if (!pipSupported) return;
+  try {
+    await togglePip(() => {
+      const el = surface.value;
+      return el instanceof HTMLCanvasElement || el instanceof HTMLImageElement ? el : null;
+    }, document.title);
+  } catch {
+    /* the browser wants a click first, or said no */
+  }
+}
 
 async function toggleFullscreen() {
   try {
@@ -3225,6 +3241,18 @@ const LED_BITS: Array<[number, string]> = [
           @click="soundClick"
         >
           <Icon :name="soundOn ? 'volume' : 'volume-off'" :size="15" />
+        </button>
+        <button
+          v-if="pipSupported"
+          type="button"
+          class="btn btn-sm btn-icon"
+          :class="{ active: pipWindow }"
+          data-ui="pip"
+          aria-label="Picture in a small window"
+          title="Picture in a small window (P)"
+          @click="openPip()"
+        >
+          <Icon name="pip" :size="15" />
         </button>
         <button
           type="button"
