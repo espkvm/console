@@ -32,6 +32,10 @@ export interface Setting {
   min?: number;
   max?: number;
   choices?: string[];
+  /** What to show for each choice, where the name the API takes reads badly. */
+  labels?: string[];
+  /** Shown after a number: "ms", "%". */
+  unit?: string;
   maxLength?: number;
   default: number | string;
   /** Capability this setting depends on, if any. */
@@ -46,7 +50,35 @@ export interface Setting {
   profile?: boolean;
   /** Show this setting only while another setting equals a given value, e.g. the
    *  GC9A01's SPI pins appear only when the round LCD is the chosen display type. */
-  showIf?: { key: string; eq: number };
+  showIf?: { key: string; eq?: number; ne?: number };
+}
+
+/** What a choice of an enum setting reads as: the device's label, or the
+ *  name it takes with its first letter raised. */
+export function choiceLabel(s: Setting, i: number): string {
+  const label = s.labels?.[i];
+  if (label) return label;
+  const name = s.choices?.[i] ?? String(i);
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/**
+ * Whether a setting is shown for the values as they are. A setting with showIf
+ * follows the one it names, and that one its own: the round LCD's pins hang on
+ * the panel type, which hangs on the display being on. The device applies the
+ * same rule to its pin check (kvm_settings.c).
+ */
+export function settingShown(schema: Setting[], values: Values, s: Setting): boolean {
+  let cur: Setting | undefined = s;
+  for (let depth = 0; cur?.showIf && depth < 8; depth++) {
+    const cond: { key: string; eq?: number; ne?: number } = cur.showIf;
+    const { key, eq, ne } = cond;
+    const v = Number(values[key]);
+    if (eq !== undefined && v !== eq) return false;
+    if (ne !== undefined && v === ne) return false;
+    cur = schema.find((x) => x.key === key);
+  }
+  return true;
 }
 
 /** The GPIO map: the usable range and which pins the board's fixed peripherals hold. */

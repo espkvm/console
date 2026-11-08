@@ -48,13 +48,128 @@
 .settings-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  container: settings-list / inline-size;
 }
 
+/* One setting: its name and what it does, then its control. On a wide pane
+   the control stands to the right of the name, the way a phone's settings do,
+   so a screen holds twice as many; narrow, it goes underneath. */
 .setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.setting-text {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.setting-hint {
+  overflow-wrap: anywhere;
+}
+
+/* A number and its unit, side by side. */
+.num-wrap {
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-2);
+}
+
+/* Kept even when empty, so numbers with and without a unit line up. */
+.num-unit {
+  min-width: 2.5rem;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* A card's buttons keep their own width. */
+.firmware > .btn,
+.fold-body > .btn {
+  align-self: flex-start;
+}
+
+/* A toggle is small enough to sit beside its name even on a phone. */
+.setting-bool {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.setting-bool > * {
+  grid-column: 1 / -1;
+}
+
+.setting-bool > .setting-text {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.setting-bool > .setting-control {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+}
+
+@container settings-list (min-width: 540px) {
+  .setting:not(.setting-wide) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .setting:not(.setting-wide) > * {
+    grid-column: 1 / -1;
+  }
+
+  .setting:not(.setting-wide) > .setting-text,
+  .setting:not(.setting-wide) > .setting-head {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .setting:not(.setting-wide) > .setting-control {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    align-self: start;
+  }
+
+  .setting:not(.setting-wide) > .setting-control select,
+  .setting:not(.setting-wide) > .setting-control input[type="text"],
+  .setting:not(.setting-wide) > .setting-control input[type="password"] {
+    width: 15rem;
+    max-width: 100%;
+  }
+
+  .setting:not(.setting-wide) .num-input {
+    width: 7rem;
+  }
+}
+
+/* "Applies after a restart": said quietly beside the name. The bar at the
+   top says it loudly once something like that was changed. */
+.setting-flag {
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+.restart-pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  font-size: var(--text-sm);
+}
+
+.group-blocked {
+  padding: var(--space-2) 0;
 }
 
 .setting-head {
@@ -617,6 +732,49 @@
   gap: var(--space-2);
   padding-top: var(--space-3);
   border-top: 1px solid var(--border);
+}
+
+/* A card that folds to one line: its name and how it stands. */
+.fold {
+  display: block;
+}
+
+.fold > summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  cursor: pointer;
+  list-style: none;
+}
+
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fold > summary::before {
+  content: "\25B8";
+  color: var(--text-faint);
+  transition: transform var(--transition);
+}
+
+.fold[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.fold > summary h3 {
+  margin: 0;
+}
+
+.fold-status {
+  color: var(--text-faint);
+  font-size: var(--text-sm);
+}
+
+.fold-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 /* Bring-your-own certificate: a monospace PEM box and its actions. */
@@ -1796,17 +1954,6 @@
 
 /* ---- settings: finding one among a hundred ------------------------------ */
 
-.settings-find {
-  display: flex;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-}
-
-.settings-search {
-  flex: 1;
-  min-width: 0;
-}
-
 /* A heading the device asked for, inside a section. */
 /* The group the overview of features opened Settings at, marked for a moment. */
 .settings-group-flash {
@@ -1824,7 +1971,7 @@
 }
 
 .settings-group {
-  margin: var(--space-3) 0 0;
+  margin: var(--space-5) 0 0;
   color: var(--text-muted);
   font-size: var(--text-sm);
   font-weight: 600;
@@ -1881,7 +2028,7 @@
   display: flex;
   flex-direction: column;
   width: min(1040px, 100%);
-  height: min(720px, 100%);
+  height: min(860px, 100%);
   overflow: hidden;
   background: var(--bg-raised);
   border: 1px solid var(--border);
@@ -1924,16 +2071,52 @@
   min-height: 0;
 }
 
+/* The section list, with the search box over it: search runs across every
+   section, so it sits above them rather than inside one. */
+.settings-window .settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 200px;
+  flex: none;
+  padding: var(--space-3);
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+}
+
+.nav-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.nav-search .settings-search {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The phone's way in and out of the search; the desktop has the box itself. */
+.nav-search-btn,
+.nav-search-back {
+  display: none;
+}
+
 .settings-window .tabs {
   flex-direction: column;
   flex-wrap: nowrap;
   gap: 2px;
-  width: 200px;
-  flex: none;
   margin: 0;
-  padding: var(--space-3);
-  overflow-y: auto;
-  border-right: 1px solid var(--border);
+}
+
+.tab-changed {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.tab-count {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
 }
 
 .settings-window .tab {
@@ -1953,6 +2136,11 @@
   min-height: 0;
   padding: var(--space-4);
   overflow-y: auto;
+}
+
+/* Putting every setting back stands apart from the rest. */
+.settings-footer-end {
+  margin-left: auto;
 }
 
 /* What acts on every setting stays put while the settings scroll past it. */
@@ -1984,17 +2172,55 @@
     flex-direction: column;
   }
 
+  .settings-window .settings-nav {
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* The box opens in place of the tabs, the whole width. */
+  .settings-nav .nav-search {
+    display: none;
+  }
+
+  .settings-nav .nav-search-btn {
+    display: flex;
+    flex: none;
+  }
+
+  .settings-nav.search-open .nav-search {
+    display: flex;
+    flex: 1;
+  }
+
+  .settings-nav.search-open .nav-search-back {
+    display: flex;
+  }
+
+  .settings-nav.search-open .nav-search-btn,
+  .settings-nav.search-open .tabs {
+    display: none;
+  }
+
+  .tab-changed {
+    margin-bottom: 0;
+    gap: var(--space-1);
+  }
+
   /* One row that scrolls sideways: wrapped, the sections took four rows of a
      phone's screen before the first setting. */
   .settings-window .tabs {
-    width: auto;
+    flex: 1;
+    min-width: 0;
     flex-direction: row;
     flex-wrap: nowrap;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scrollbar-width: none;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
   }
 
   .settings-window .tabs::-webkit-scrollbar {

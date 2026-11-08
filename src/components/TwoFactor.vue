@@ -110,8 +110,9 @@ function downloadCodes() {
 </script>
 
 <template>
-  <div class="firmware">
-    <h3>Two-factor sign-in</h3>
+  <details class="firmware fold" :open="recovery.length > 0 || mode !== 'idle'">
+    <summary><h3>Two-factor sign-in</h3><span class="fold-status">{{ on ? "On" : "Off" }}</span></summary>
+    <div class="fold-body">
     <p class="setting-note">
       After the password, a six-digit code from an authenticator app (Google Authenticator, Aegis,
       1Password and the like). The reset button on the board turns it off with the password.
@@ -193,7 +194,8 @@ function downloadCodes() {
       </div>
     </form>
     <p v-if="error && mode === 'idle'" class="setting-note setting-note-blocked">{{ error }}</p>
-  </div>
+    </div>
+  </details>
 </template>
 
 <style scoped>

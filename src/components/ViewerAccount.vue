@@ -43,8 +43,9 @@ async function save(remove: boolean) {
 </script>
 
 <template>
-  <form v-if="known" class="firmware" @submit.prevent="save(false)">
-    <h3>View-only sign-in</h3>
+  <details v-if="known" class="firmware fold">
+  <summary><h3>View-only sign-in</h3><span class="fold-status">{{ exists ? "On" : "Off" }}</span></summary>
+  <form class="fold-body" @submit.prevent="save(false)">
     <p class="setting-note">
       A second sign-in, user <span class="mono">viewer</span>, for someone who should see the
       screen and nothing more. It shows the picture, the sound and the recordings. It cannot
@@ -75,4 +76,5 @@ async function save(remove: boolean) {
       </button>
     </div>
   </form>
+  </details>
 </template>

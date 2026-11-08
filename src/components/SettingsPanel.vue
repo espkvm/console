@@ -32,6 +32,8 @@ import {
   runAcme,
   saveSettings,
   settingBlockedReason,
+  settingShown,
+  choiceLabel,
   findTelegramChats,
   loadNotifyStatus,
   type TelegramChats,
@@ -46,6 +48,7 @@ import {
   type ImportPlan,
 } from "../state/settingsFile";
 import { runRestart } from "../state/restart";
+import { restartPending } from "../state/restartPending";
 import { TIME_ZONES, browserZone, zoneName, zoneOptions } from "../state/timezones";
 import { toast } from "../state/toasts";
 import TwoFactor from "./TwoFactor.vue";
@@ -207,7 +210,6 @@ const sectionBlurb = computed(
  * key itself - so it needs no list of its own and covers settings added to the
  * firmware later. */
 const query = ref("");
-const changedOnly = ref(false);
 
 function isChanged(setting: Setting): boolean {
   const now = props.values[setting.key];
@@ -223,7 +225,7 @@ const searchHits = computed(() => {
     if (entry.section === "storage_hidden") return false;
     const haystack =
       `${entry.title} ${entry.help ?? ""} ${entry.key}`.toLowerCase();
-    return haystack.includes(q) && (!changedOnly.value || isChanged(entry));
+    return haystack.includes(q);
   });
 });
 
@@ -414,7 +416,55 @@ onMounted(() => void showGroup(props.startGroup ?? ""));
 const currentSection = computed(() => active.value || sections.value[0]?.id || "video");
 const busy = ref(false);
 
-const rows = computed(() => props.schema.filter((s) => s.section === currentSection.value));
+/* "Changed" is a section of its own: everything that differs from the factory
+   value, from every section. A hidden setting shows here too - it differs,
+   and this is where one looks for what differs. */
+const changedRows = computed(() =>
+  props.schema.filter((s) => s.section !== "storage_hidden" && isChanged(s)),
+);
+const rows = computed(() =>
+  currentSection.value === "changed"
+    ? changedRows.value
+    : props.schema.filter((s) => s.section === currentSection.value),
+);
+
+/* Searching: a box at the top of the section list. On a phone the list is a
+   row of tabs with no room for it, so a button there opens it in their place. */
+const searchBox = ref<HTMLInputElement | null>(null);
+const searchOpen = ref(false);
+async function openSearch() {
+  searchOpen.value = true;
+  await nextTick();
+  searchBox.value?.focus();
+}
+function closeSearch() {
+  query.value = "";
+  searchOpen.value = false;
+}
+function pickSection(id: string) {
+  active.value = id;
+  closeSearch();
+}
+function onSearchKey(e: KeyboardEvent) {
+  if (e.key === "Escape" && (query.value || searchOpen.value)) {
+    e.preventDefault();
+    e.stopPropagation();
+    closeSearch();
+    searchBox.value?.blur();
+  }
+}
+/* "/" or Ctrl+F while Settings is open goes to the search box. */
+function onWindowKey(e: KeyboardEvent) {
+  const t = e.target as HTMLElement | null;
+  const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+  const ctrlF = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f";
+  if (ctrlF || (e.key === "/" && !typing)) {
+    e.preventDefault();
+    void openSearch();
+  }
+}
+onMounted(() => window.addEventListener("keydown", onWindowKey));
+onUnmounted(() => window.removeEventListener("keydown", onWindowKey));
 
 /*
  * The VPN section is special. WireGuard and Tailscale are mutually exclusive on
@@ -460,12 +510,7 @@ const displayRows = computed(() => {
    * the setting it names holds the given value. The GC9A01's SPI pins use this to
    * stay hidden unless the round LCD is the selected display type - an I2C OLED
    * has no pins to configure, so showing them would only mislead. */
-  if (changedOnly.value) {
-    list = list.filter(isChanged);
-  }
-  return list.filter(
-    (r) => !r.showIf || Number(props.values[r.showIf.key]) === r.showIf.eq,
-  );
+  return list.filter((r) => settingShown(props.schema, props.values, r));
 });
 
 /*
@@ -480,9 +525,10 @@ const grouped = computed(() => {
   const out: { name: string; rows: Setting[] }[] = [];
   const byName = new Map<string, { name: string; rows: Setting[] }>();
   for (const row of rowsNow) {
-    const name = query.value.trim()
-      ? sectionTitle(row.section)
-      : (row.group ?? "");
+    const name =
+      query.value.trim() || currentSection.value === "changed"
+        ? sectionTitle(row.section)
+        : (row.group ?? "");
     let block = byName.get(name);
     if (!block) {
       block = { name, rows: [] };
@@ -491,8 +537,47 @@ const grouped = computed(() => {
     }
     block.rows.push(row);
   }
-  return out;
+  return out.map((b) => ({ ...b, blocked: groupBlocked(b.rows) }));
 });
+
+/* A group the hardware cannot have at all - WiFi on a board without it - says
+   so once and folds up, rather than seven grey fields each saying the same. */
+function groupBlocked(list: Setting[]): string | null {
+  /* Not in a search or in Changed: there a hit has to show. */
+  if (sectionBlocked.value || list.length < 2 || query.value.trim() || currentSection.value === "changed") {
+    return null;
+  }
+  const reasons = list.map((r) => settingBlockedReason(r, props.caps));
+  return reasons.every((x) => x !== null && x === reasons[0]) ? reasons[0] : null;
+}
+const openedBlocked = ref(new Set<string>());
+function openBlocked(name: string) {
+  openedBlocked.value = new Set([...openedBlocked.value, name]);
+}
+
+/* The help's first sentence stays under the title; the rest opens on (i). */
+function helpHead(help: string): string {
+  /* A sentence ends at . ! or ? and a space - but not inside "e.g." or "i.e.". */
+  const m = /^(.+?(?<!\b(?:e\.g|i\.e|etc|vs))[.!?])(\s|$)/s.exec(help.trim());
+  return m ? m[1] : help;
+}
+function helpHasMore(help: string): boolean {
+  return helpHead(help).length < help.trim().length;
+}
+
+/* Long text (a URL, a list of phrases) takes the whole width; everything else
+   sits to the right of its name. */
+function wide(s: Setting): boolean {
+  return (
+    s.key === "ui_hidden" ||
+    (s.type === "string" && !s.secret && s.key !== "sched_tz" && (s.maxLength ?? 0) > 64)
+  );
+}
+
+/* The profile picker only where a setting can be held per device. */
+const sectionHasProfile = computed(
+  () => !query.value.trim() && currentSection.value !== "changed" && rows.value.some((r) => r.profile),
+);
 
 /* The I2C OLEDs (SSD1306/SH1106) ride the capture chip's I2C bus rather than pins
  * of their own - so there is nothing to configure, but the operator still needs to
@@ -566,7 +651,7 @@ async function write(key: string, value: number | string | boolean) {
    * the restart can be offered at once. Others that need one come in groups
    * (network, pins): asked after the first, the device would restart half set. */
   const setting = props.schema.find((s) => s.key === key);
-  const offerRestart = Boolean(setting?.reboot && setting.profile) && props.values[key] !== value;
+  const needsRestart = Boolean(setting?.reboot) && props.values[key] !== value;
   busy.value = true;
   let saved = false;
   try {
@@ -581,14 +666,8 @@ async function write(key: string, value: number | string | boolean) {
   } finally {
     busy.value = false;
   }
-  if (saved && offerRestart && confirm(`${setting?.title} applies after a restart. Restart now?`)) {
-    try {
-      if (await runRestart("Restarting the device", restartDevice, { kind: "manual" })) {
-        location.reload();
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
-    }
+  if (saved && needsRestart && setting && !restartPending.value.includes(setting.title)) {
+    restartPending.value = [...restartPending.value, setting.title];
   }
 }
 
@@ -840,6 +919,13 @@ onMounted(async () => {
 
 /* Let's Encrypt over Tailscale: watched every two seconds while it runs. */
 const acme = computed(() => tls.value?.acme ?? null);
+
+/* One line for the folded certificate card. */
+const certStatus = computed(() => {
+  const parts = [tls.value?.custom ? "Your own certificate" : "Self-signed, from the device's own CA"];
+  if (acme.value?.cert) parts.push("Let's Encrypt over Tailscale");
+  return parts.join(" + ");
+});
 let acmeTimer: ReturnType<typeof setTimeout> | undefined;
 
 async function refreshTls() {
@@ -913,19 +999,61 @@ async function doRevertCert() {
 
 <template>
   <div ref="root" class="settings">
-    <div class="tabs" role="tablist">
+    <nav :class="['settings-nav', { 'search-open': searchOpen }]">
+      <div class="nav-search">
+        <!-- Named and marked off, or a browser takes the box above a password
+             field for a username box and fills in the saved login. -->
+        <input
+          ref="searchBox"
+          v-model="query"
+          type="search"
+          class="settings-search"
+          name="setting-filter"
+          autocomplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          placeholder="Find a setting"
+          aria-label="Find a setting"
+          title="Find a setting ( / )"
+          @keydown="onSearchKey"
+        />
+        <button type="button" class="btn-link nav-search-back" @click="closeSearch">
+          Cancel
+        </button>
+      </div>
       <button
-        v-for="s in sections"
-        :key="s.id"
         type="button"
-        role="tab"
-        :aria-selected="s.id === currentSection"
-        :class="['tab', { 'tab-active': s.id === currentSection }]"
-        @click="active = s.id"
+        class="icon-btn nav-search-btn"
+        aria-label="Find a setting"
+        title="Find a setting"
+        @click="openSearch"
       >
-        {{ s.title }}
+        <Icon name="search" :size="16" />
       </button>
-    </div>
+      <div class="tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="!query.trim() && currentSection === 'changed'"
+          :class="['tab', 'tab-changed', { 'tab-active': !query.trim() && currentSection === 'changed' }]"
+          title="Every setting that differs from the factory value"
+          @click="pickSection('changed')"
+        >
+          Changed <span class="tab-count">{{ changedRows.length }}</span>
+        </button>
+        <button
+          v-for="s in sections"
+          :key="s.id"
+          type="button"
+          role="tab"
+          :aria-selected="!query.trim() && s.id === currentSection"
+          :class="['tab', { 'tab-active': !query.trim() && s.id === currentSection }]"
+          @click="pickSection(s.id)"
+        >
+          {{ s.title }}
+        </button>
+      </div>
+    </nav>
 
     <!-- Beside the section list: the settings, and the buttons that act on
          all of them pinned under the scroll. -->
@@ -933,34 +1061,26 @@ async function doRevertCert() {
       <!-- Everything but the section list: its own column in the window, the
            whole width in the panel. -->
       <div class="settings-main">
-        <ProfileBar @values="(v) => emit('values', v)" />
-        <div class="settings-find">
-          <!-- Named and marked off, or a browser takes the box above a password
-               field for a username box and fills in the saved login. -->
-          <input
-            v-model="query"
-            type="search"
-            class="settings-search"
-            name="setting-filter"
-            autocomplete="off"
-            data-1p-ignore
-            data-lpignore="true"
-            placeholder="Find a setting"
-            aria-label="Find a setting"
-          />
-          <button
-            type="button"
-            :class="['btn', 'btn-sm', { 'btn-on': changedOnly }]"
-            :aria-pressed="changedOnly"
-            title="Only the settings that differ from the factory values"
-            @click="changedOnly = !changedOnly"
+        <div v-if="restartPending.length" class="restart-pending" role="status">
+          <span
+            >Applies after a restart:
+            <b>{{ restartPending.join(", ") }}</b></span
           >
-            Changed
+          <button type="button" class="btn btn-sm" @click="doRestart">
+            Restart now
           </button>
         </div>
+        <ProfileBar v-if="sectionHasProfile" @values="(v) => emit('values', v)" />
 
         <p v-if="query.trim()" class="setting-note">
           {{ searchHits.length }} of {{ schema.length }} settings match.
+        </p>
+        <p v-else-if="currentSection === 'changed'" class="setting-note">
+          {{
+            changedRows.length
+              ? "Every setting that differs from the factory value. The arrow puts one back."
+              : "Every setting is at its factory value."
+          }}
         </p>
         <p v-else-if="sectionBlurb" class="setting-note">{{ sectionBlurb }}</p>
 
@@ -1007,21 +1127,35 @@ async function doRevertCert() {
                 >how to wire it</a
               >
             </h3>
+            <p
+              v-if="block.blocked && !openedBlocked.has(block.name)"
+              class="setting-note group-blocked"
+            >
+              {{ block.blocked }}
+              <button type="button" class="btn-link" @click="openBlocked(block.name)">
+                Show its settings
+              </button>
+            </p>
             <div
-              v-for="s in block.rows"
+              v-for="s in block.blocked && !openedBlocked.has(block.name) ? [] : block.rows"
               :key="s.key"
               :class="[
                 'setting',
-                { 'setting-blocked': busy || sectionBlocked || blockedFor(s) },
+                {
+                  'setting-blocked': busy || sectionBlocked || blockedFor(s),
+                  'setting-wide': wide(s),
+                  'setting-bool': s.type === 'bool',
+                },
               ]"
             >
+              <div class="setting-text">
               <div class="setting-head">
                 <label class="setting-title" :for="`set-${s.key}`">{{
                   s.title
                 }}</label>
                 <span
                   v-if="s.reboot"
-                  class="badge"
+                  class="setting-flag"
                   title="Applies after a restart"
                   >restart</span
                 >
@@ -1033,7 +1167,7 @@ async function doRevertCert() {
                 >
                 <span class="setting-head-actions">
                   <button
-                    v-if="s.help"
+                    v-if="s.help && helpHasMore(s.help)"
                     type="button"
                     class="icon-btn"
                     :aria-label="`What ${s.title} does`"
@@ -1067,6 +1201,13 @@ async function doRevertCert() {
                   </button>
                 </span>
               </div>
+              <p v-if="blockedFor(s)" class="setting-note setting-note-blocked">
+                {{ blockedFor(s) }}
+              </p>
+              <p v-else-if="s.help" class="setting-note setting-hint">
+                {{ helpOpen.has(s.key) ? s.help : helpHead(s.help) }}
+              </p>
+              </div>
 
               <div class="setting-control">
                 <label v-if="s.type === 'bool'" class="switch">
@@ -1098,7 +1239,7 @@ async function doRevertCert() {
                     :key="c"
                     :value="String(i)"
                   >
-                    {{ c }}
+                    {{ choiceLabel(s, i) }}
                   </option>
                 </select>
 
@@ -1126,24 +1267,26 @@ async function doRevertCert() {
                   </option>
                 </select>
 
-                <input
-                  v-else-if="s.type === 'int'"
-                  :id="`set-${s.key}`"
-                  type="number"
-                  class="num-input"
-                  :min="s.min"
-                  :max="s.max"
-                  :value="shown(s.key, String(Number(values[s.key] ?? 0)))"
-                  :disabled="!!sectionBlocked || !!blockedFor(s)"
-                  @input="drafts[s.key] = ($event.target as HTMLInputElement).value"
-                  @change="
-                    commit(
-                      s.key,
-                      Number(($event.target as HTMLInputElement).value),
-                    )
-                  "
-                  @wheel="guardWheel"
-                />
+                <span v-else-if="s.type === 'int'" class="num-wrap">
+                  <input
+                    :id="`set-${s.key}`"
+                    type="number"
+                    class="num-input"
+                    :min="s.min"
+                    :max="s.max"
+                    :value="shown(s.key, String(Number(values[s.key] ?? 0)))"
+                    :disabled="!!sectionBlocked || !!blockedFor(s)"
+                    @input="drafts[s.key] = ($event.target as HTMLInputElement).value"
+                    @change="
+                      commit(
+                        s.key,
+                        Number(($event.target as HTMLInputElement).value),
+                      )
+                    "
+                    @wheel="guardWheel"
+                  />
+                  <span class="num-unit">{{ s.unit }}</span>
+                </span>
 
                 <!-- Read-only until focused: browsers do not autofill a read-only
                      field, and some ignore "new-password" and fill the console's
@@ -1160,7 +1303,7 @@ async function doRevertCert() {
                   readonly
                   @focus="($event.target as HTMLInputElement).readOnly = false"
                   :maxlength="s.maxLength"
-                  placeholder="Leave blank to keep the current value"
+                  placeholder="Blank keeps the saved one"
                   :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
                   @change="writeSecret(s.key, $event.target as HTMLInputElement)"
                 />
@@ -1221,12 +1364,6 @@ async function doRevertCert() {
                 />
               </div>
 
-              <p v-if="blockedFor(s)" class="setting-note setting-note-blocked">
-                {{ blockedFor(s) }}
-              </p>
-              <p v-else-if="s.help && helpOpen.has(s.key)" class="setting-note">
-                {{ s.help }}
-              </p>
 
               <p v-if="s.key === 'ptr_scr_y' && findScreen" class="setting-note">
                 <button
@@ -1479,12 +1616,9 @@ async function doRevertCert() {
           </button>
         </div>
 
-        <form
-          v-if="currentSection === 'security'"
-          class="firmware"
-          @submit.prevent="submitPassword"
-        >
-          <h3>Password</h3>
+        <details v-if="currentSection === 'security'" class="firmware fold">
+        <summary><h3>Password</h3><span class="fold-status">Change the console password</span></summary>
+        <form class="fold-body" @submit.prevent="submitPassword">
           <p class="setting-note">
             Not listed above with the other settings: those can be read back, and
             a password that can be read back is not one. Changing it signs out
@@ -1533,11 +1667,13 @@ async function doRevertCert() {
             {{ changingPassword ? "Changing..." : "Change password" }}
           </button>
         </form>
+        </details>
 
         <TwoFactor v-if="currentSection === 'security'" />
 
-        <div v-if="currentSection === 'security'" class="firmware">
-          <h3>Viewing token</h3>
+        <details v-if="currentSection === 'security'" class="firmware fold">
+          <summary><h3>Viewing token</h3><span class="fold-status">{{ tokenExists ? "One exists" : "None" }}</span></summary>
+          <div class="fold-body">
           <p class="setting-note">
             One long string that opens the picture and nothing else - the MJPEG
             stream, a single frame, and the capture's figures. It is for a
@@ -1576,12 +1712,14 @@ async function doRevertCert() {
               Revoke
             </button>
           </div>
-        </div>
+          </div>
+        </details>
 
         <ViewerAccount v-if="currentSection === 'security' && signedIn" />
 
-        <div v-if="currentSection === 'security'" class="firmware">
-          <h3>Device certificate</h3>
+        <details v-if="currentSection === 'security'" class="firmware fold">
+          <summary><h3>Device certificate</h3><span class="fold-status">{{ certStatus }}</span></summary>
+          <div class="fold-body">
 
           <!-- Let's Encrypt for the tailnet name. Served only to whoever asks
                for that name, so the local name and the IPs below are unchanged. -->
@@ -1720,7 +1858,8 @@ async function doRevertCert() {
               </div>
             </template>
           </template>
-        </div>
+          </div>
+        </details>
 
         <p v-for="(line, i) in importReport" :key="i" class="setting-note">
           {{ line }}
@@ -1757,7 +1896,7 @@ async function doRevertCert() {
         </button>
         <button
           type="button"
-          class="btn btn-sm btn-danger"
+          class="btn btn-sm btn-danger settings-footer-end"
           :disabled="busy"
           @click="doReset"
         >
