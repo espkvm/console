@@ -195,7 +195,9 @@ const sections = computed(() => {
   const present = new Set(props.schema.map((s) => s.section));
   const list = props.sections.filter((s) => present.has(s.id));
   /* The pin map is drawn from the board, not from a setting, so it is the one
-     tab the device does not describe. */
+     tab the device does not describe. A closed box with no free pins has
+     nothing to wire, so no map either. */
+  if (props.caps.gpio_header?.available === false) return list;
   return [...list, { id: "pins", title: "Pins" }];
 });
 
@@ -286,7 +288,7 @@ onMounted(async () => {
  */
 const pinSettings = computed(() =>
   props.schema.filter(
-    (s) => s.pin && (!s.showIf || Number(props.values[s.showIf.key]) === s.showIf.eq),
+    (s) => s.pin && settingShown(props.schema, props.values, s),
   ),
 );
 
@@ -606,10 +608,10 @@ const sectionHasProfile = computed(
  * of their own - so there is nothing to configure, but the operator still needs to
  * know where to wire. Pull the real SDA/SCL out of the reserved-pin map, so the
  * note stays right even when a board overlay moves the capture bus. GC9A01 (index
- * 2) is SPI and has its own pin pickers, so it is excluded. */
+ * 2) and ST7789 (15) are SPI and have their own pin pickers, so they are excluded. */
 const oledI2cNote = computed<{ sda: number; scl: number } | null>(() => {
   if (currentSection.value !== "display" || !props.values.disp_enable) return null;
-  if (Number(props.values.disp_type ?? 0) === 2) return null;
+  if ([2, 15].includes(Number(props.values.disp_type ?? 0))) return null;
   let sda: number | null = null;
   let scl: number | null = null;
   for (const [pin, use] of reservedPins.value) {

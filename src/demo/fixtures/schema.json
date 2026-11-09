@@ -1076,9 +1076,9 @@
     },
     {
       "key": "btn_gpio",
-      "section": "power",
-      "group": "Button on the box",
-      "title": "Button GPIO",
+      "section": "buttons",
+      "group": "Button 1",
+      "title": "GPIO",
       "help": "A push button on a free pin: the M5Stack Unit Button on a Grove port (its yellow wire), or any switch to ground. -1 for none. Not tried with real hardware yet.",
       "type": "int",
       "min": -1,
@@ -1088,10 +1088,10 @@
     },
     {
       "key": "btn_press",
-      "section": "power",
-      "group": "Button on the box",
+      "section": "buttons",
+      "group": "Button 1",
       "title": "A short press",
-      "help": "What a short press does: the target's power button, a hard power off, reset, Wake-on-LAN, a runbook (named below), saving the dashcam's last seconds as a clip, or a screenshot to the card. On a board with WiFi it can also change the connection, which restarts the device: \"hotspot on/off\" goes to its own hotspot and back to the mode it had, \"next network mode\" steps through them all, \"Ethernet / WiFi\" swaps the two.",
+      "help": "What a short press does: the target's power button, a hard power off, reset, Wake-on-LAN, a runbook (named below), saving the dashcam's last seconds as a clip, or a screenshot to the card. On a board with WiFi it can also change the connection, which restarts the device: \"hotspot on/off\" goes to its own hotspot and back to the mode it had, \"next network mode\" steps through them all, \"Ethernet / WiFi\" swaps the two. \"next display page\" and \"display on/off\" drive the status display.",
       "type": "enum",
       "choices": [
         "nothing",
@@ -1104,7 +1104,9 @@
         "screenshot",
         "hotspot on/off",
         "next network mode",
-        "Ethernet / WiFi"
+        "Ethernet / WiFi",
+        "next display page",
+        "display on/off"
       ],
       "default": 0,
       "showIf": {
@@ -1114,10 +1116,10 @@
     },
     {
       "key": "btn_hold",
-      "section": "power",
-      "group": "Button on the box",
+      "section": "buttons",
+      "group": "Button 1",
       "title": "Held for 1.5 s",
-      "help": "What holding it does. It fires as soon as it has been held long enough, so you know it took.",
+      "help": "What holding it for 1.5 s does. It fires as soon as it has been held long enough, so you know it took.",
       "type": "enum",
       "choices": [
         "nothing",
@@ -1130,7 +1132,9 @@
         "screenshot",
         "hotspot on/off",
         "next network mode",
-        "Ethernet / WiFi"
+        "Ethernet / WiFi",
+        "next display page",
+        "display on/off"
       ],
       "default": 0,
       "showIf": {
@@ -1140,8 +1144,8 @@
     },
     {
       "key": "btn_runbook",
-      "section": "power",
-      "group": "Button on the box",
+      "section": "buttons",
+      "group": "Button 1",
       "title": "Runbook to run",
       "help": "The name of the runbook, for either action set to \"runbook\".",
       "type": "string",
@@ -1154,14 +1158,311 @@
     },
     {
       "key": "btn_active_high",
-      "section": "power",
-      "group": "Button on the box",
-      "title": "Button reads high when pressed",
+      "section": "buttons",
+      "group": "Button 1",
+      "title": "Reads high when pressed",
       "help": "Off for a button that connects the pin to ground, which is the usual kind and the M5Stack Unit Button. On for one that connects it to 3V3.",
       "type": "bool",
       "default": 0,
       "showIf": {
         "key": "btn_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn2_gpio",
+      "section": "buttons",
+      "group": "Button 2",
+      "title": "GPIO",
+      "help": "A push button on a free pin: the M5Stack Unit Button on a Grove port (its yellow wire), or any switch to ground. -1 for none. Not tried with real hardware yet.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": -1,
+      "pin": true,
+      "showIf": {
+        "key": "btn_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn2_press",
+      "section": "buttons",
+      "group": "Button 2",
+      "title": "A short press",
+      "help": "What a short press does: the target's power button, a hard power off, reset, Wake-on-LAN, a runbook (named below), saving the dashcam's last seconds as a clip, or a screenshot to the card. On a board with WiFi it can also change the connection, which restarts the device: \"hotspot on/off\" goes to its own hotspot and back to the mode it had, \"next network mode\" steps through them all, \"Ethernet / WiFi\" swaps the two. \"next display page\" and \"display on/off\" drive the status display.",
+      "type": "enum",
+      "choices": [
+        "nothing",
+        "power",
+        "power off (hold)",
+        "reset",
+        "wake (WoL)",
+        "runbook",
+        "save clip",
+        "screenshot",
+        "hotspot on/off",
+        "next network mode",
+        "Ethernet / WiFi",
+        "next display page",
+        "display on/off"
+      ],
+      "default": 0,
+      "showIf": {
+        "key": "btn2_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn2_hold",
+      "section": "buttons",
+      "group": "Button 2",
+      "title": "Held for 1.5 s",
+      "help": "What holding it for 1.5 s does. It fires as soon as it has been held long enough, so you know it took.",
+      "type": "enum",
+      "choices": [
+        "nothing",
+        "power",
+        "power off (hold)",
+        "reset",
+        "wake (WoL)",
+        "runbook",
+        "save clip",
+        "screenshot",
+        "hotspot on/off",
+        "next network mode",
+        "Ethernet / WiFi",
+        "next display page",
+        "display on/off"
+      ],
+      "default": 0,
+      "showIf": {
+        "key": "btn2_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn2_runbook",
+      "section": "buttons",
+      "group": "Button 2",
+      "title": "Runbook to run",
+      "help": "The name of the runbook, for either action set to \"runbook\".",
+      "type": "string",
+      "maxLength": 47,
+      "default": "",
+      "showIf": {
+        "key": "btn2_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn2_high",
+      "section": "buttons",
+      "group": "Button 2",
+      "title": "Reads high when pressed",
+      "help": "Off for a button that connects the pin to ground, which is the usual kind and the M5Stack Unit Button. On for one that connects it to 3V3.",
+      "type": "bool",
+      "default": 0,
+      "showIf": {
+        "key": "btn2_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn3_gpio",
+      "section": "buttons",
+      "group": "Button 3",
+      "title": "GPIO",
+      "help": "A push button on a free pin: the M5Stack Unit Button on a Grove port (its yellow wire), or any switch to ground. -1 for none. Not tried with real hardware yet.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": -1,
+      "pin": true,
+      "showIf": {
+        "key": "btn2_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn3_press",
+      "section": "buttons",
+      "group": "Button 3",
+      "title": "A short press",
+      "help": "What a short press does: the target's power button, a hard power off, reset, Wake-on-LAN, a runbook (named below), saving the dashcam's last seconds as a clip, or a screenshot to the card. On a board with WiFi it can also change the connection, which restarts the device: \"hotspot on/off\" goes to its own hotspot and back to the mode it had, \"next network mode\" steps through them all, \"Ethernet / WiFi\" swaps the two. \"next display page\" and \"display on/off\" drive the status display.",
+      "type": "enum",
+      "choices": [
+        "nothing",
+        "power",
+        "power off (hold)",
+        "reset",
+        "wake (WoL)",
+        "runbook",
+        "save clip",
+        "screenshot",
+        "hotspot on/off",
+        "next network mode",
+        "Ethernet / WiFi",
+        "next display page",
+        "display on/off"
+      ],
+      "default": 0,
+      "showIf": {
+        "key": "btn3_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn3_hold",
+      "section": "buttons",
+      "group": "Button 3",
+      "title": "Held for 1.5 s",
+      "help": "What holding it for 1.5 s does. It fires as soon as it has been held long enough, so you know it took.",
+      "type": "enum",
+      "choices": [
+        "nothing",
+        "power",
+        "power off (hold)",
+        "reset",
+        "wake (WoL)",
+        "runbook",
+        "save clip",
+        "screenshot",
+        "hotspot on/off",
+        "next network mode",
+        "Ethernet / WiFi",
+        "next display page",
+        "display on/off"
+      ],
+      "default": 0,
+      "showIf": {
+        "key": "btn3_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn3_runbook",
+      "section": "buttons",
+      "group": "Button 3",
+      "title": "Runbook to run",
+      "help": "The name of the runbook, for either action set to \"runbook\".",
+      "type": "string",
+      "maxLength": 47,
+      "default": "",
+      "showIf": {
+        "key": "btn3_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn3_high",
+      "section": "buttons",
+      "group": "Button 3",
+      "title": "Reads high when pressed",
+      "help": "Off for a button that connects the pin to ground, which is the usual kind and the M5Stack Unit Button. On for one that connects it to 3V3.",
+      "type": "bool",
+      "default": 0,
+      "showIf": {
+        "key": "btn3_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn4_gpio",
+      "section": "buttons",
+      "group": "Button 4",
+      "title": "GPIO",
+      "help": "A push button on a free pin: the M5Stack Unit Button on a Grove port (its yellow wire), or any switch to ground. -1 for none. Not tried with real hardware yet.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": -1,
+      "pin": true,
+      "showIf": {
+        "key": "btn3_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn4_press",
+      "section": "buttons",
+      "group": "Button 4",
+      "title": "A short press",
+      "help": "What a short press does: the target's power button, a hard power off, reset, Wake-on-LAN, a runbook (named below), saving the dashcam's last seconds as a clip, or a screenshot to the card. On a board with WiFi it can also change the connection, which restarts the device: \"hotspot on/off\" goes to its own hotspot and back to the mode it had, \"next network mode\" steps through them all, \"Ethernet / WiFi\" swaps the two. \"next display page\" and \"display on/off\" drive the status display.",
+      "type": "enum",
+      "choices": [
+        "nothing",
+        "power",
+        "power off (hold)",
+        "reset",
+        "wake (WoL)",
+        "runbook",
+        "save clip",
+        "screenshot",
+        "hotspot on/off",
+        "next network mode",
+        "Ethernet / WiFi",
+        "next display page",
+        "display on/off"
+      ],
+      "default": 0,
+      "showIf": {
+        "key": "btn4_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn4_hold",
+      "section": "buttons",
+      "group": "Button 4",
+      "title": "Held for 1.5 s",
+      "help": "What holding it for 1.5 s does. It fires as soon as it has been held long enough, so you know it took.",
+      "type": "enum",
+      "choices": [
+        "nothing",
+        "power",
+        "power off (hold)",
+        "reset",
+        "wake (WoL)",
+        "runbook",
+        "save clip",
+        "screenshot",
+        "hotspot on/off",
+        "next network mode",
+        "Ethernet / WiFi",
+        "next display page",
+        "display on/off"
+      ],
+      "default": 0,
+      "showIf": {
+        "key": "btn4_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn4_runbook",
+      "section": "buttons",
+      "group": "Button 4",
+      "title": "Runbook to run",
+      "help": "The name of the runbook, for either action set to \"runbook\".",
+      "type": "string",
+      "maxLength": 47,
+      "default": "",
+      "showIf": {
+        "key": "btn4_gpio",
+        "ne": -1
+      }
+    },
+    {
+      "key": "btn4_high",
+      "section": "buttons",
+      "group": "Button 4",
+      "title": "Reads high when pressed",
+      "help": "Off for a button that connects the pin to ground, which is the usual kind and the M5Stack Unit Button. On for one that connects it to 3V3.",
+      "type": "bool",
+      "default": 0,
+      "showIf": {
+        "key": "btn4_gpio",
         "ne": -1
       }
     },
@@ -2172,7 +2473,7 @@
       "section": "display",
       "group": "Screen",
       "title": "Status display",
-      "help": "Drive a small display that shows the IP, link, capture status and health. An I2C OLED (SSD1306/SH1106) shares the capture chip's I2C and is auto-detected with no extra pins; a round SPI LCD (GC9A01) uses the GPIOs set below, after you pick it as the display type. Off by default; does nothing when no panel is connected.",
+      "help": "Drive a small display that shows the IP, link, capture status and health. An I2C OLED (SSD1306/SH1106) shares the capture chip's I2C and is auto-detected with no extra pins; an SPI LCD (GC9A01, ST7789) uses the GPIOs set below, after you pick it as the display type. Off by default; does nothing when no panel is connected.",
       "type": "bool",
       "default": 0
     },
@@ -2181,7 +2482,7 @@
       "section": "display",
       "group": "Screen",
       "title": "Panel",
-      "help": "Which panel is wired, controller and size together. SSD1306 and SH1106 are I2C OLEDs - pick SH1106 if the image is shifted by two pixels or wraps. GC9A01 is a round colour SPI LCD, e.g. the Waveshare 1.28\" module. None of this can be detected: one chip drives every size and reports none of it. A wrong size shows the picture squeezed into part of the glass, or every other row missing. Shorter panels show fewer status lines.",
+      "help": "Which panel is wired, controller and size together. SSD1306 and SH1106 are I2C OLEDs - pick SH1106 if the image is shifted by two pixels or wraps. GC9A01 is a round colour SPI LCD, e.g. the Waveshare 1.28\" module. ST7789 is the square colour LCD built into the JetKVM Mini. None of this can be detected: one chip drives every size and reports none of it. A wrong size shows the picture squeezed into part of the glass, or every other row missing. Shorter panels show fewer status lines.",
       "type": "enum",
       "choices": [
         "SSD1306 128x64",
@@ -2198,9 +2499,45 @@
         "SSD1315 128x64 (untested)",
         "SSD1315 72x40 (M5Stack Mini OLED)",
         "SH1107 128x64 (M5Stack Unit OLED)",
-        "SSD1309 128x64 (M5Stack Unit Glass2, untested)"
+        "SSD1309 128x64 (M5Stack Unit Glass2, untested)",
+        "ST7789 240x240 (JetKVM Mini)"
       ],
       "default": 0,
+      "showIf": {
+        "key": "disp_enable",
+        "eq": 1
+      }
+    },
+    {
+      "key": "disp_bright",
+      "section": "display",
+      "group": "Screen",
+      "title": "Brightness",
+      "help": "How bright the backlight of a colour SPI LCD is. Takes effect at once. Needs the backlight pin set, and does nothing on the OLEDs.",
+      "type": "int",
+      "min": 5,
+      "max": 100,
+      "unit": "%",
+      "default": 100,
+      "showIf": {
+        "key": "disp_type",
+        "in": [
+          2,
+          15
+        ]
+      }
+    },
+    {
+      "key": "disp_dwell",
+      "section": "display",
+      "group": "Screen",
+      "title": "Each page for",
+      "help": "How long each status page stays up before the next one. 0 keeps the page until you press the display button.",
+      "type": "int",
+      "min": 0,
+      "max": 60,
+      "unit": "s",
+      "default": 4,
       "showIf": {
         "key": "disp_enable",
         "eq": 1
@@ -2224,7 +2561,7 @@
       "section": "display",
       "group": "Wiring",
       "title": "LCD SCLK / CLK",
-      "help": "SPI clock GPIO for the GC9A01. Ignored by the I2C OLEDs.",
+      "help": "SPI clock GPIO for the SPI LCD. Ignored by the I2C OLEDs.",
       "type": "int",
       "min": -1,
       "max": 54,
@@ -2233,7 +2570,10 @@
       "pin": true,
       "showIf": {
         "key": "disp_type",
-        "eq": 2
+        "in": [
+          2,
+          15
+        ]
       }
     },
     {
@@ -2241,7 +2581,7 @@
       "section": "display",
       "group": "Wiring",
       "title": "LCD MOSI / DIN",
-      "help": "SPI data GPIO for the GC9A01.",
+      "help": "SPI data GPIO for the SPI LCD.",
       "type": "int",
       "min": -1,
       "max": 54,
@@ -2250,7 +2590,10 @@
       "pin": true,
       "showIf": {
         "key": "disp_type",
-        "eq": 2
+        "in": [
+          2,
+          15
+        ]
       }
     },
     {
@@ -2258,7 +2601,7 @@
       "section": "display",
       "group": "Wiring",
       "title": "LCD CS",
-      "help": "Chip-select GPIO for the GC9A01.",
+      "help": "Chip-select GPIO for the SPI LCD.",
       "type": "int",
       "min": -1,
       "max": 54,
@@ -2267,7 +2610,10 @@
       "pin": true,
       "showIf": {
         "key": "disp_type",
-        "eq": 2
+        "in": [
+          2,
+          15
+        ]
       }
     },
     {
@@ -2275,7 +2621,7 @@
       "section": "display",
       "group": "Wiring",
       "title": "LCD DC",
-      "help": "Data/command GPIO for the GC9A01.",
+      "help": "Data/command GPIO for the SPI LCD.",
       "type": "int",
       "min": -1,
       "max": 54,
@@ -2284,7 +2630,10 @@
       "pin": true,
       "showIf": {
         "key": "disp_type",
-        "eq": 2
+        "in": [
+          2,
+          15
+        ]
       }
     },
     {
@@ -2292,7 +2641,7 @@
       "section": "display",
       "group": "Wiring",
       "title": "LCD RST",
-      "help": "Reset GPIO for the GC9A01. -1 (None) if RST is tied to 3V3.",
+      "help": "Reset GPIO for the SPI LCD. -1 (None) if RST is tied to 3V3.",
       "type": "int",
       "min": -1,
       "max": 54,
@@ -2301,7 +2650,10 @@
       "pin": true,
       "showIf": {
         "key": "disp_type",
-        "eq": 2
+        "in": [
+          2,
+          15
+        ]
       }
     },
     {
@@ -2318,7 +2670,10 @@
       "pin": true,
       "showIf": {
         "key": "disp_type",
-        "ne": 2
+        "notIn": [
+          2,
+          15
+        ]
       }
     },
     {
@@ -2335,7 +2690,10 @@
       "pin": true,
       "showIf": {
         "key": "disp_type",
-        "ne": 2
+        "notIn": [
+          2,
+          15
+        ]
       }
     },
     {
@@ -2343,7 +2701,7 @@
       "section": "display",
       "group": "Wiring",
       "title": "LCD backlight",
-      "help": "Backlight GPIO for the GC9A01. -1 (None) if BL is tied to 3V3 (always on).",
+      "help": "Backlight GPIO for the SPI LCD. -1 (None) if BL is tied to 3V3 (always on).",
       "type": "int",
       "min": -1,
       "max": 54,
@@ -2352,7 +2710,10 @@
       "pin": true,
       "showIf": {
         "key": "disp_type",
-        "eq": 2
+        "in": [
+          2,
+          15
+        ]
       }
     }
   ],
@@ -2380,7 +2741,12 @@
     {
       "id": "power",
       "title": "Power",
-      "blurb": "ATX wiring, Wake-on-LAN, HDMI-CEC, the button on the board and the serial console."
+      "blurb": "ATX wiring, Wake-on-LAN, HDMI-CEC and the serial console."
+    },
+    {
+      "id": "buttons",
+      "title": "Buttons",
+      "blurb": "Push buttons wired to the device, and what a press or a hold of each does."
     },
     {
       "id": "network",

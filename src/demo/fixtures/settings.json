@@ -148,5 +148,22 @@
   "nc_port": 6666,
   "nc_from": "192.168.1.57",
   "nc_match": "Kernel panic,Oops,BUG:,Call Trace",
-  "quick_json": "[{\"t\":\"key\",\"v\":\"f2\"},{\"t\":\"key\",\"v\":\"delete\"},{\"t\":\"combo\",\"v\":\"ctrl_alt_del\"}]"
+  "quick_json": "[{\"t\":\"key\",\"v\":\"f2\"},{\"t\":\"key\",\"v\":\"delete\"},{\"t\":\"combo\",\"v\":\"ctrl_alt_del\"}]",
+  "btn2_gpio": -1,
+  "btn2_press": 0,
+  "btn2_hold": 0,
+  "btn2_runbook": "",
+  "btn2_high": false,
+  "btn3_gpio": -1,
+  "btn3_press": 0,
+  "btn3_hold": 0,
+  "btn3_runbook": "",
+  "btn3_high": false,
+  "btn4_gpio": -1,
+  "btn4_press": 0,
+  "btn4_hold": 0,
+  "btn4_runbook": "",
+  "btn4_high": false,
+  "disp_bright": 100,
+  "disp_dwell": 4
 }
