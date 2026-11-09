@@ -54,7 +54,7 @@ test("every button id the page names is a hideable control", () => {
 test("every action goes somewhere", () => {
   for (const f of TOUR_FEATURES) {
     for (const a of f.actions) {
-      assert.ok(a.section || a.panel || a.select, `${f.title}: ${a.label}`);
+      assert.ok(a.section || a.panel || a.select || a.palette, `${f.title}: ${a.label}`);
     }
   }
 });

@@ -8,6 +8,7 @@
  * Deleting is refused while a recording runs - freeing a large file rewrites
  * the card's allocation table under the file being written.
  */
+import FoldNote from "./FoldNote.vue";
 import { computed, onMounted, ref, watch } from "vue";
 
 import {
@@ -157,25 +158,6 @@ async function remove(path: string) {
       </button>
     </div>
 
-    <div v-if="record && !watchOnly" class="capture-timelapse">
-      <span class="muted">Timelapse</span>
-      <select v-model.number="every" aria-label="One frame">
-        <option v-for="o in EVERY" :key="o.s" :value="o.s">{{ o.label }}</option>
-      </select>
-      <button
-        type="button"
-        class="btn btn-sm"
-        :disabled="tlBusy || record.on || !!record.blocked"
-        :title="
-          record.on
-            ? 'A recording is running'
-            : (record.blocked ?? 'One frame at a time, played back at 25 fps, until you stop it')
-        "
-        @click="timelapse"
-      >
-        Start
-      </button>
-    </div>
 
     <p v-if="record?.dashcamNoMemory" class="setting-note setting-note-blocked">
       The dashcam is on, but this board has too little memory left for it while H.264 runs.
@@ -303,13 +285,13 @@ async function remove(path: string) {
             </span>
           </li>
         </ul>
-        <p class="setting-note">
-          Play streams a video from the card without downloading it. Videos are .ts files
-          (dashcam clips and timelapses are MP4): VLC, mpv and most players open them, and one cut
-          off by a pulled card still plays up to where it stopped. With keystrokes in recordings on
-          (Settings, Video), each also gets a .srt of what was pressed; put it next to the video
-          under the same name and the player shows it.
-        </p>
+        <FoldNote>
+          <template #lead>Play streams a video from the card without downloading it.</template>
+          Videos are .ts files (dashcam clips and timelapses are MP4). VLC, mpv and most players
+          open them, and one cut off by a pulled card still plays up to where it stopped. With
+          keystrokes in recordings on (Settings, Video), each also gets a .srt of what was pressed.
+          Put it next to the video under the same name and the player shows it.
+        </FoldNote>
       </template>
 
       <template v-else>
@@ -364,5 +346,25 @@ async function remove(path: string) {
       </p>
     </template>
     <RecordingPlayer v-if="playing" :file="playing" :start="playFrom" @close="playing = null" />
+
+    <div v-if="record && !watchOnly" class="capture-timelapse capture-timelapse-end">
+      <span class="muted">Timelapse</span>
+      <select v-model.number="every" aria-label="One frame">
+        <option v-for="o in EVERY" :key="o.s" :value="o.s">{{ o.label }}</option>
+      </select>
+      <button
+        type="button"
+        class="btn btn-sm"
+        :disabled="tlBusy || record.on || !!record.blocked"
+        :title="
+          record.on
+            ? 'A recording is running'
+            : (record.blocked ?? 'One frame at a time, played back at 25 fps, until you stop it')
+        "
+        @click="timelapse"
+      >
+        Start
+      </button>
+    </div>
   </section>
 </template>

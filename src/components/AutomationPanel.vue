@@ -9,6 +9,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
+import FoldNote from "./FoldNote.vue";
 import {
   loadRunbooks,
   parseRunbookScript,
@@ -391,12 +392,6 @@ async function sendTest() {
 
 <template>
   <div class="automation">
-    <p class="setting-note">
-      A runbook is a macro that can wait: it sends keys, and it holds until a phrase shows up on
-      the screen. The device runs it, so this tab can close. Waits only see a text screen - a
-      BIOS, a boot menu, a console - never a picture.
-    </p>
-
     <div v-if="status && status.state !== 'idle'" class="runbook-status" :class="`runbook-${status.state}`">
       <div class="runbook-status-head">
         <strong>{{ STATE_WORDS[status.state] }}</strong>
@@ -414,6 +409,11 @@ async function sendTest() {
     </div>
 
     <h3>Runbooks</h3>
+    <FoldNote>
+      <template #lead>A runbook is a macro that can wait for a phrase on the screen.</template>
+      It sends keys and holds until the phrase shows up. The device runs it, so this tab can close.
+      Waits only see a text screen - a BIOS, a boot menu, a console - never a picture.
+    </FoldNote>
     <ul v-if="runbooks.length" class="image-list">
       <li v-for="(r, i) in runbooks" :key="i" class="image-row">
         <span class="image-name mono">{{ r.name }}</span>
@@ -476,11 +476,12 @@ async function sendTest() {
     <hr class="panel-rule" />
 
     <h3>Schedules</h3>
-    <p class="setting-note">
-      Fire an action on a timetable - Wake-on-LAN in the morning, a runbook overnight, a reset on
-      a schedule. The device runs these, so nothing has to be open. They need the clock, which it
-      sets over the network; the time server and the time zone are in Settings, System.
-    </p>
+    <FoldNote>
+      <template #lead>Fire an action on a timetable, with nothing left open.</template>
+      Wake-on-LAN in the morning, a runbook overnight, a reset on a schedule. They need the clock,
+      which the device sets over the network. The time server and the time zone are in Settings,
+      System.
+    </FoldNote>
 
     <label class="switch">
       <input v-model="schedEnabled" type="checkbox" />
@@ -559,14 +560,14 @@ async function sendTest() {
     <hr class="panel-rule" />
 
     <h3>Notifications</h3>
-    <p class="setting-note">
-      Push a message when a watched phrase appears, the screen goes blank or a screen area that
-      asks for it fires - to Telegram (with a
-      screenshot on the MJPEG codec) or a webhook. Set the bot token, chat id or URL under
-      Settings &rarr; Notifications.
+    <FoldNote>
+      <template #lead>A message to Telegram or a webhook when something shows on the screen.</template>
+      A watched phrase, a blank screen, or a screen area that asks for it. Telegram gets a
+      screenshot on the MJPEG codec. Set the bot token, chat id or URL under Settings &rarr;
+      Notifications.
       <a href="https://github.com/espkvm/espkvm/blob/main/docs/NOTIFICATIONS.md" target="_blank"
         rel="noopener">How they work</a>.
-    </p>
+    </FoldNote>
     <label class="switch">
       <input v-model="notifyEnabled" type="checkbox" />
       <span>Send notifications</span>

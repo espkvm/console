@@ -110,7 +110,7 @@ onUnmounted(() => window.clearInterval(timer));
 </script>
 
 <template>
-  <Teleport to="main.stage">
+  <Teleport to="main.stage > .stage-view">
     <section class="lg" aria-label="Device log">
       <div class="lg-head">
         <h3>{{ title }}</h3>

@@ -584,6 +584,16 @@
       "requires": "hid"
     },
     {
+      "key": "quick_json",
+      "section": "macros",
+      "title": "Quick buttons",
+      "help": "Buttons pinned to the console's bar, edited from the Input panel.",
+      "type": "string",
+      "maxLength": 600,
+      "default": "[]",
+      "requires": "hid"
+    },
+    {
       "key": "runbooks_json",
       "section": "runbooks",
       "title": "Runbooks",

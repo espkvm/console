@@ -147,5 +147,6 @@
   "nc_enable": true,
   "nc_port": 6666,
   "nc_from": "192.168.1.57",
-  "nc_match": "Kernel panic,Oops,BUG:,Call Trace"
+  "nc_match": "Kernel panic,Oops,BUG:,Call Trace",
+  "quick_json": "[{\"t\":\"key\",\"v\":\"f2\"},{\"t\":\"key\",\"v\":\"delete\"},{\"t\":\"combo\",\"v\":\"ctrl_alt_del\"}]"
 }

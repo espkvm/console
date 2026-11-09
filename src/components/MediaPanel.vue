@@ -12,6 +12,7 @@
  * The device can also download an image itself, from a URL: netboot.xyz into
  * the rescue slot in one click, or any link onto the card.
  */
+import FoldNote from "./FoldNote.vue";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import {
@@ -329,17 +330,13 @@ async function removeImage(name: string) {
         <input type="checkbox" :checked="exposed" @change="toggleExpose" />
         <span>Expose virtual media to the target</span>
       </label>
-      <p class="setting-note">
-        <template v-if="exposed"
-          >The medium selected below is presented to the target as a USB drive it can boot
-          from.</template
-        >
-        <template v-else
-          >Off &mdash; the target sees no drive. Turn this on to present the selected
-          medium.</template
-        >
+      <FoldNote>
+        <template #lead>
+          <template v-if="exposed">The medium picked below is a USB drive the target can boot from.</template>
+          <template v-else>Off: the target sees no drive.</template>
+        </template>
         Adding or removing the drive re-plugs USB, so switching this takes effect after a restart.
-      </p>
+      </FoldNote>
 
       <p v-if="storage.handedOver" class="setting-note setting-note-blocked">
         The whole microSD card is handed to the target as a read-write drive. While it is,
@@ -348,6 +345,20 @@ async function removeImage(name: string) {
       </p>
 
       <ul class="image-list">
+        <li :class="['image-row', { 'image-active': !storage.active }]">
+          <label class="image-pick">
+            <input
+              type="radio"
+              name="active-image"
+              :checked="!storage.active"
+              @change="selectImage('')"
+            />
+            <span class="image-text">
+              <span class="image-name">No medium</span>
+              <span class="muted image-sub">eject: the target sees an empty drive</span>
+            </span>
+          </label>
+        </li>
         <li
           v-if="storage.rescue?.supported"
           :class="['image-row', { 'image-active': storage.active === RESCUE_MEDIUM }]"
@@ -466,30 +477,23 @@ async function removeImage(name: string) {
         <progress v-if="fetchSt.total > 0" :value="fetchPct" max="100" />
       </div>
 
-      <p v-if="storage.rescue?.supported" class="setting-note">
-        Need a rescue image?
+      <FoldNote v-if="storage.rescue?.supported">
+        <template #lead>
+          Need a rescue image?
+          <button
+            type="button"
+            class="btn-link"
+            :disabled="fetching || uploadingRescue"
+            @click="beginFetch(NETBOOT_XYZ_ISO, 'rescue')"
+          >
+            Download netboot.xyz to the rescue slot.
+          </button>
+        </template>
         <a href="https://netboot.xyz" target="_blank" rel="noreferrer">netboot.xyz</a>
-        fits the flash slot and boots a menu of rescue systems and installers over the network.
-        <button
-          type="button"
-          class="btn-link"
-          :disabled="fetching || uploadingRescue"
-          @click="beginFetch(NETBOOT_XYZ_ISO, 'rescue')"
-        >
-          Download it to the rescue slot
-        </button>
-        - the device fetches it itself.
-      </p>
+        fits the flash slot and boots a menu of rescue systems and installers over the network. The
+        device fetches it itself.
+      </FoldNote>
 
-      <label class="image-pick image-eject">
-        <input
-          type="radio"
-          name="active-image"
-          :checked="!storage.active"
-          @change="selectImage('')"
-        />
-        <span>Eject - offer the target no medium</span>
-      </label>
 
       <template v-if="storage.mounted && !storage.handedOver">
         <p class="setting-note">

@@ -43,6 +43,8 @@ jobs:
         run: |
           mkdir -p _site
           cp dist/index.html _site/index.html
+          # Settings, Notifications shows a sample alert through it.
+          cp demo/sw.js _site/sw.js
           # The tag goes into the artefact, never into the source - see
           # demo/analytics.html for why.
           python3 - <<'PY'

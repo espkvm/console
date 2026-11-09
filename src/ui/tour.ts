@@ -20,6 +20,8 @@ export interface TourAction {
   panel?: TourPanel;
   /** Start selecting text on the screen. */
   select?: boolean;
+  /** Open the command palette. */
+  palette?: boolean;
 }
 
 /** What the page knows about the device, for the On / Off marks. */
@@ -79,6 +81,36 @@ export const TOUR_FEATURES: TourFeature[] = [
     ],
     docs: DOCS + "HOW-IT-WORKS.md#input",
     ui: ["keyboard", "touch", "keylock"],
+  },
+  {
+    icon: "search",
+    title: "Command palette",
+    line: "[[Ctrl+K]] or [[Ctrl+Shift+P]]: type a few letters of what you want - a panel, a key combination, a macro, a setting - and press Enter.",
+    actions: [{ label: "Open", palette: true }],
+    since: "0.79.0",
+  },
+  {
+    icon: "record",
+    title: "Tab icon",
+    line: "The tab's icon shows what the device is doing, so you see it from another tab: grey when the device is unreachable, a ring during an update, a red dot while recording, a power sign when the target is off, a dash with no picture.",
+    actions: [],
+    since: "0.79.0",
+  },
+  {
+    icon: "play",
+    title: "Bar buttons",
+    line: "Pin a key like F2 or Del, a macro or a runbook to the bar under the picture.",
+    caps: ["hid"],
+    actions: [{ label: "Open", panel: "input" }],
+    since: "0.79.0",
+    state: (c) => {
+      try {
+        const n = JSON.parse(String(c.values.quick_json ?? "[]")).length;
+        return n ? `${n} pinned` : undefined;
+      } catch {
+        return undefined;
+      }
+    },
   },
   {
     icon: "disc",

@@ -6,6 +6,7 @@
  * boot, and from then on prints what the target sends. With the terminal
  * focused, keys go to the target as a VT100 sends them; a paste goes as text.
  */
+import Keys from "./Keys.vue";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 
 import { keyBytes, Terminal } from "../input/terminal";
@@ -174,7 +175,7 @@ const status = computed(() => {
 </script>
 
 <template>
-  <Teleport to="main.stage">
+  <Teleport to="main.stage > .stage-view">
     <section class="ser" aria-label="Serial console">
       <div class="ser-head">
         <h3>Serial console</h3>
@@ -213,7 +214,7 @@ const status = computed(() => {
         </div>
       </div>
       <p class="ser-hint">
-        Click the terminal and type; every key goes to the target, Ctrl+C too. Ctrl+Shift+C and Ctrl+Shift+V stay with the browser.
+        Click the terminal and type. Every key goes to the target, <Keys combo="Ctrl+C" /> too. <Keys combo="Ctrl+Shift+C" /> and <Keys combo="Ctrl+Shift+V" /> stay with the browser.
       </p>
     </section>
   </Teleport>

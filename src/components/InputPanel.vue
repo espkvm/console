@@ -8,9 +8,22 @@
  * a KVM can only send key positions, so the text is translated through the
  * layout the target is known to have active.
  */
+import FoldNote from "./FoldNote.vue";
 import { computed, ref } from "vue";
 
-import { macrosForOs, macroLabel, SYSRQ_MOD, SYSRQ_KEY, SYSRQ_LETTERS, type Macro } from "../macros";
+import { macrosForOs, macroLabel, type Macro } from "../macros";
+import { loadRunbooks } from "../runbookScript";
+import {
+  keyProblem,
+  parseQuick,
+  QUICK_MAX,
+  quickLabel,
+  sameQuick,
+  sendBuiltin,
+  serializeQuick,
+  type QuickItem,
+  type QuickKind,
+} from "../state/quick";
 import { charToHid, untypeableChars, DEFAULT_LAYOUT } from "../layouts";
 import {
   runMacroScript,
@@ -51,41 +64,14 @@ const labelFor = (m: Macro) => macroLabel(m, effectiveOs.value);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/* Deliver a magic-SysRq sequence: hold Alt+SysRq, tap each command letter in
-   turn, then let go. Sync (s) and remount-read-only (u) need a moment to finish
-   before the next command, so they get a longer pause; a reboot/power-off (b/o)
-   ends it. */
-async function sendSysrq(letters: string) {
+async function sendMacro(m: Macro) {
+  if (macroBusy.value) return;
   macroBusy.value = true;
   try {
-    props.control.keyboard(SYSRQ_MOD, [SYSRQ_KEY]);
-    await sleep(400);
-    for (const ch of letters.toLowerCase()) {
-      const code = (SYSRQ_LETTERS as Record<string, number>)[ch];
-      if (!code) continue;
-      props.control.keyboard(SYSRQ_MOD, [SYSRQ_KEY, code]);
-      await sleep(300);
-      props.control.keyboard(SYSRQ_MOD, [SYSRQ_KEY]);
-      await sleep(ch === "s" || ch === "u" ? 2500 : 800);
-    }
+    await sendBuiltin(props.control, m, effectiveOs.value);
   } finally {
-    props.control.releaseAll();
     macroBusy.value = false;
   }
-}
-
-function sendMacro(m: Macro) {
-  if (macroBusy.value) return;
-  if (m.destructive) {
-    const detail = m.hint ? `\n\n${m.hint}` : "";
-    if (!confirm(`Send ${labelFor(m)} to the target?${detail}`)) return;
-  }
-  if (m.sysrq) {
-    void sendSysrq(m.sysrq);
-    return;
-  }
-  props.control.keyboard(m.modifier ?? 0, m.key ? [m.key] : []);
-  setTimeout(() => props.control.keyboard(0, []), 40);
 }
 
 /* The manual escape hatch: one message that clears keyboard, both mouse
@@ -250,6 +236,70 @@ async function runMacro(m: UserMacro) {
     runningMacro.value = null;
   }
 }
+
+/* ---- buttons pinned to the bar ------------------------------------------ */
+
+const quick = computed<QuickItem[]>(() => parseQuick(props.values.quick_json));
+const runbookNames = computed(() => loadRunbooks(props.values.runbooks_json).map((r) => r.name));
+const KIND_NAMES: Record<QuickKind, string> = {
+  key: "key",
+  combo: "combination",
+  macro: "macro",
+  runbook: "runbook",
+};
+const addKind = ref<QuickKind>("key");
+const addValue = ref("");
+const savingQuick = ref(false);
+
+/* The choice list for the kinds that pick from something. */
+const addChoices = computed<{ v: string; label: string }[]>(() => {
+  if (addKind.value === "combo") return macros.value.map((m) => ({ v: m.id, label: labelFor(m) }));
+  if (addKind.value === "macro") return userMacros.value.map((m) => ({ v: m.name, label: m.name }));
+  if (addKind.value === "runbook") return runbookNames.value.map((n) => ({ v: n, label: n }));
+  return [];
+});
+function onKindChange() {
+  addValue.value = addChoices.value[0]?.v ?? "";
+}
+const addError = computed(() => {
+  const v = addValue.value.trim();
+  if (!v) return null;
+  if (addKind.value === "key") return keyProblem(v);
+  if (quick.value.some((q) => sameQuick(q, { t: addKind.value, v }))) return "Already on the bar";
+  return null;
+});
+const canAdd = computed(
+  () => !!addValue.value.trim() && !addError.value && quick.value.length < QUICK_MAX && !savingQuick.value,
+);
+
+async function persistQuick(list: QuickItem[]) {
+  savingQuick.value = true;
+  try {
+    emit("values", await saveSettings({ quick_json: serializeQuick(list) }));
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    savingQuick.value = false;
+  }
+}
+async function addQuick() {
+  if (!canAdd.value) return;
+  const v = addKind.value === "key" ? addValue.value.trim().toLowerCase() : addValue.value;
+  await persistQuick([...quick.value, { t: addKind.value, v }]);
+  if (addKind.value === "key") addValue.value = "";
+}
+function removeQuick(i: number) {
+  const list = quick.value.slice();
+  list.splice(i, 1);
+  void persistQuick(list);
+}
+function moveQuick(i: number, by: number) {
+  const j = i + by;
+  if (j < 0 || j >= quick.value.length) return;
+  const list = quick.value.slice();
+  [list[i], list[j]] = [list[j], list[i]];
+  void persistQuick(list);
+}
 </script>
 
 <template>
@@ -272,6 +322,64 @@ async function runMacro(m: UserMacro) {
         {{ labelFor(m) }}
       </button>
     </div>
+
+    <h3>Bar buttons</h3>
+    <p class="setting-note">Pinned to the bar under the picture, in every browser. Up to {{ QUICK_MAX }}.</p>
+    <ul v-if="quick.length" class="image-list">
+      <li v-for="(q, i) in quick" :key="q.t + q.v" class="image-row">
+        <span class="image-name">
+          <span class="mono">{{ quickLabel(q, effectiveOs) }}</span>
+          <span class="quick-kind">{{ KIND_NAMES[q.t] }}</span>
+        </span>
+        <span class="macro-actions">
+          <button
+            type="button"
+            class="btn btn-sm btn-quiet"
+            :disabled="i === 0 || savingQuick"
+            title="Move left"
+            aria-label="Move left"
+            @click="moveQuick(i, -1)"
+          >
+            &larr;
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-quiet"
+            :disabled="i === quick.length - 1 || savingQuick"
+            title="Move right"
+            aria-label="Move right"
+            @click="moveQuick(i, 1)"
+          >
+            &rarr;
+          </button>
+          <button type="button" class="btn btn-sm btn-quiet" :disabled="savingQuick" @click="removeQuick(i)">
+            Remove
+          </button>
+        </span>
+      </li>
+    </ul>
+    <div v-if="quick.length < QUICK_MAX" class="quick-add">
+      <select v-model="addKind" aria-label="What to pin" @change="onKindChange">
+        <option value="key">Key</option>
+        <option value="combo">Combination</option>
+        <option v-if="userMacros.length" value="macro">Macro</option>
+        <option v-if="runbookNames.length" value="runbook">Runbook</option>
+      </select>
+      <input
+        v-if="addKind === 'key'"
+        v-model="addValue"
+        type="text"
+        class="mono quick-value"
+        placeholder="f2, delete, ctrl+alt+f2"
+        aria-label="Key"
+        @keydown.enter="addQuick"
+      />
+      <select v-else v-model="addValue" class="quick-value" aria-label="Which one">
+        <option v-for="c in addChoices" :key="c.v" :value="c.v">{{ c.label }}</option>
+      </select>
+      <button type="button" class="btn btn-sm" :disabled="!canAdd" @click="addQuick">Add</button>
+    </div>
+    <p v-if="addError" class="setting-note setting-note-blocked">{{ addError }}</p>
 
     <h3>Macros</h3>
     <ul v-if="userMacros.length" class="image-list">
@@ -321,10 +429,11 @@ async function runMacro(m: UserMacro) {
     <button v-else type="button" class="btn btn-sm" @click="newMacro">New macro...</button>
 
     <h3>Paste text</h3>
-    <p class="setting-note">
-      Sent as key positions using the <strong>{{ layout }}</strong> layout, which must match
-      what the target has active. Change it under Settings -> Input.
-    </p>
+    <FoldNote>
+      <template #lead>Typed with the <strong>{{ layout }}</strong> layout.</template>
+      The text goes as key positions, so the layout must match what the target has active. Change
+      it under Settings, Input.
+    </FoldNote>
     <div v-if="pasting" class="type-progress">
       <progress :max="typeTotal" :value="typed"></progress>
       <small class="mono">{{ typed }} / {{ typeTotal }}</small>
@@ -344,11 +453,11 @@ async function runMacro(m: UserMacro) {
     </template>
 
     <h3>Stuck input</h3>
-    <p class="setting-note">
-      Lift every key and mouse button the target thinks is held. Use it if a
-      click or a key ever gets stuck down - it is the software version of
-      unplugging the cable.
-    </p>
+    <FoldNote>
+      <template #lead>Lift every key and mouse button the target thinks is held.</template>
+      For a click or a key that got stuck down. It is the software version of unplugging the
+      cable.
+    </FoldNote>
     <button type="button" class="btn btn-sm" @click="releaseAll">Release all inputs</button>
   </div>
 </template>
@@ -369,5 +478,26 @@ async function runMacro(m: UserMacro) {
 .type-progress progress {
   flex: 1;
   min-width: 0;
+}
+.quick-add {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.quick-add > select:first-child {
+  flex: none;
+  width: auto;
+}
+
+.quick-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.quick-kind {
+  margin-left: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-xs, 12px);
 }
 </style>

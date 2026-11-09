@@ -9,6 +9,7 @@
  * name and power state follow the source. With the window focused the arrow
  * keys, Enter and Escape/Backspace drive the remote too.
  */
+import Keys from "./Keys.vue";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 
 import {
@@ -226,7 +227,7 @@ function onKeydown(e: KeyboardEvent) {
         </button>
       </div>
 
-      <p class="rc-hint">Arrows, Enter, Esc and digits work here too.</p>
+      <p class="rc-hint">Arrows, <Keys combo="Enter" />, <Keys combo="Esc" /> and digits work here too.</p>
     </template>
     </section>
   </Teleport>

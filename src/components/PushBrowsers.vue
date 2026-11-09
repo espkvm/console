@@ -8,7 +8,14 @@
  */
 import { computed, onMounted, ref } from "vue";
 
-import { getPush, pushRemove, pushSubscribe, type PushBrowser } from "../state/device";
+import { demoPushOn, demoPushStart, demoPushStop } from "../demo/push";
+
+import {
+  getPush,
+  pushRemove,
+  pushSubscribe,
+  type PushBrowser,
+} from "../state/device";
 import { toast } from "../state/toasts";
 
 const ID_KEY = "espkvm.push.id";
@@ -28,8 +35,13 @@ const standalone =
 /* Why this browser cannot, or "" when it can. */
 const why = computed(() => {
   if (!window.isSecureContext) return "Needs the console over HTTPS.";
-  if (isIos && !standalone) return "On an iPhone or iPad: Share, Add to Home Screen, then open the console from there.";
-  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window))
+  if (isIos && !standalone)
+    return "On an iPhone or iPad: Share, Add to Home Screen, then open the console from there.";
+  if (
+    !("serviceWorker" in navigator) ||
+    !("PushManager" in window) ||
+    !("Notification" in window)
+  )
     return "This browser has no Web Push.";
   return "";
 });
@@ -79,7 +91,10 @@ function browserName(): string {
 }
 
 function keyBytes(b64: string): Uint8Array<ArrayBuffer> {
-  const s = atob(b64.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (b64.length % 4)) % 4));
+  const s = atob(
+    b64.replace(/-/g, "+").replace(/_/g, "/") +
+      "=".repeat((4 - (b64.length % 4)) % 4),
+  );
   const out = new Uint8Array(new ArrayBuffer(s.length));
   for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
   return out;
@@ -101,6 +116,7 @@ async function load() {
       mine.value = (await reg?.pushManager.getSubscription()) ?? null;
     }
     myId.value = mine.value ? readId() : null;
+    if (DEMO) demoShowMine();
   } catch {
     /* an older firmware: the block stays hidden */
   } finally {
@@ -109,16 +125,48 @@ async function load() {
 }
 onMounted(() => void load());
 
+/* The demo has nothing to push from: src/demo/push.ts shows a sample alert instead. */
+const DEMO = import.meta.env.MODE === "demo";
+const DEMO_ID = 999;
+async function demoTurnOn() {
+  await demoPushStart();
+  demoShowMine();
+  toast.info(
+    "On. Switch to another tab: in 3 seconds an alert comes, the way the device sends one.",
+  );
+}
+function demoShowMine() {
+  if (!demoPushOn.value || browsers.value.some((b) => b.id === DEMO_ID)) return;
+  browsers.value = [
+    ...browsers.value,
+    {
+      id: DEMO_ID,
+      name: browserName(),
+      host: "",
+      added: Math.floor(Date.now() / 1000),
+    },
+  ];
+  myId.value = DEMO_ID;
+}
+
 async function turnOn() {
   busy.value = true;
   try {
     if ((await Notification.requestPermission()) !== "granted") {
-      toast.error("The browser said no. Allow notifications for this site in its settings.");
+      toast.error(
+        "The browser said no. Allow notifications for this site in its settings.",
+      );
+      return;
+    }
+    if (DEMO) {
+      await demoTurnOn();
       return;
     }
     const reg = await registration();
     if (!reg) {
-      toast.error("No service worker here. Is the device's certificate trusted?");
+      toast.error(
+        "No service worker here. Is the device's certificate trusted?",
+      );
       return;
     }
     let sub = await reg.pushManager.getSubscription();
@@ -129,19 +177,29 @@ async function turnOn() {
       await sub.unsubscribe();
       sub = null;
     }
-    sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: want });
+    sub ??= await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: want,
+    });
     const id = await pushSubscribe(sub.toJSON(), browserName());
     writeId(id);
-    toast.info("This browser gets the notifications now. Send a test to check.");
+    toast.info(
+      "This browser gets the notifications now. Send a test to check.",
+    );
   } catch (e) {
     toast.error(e instanceof Error ? e.message : String(e));
   } finally {
     busy.value = false;
-    await load();
+    if (!DEMO) await load();
   }
 }
 
 async function remove(b: PushBrowser) {
+  if (DEMO) {
+    browsers.value = browsers.value.filter((x) => x.id !== b.id);
+    if (b.id === DEMO_ID) demoPushStop();
+    return;
+  }
   busy.value = true;
   try {
     await pushRemove({ id: b.id });
@@ -157,7 +215,11 @@ async function remove(b: PushBrowser) {
   }
 }
 
-const subscribedHere = computed(() => mine.value !== null && browsers.value.some((b) => b.id === myId.value));
+const subscribedHere = computed(
+  () =>
+    ((DEMO && demoPushOn.value) || mine.value !== null) &&
+    browsers.value.some((b) => b.id === myId.value),
+);
 
 function when(t: number): string {
   return t ? new Date(t * 1000).toLocaleDateString() : "";
@@ -170,12 +232,17 @@ function when(t: number): string {
       <label class="setting-title">Notifications in this browser</label>
     </div>
     <p class="setting-note">
-      Web Push: alerts come to this browser like any app's, also with the console closed. No account or bot
-      needed.
+      Web Push: alerts come to this browser like any app's, also with the
+      console closed. No account or bot needed.
     </p>
     <p v-if="why" class="setting-note">{{ why }}</p>
     <p v-else-if="!subscribedHere" class="push-actions">
-      <button type="button" class="btn btn-sm btn-primary" :disabled="busy" @click="turnOn">
+      <button
+        type="button"
+        class="btn btn-sm btn-primary"
+        :disabled="busy"
+        @click="turnOn"
+      >
         Send them to this browser
       </button>
     </p>
@@ -189,7 +256,14 @@ function when(t: number): string {
           </td>
           <td class="muted">{{ when(b.added) }}</td>
           <td class="num">
-            <button type="button" class="btn btn-sm" :disabled="busy" @click="remove(b)">Remove</button>
+            <button
+              type="button"
+              class="btn btn-sm"
+              :disabled="busy"
+              @click="remove(b)"
+            >
+              Remove
+            </button>
           </td>
         </tr>
       </tbody>

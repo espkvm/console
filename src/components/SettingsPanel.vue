@@ -96,6 +96,8 @@ const props = defineProps<{
   startSection?: string;
   /** A group in it to scroll to and mark for a moment. */
   startGroup?: string;
+  /** One setting to scroll to and mark (from the command palette). */
+  startSetting?: string;
 }>();
 
 /* The "Find this screen" button under the several-screens settings. */
@@ -400,17 +402,38 @@ async function showGroup(name: string) {
   void head.offsetWidth; /* restart the animation */
   head.classList.add("settings-group-flash");
 }
+/* One setting's row, the same way. A row that is not drawn (its group folded
+   because the board lacks it) falls back to the group's heading. */
+async function showSetting(key: string) {
+  if (!key) return;
+  await nextTick();
+  const row = root.value?.querySelector<HTMLElement>(`.setting[data-key="${CSS.escape(key)}"]`);
+  if (!row) {
+    void showGroup(props.schema.find((s) => s.key === key)?.group ?? "");
+    return;
+  }
+  row.scrollIntoView({ block: "center", behavior: "smooth" });
+  row.classList.remove("settings-group-flash");
+  void row.offsetWidth; /* restart the animation */
+  row.classList.add("settings-group-flash");
+  /* Ready to type into: the palette was opened from the keyboard. */
+  row.querySelector<HTMLElement>("input, select, textarea, [role=switch]")?.focus({ preventScroll: true });
+}
 watch(
-  () => [props.startSection, props.startGroup] as const,
-  ([id, group]) => {
+  () => [props.startSection, props.startGroup, props.startSetting] as const,
+  ([id, group, key]) => {
     if (id) {
       active.value = id;
       query.value = "";
       void showGroup(group ?? "");
+      void showSetting(key ?? "");
     }
   },
 );
-onMounted(() => void showGroup(props.startGroup ?? ""));
+onMounted(() => {
+  void showGroup(props.startGroup ?? "");
+  void showSetting(props.startSetting ?? "");
+});
 /* The first tab until one is picked - by its id: the list holds whole sections,
    and handing one over as the id matched no setting and drew an empty pane. */
 const currentSection = computed(() => active.value || sections.value[0]?.id || "video");
@@ -457,7 +480,7 @@ function onSearchKey(e: KeyboardEvent) {
 function onWindowKey(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null;
   const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
-  const ctrlF = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f";
+  const ctrlF = (e.ctrlKey || e.metaKey) && e.code === "KeyF";
   if (ctrlF || (e.key === "/" && !typing)) {
     e.preventDefault();
     void openSearch();
@@ -1139,6 +1162,7 @@ async function doRevertCert() {
             <div
               v-for="s in block.blocked && !openedBlocked.has(block.name) ? [] : block.rows"
               :key="s.key"
+              :data-key="s.key"
               :class="[
                 'setting',
                 {

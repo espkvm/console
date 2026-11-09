@@ -1486,6 +1486,13 @@
   gap: var(--space-2);
 }
 
+/* Down at the end: it is the rarely used one. */
+.capture-timelapse-end {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
 /* The recording player: over the whole page, the video as large as fits. */
 .player-veil {
   position: fixed;
@@ -2287,4 +2294,26 @@
 .key-echo-key:last-child {
   border-color: var(--accent);
   color: var(--text);
+}
+
+/* A key cap, everywhere a key is named: <Keys combo="Ctrl+K"/> or [[Ctrl+K]] in KeyText. */
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg-raised);
+  color: var(--text);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85em;
+  line-height: 1.45;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.keys {
+  white-space: nowrap;
+  color: var(--text-muted);
 }

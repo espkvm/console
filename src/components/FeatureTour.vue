@@ -7,6 +7,7 @@
  * into a small button, so what it opened can be seen, and it opens again when
  * that is closed.
  */
+import KeyText from "./KeyText.vue";
 import { computed } from "vue";
 
 import Icon from "./Icon.vue";
@@ -37,6 +38,7 @@ const emit = defineEmits<{
   settings: [section: string, group: string];
   panel: [id: TourPanel];
   select: [];
+  palette: [];
   unfold: [];
   done: [];
 }>();
@@ -70,6 +72,7 @@ const shown = computed(() => {
 function run(a: TourAction) {
   if (a.panel) emit("panel", a.panel);
   else if (a.select) emit("select");
+  else if (a.palette) emit("palette");
   else if (a.section) emit("settings", a.section, a.group ?? "");
 }
 </script>
@@ -98,7 +101,7 @@ function run(a: TourAction) {
             <span v-if="f.fresh" class="ft-badge ft-new">New</span>
             <span v-if="f.state" :class="['ft-badge', { 'ft-off': f.off }]">{{ f.state }}</span>
           </div>
-          <small>{{ f.line }}</small>
+          <small><KeyText :text="f.line" /></small>
           <small v-if="f.hidden.length" class="ft-hidden">
             Hidden in this console: {{ f.hidden.join(", ") }}.
             <button type="button" class="ft-link" @click="emit('settings', 'ui', 'Buttons')">Show them</button>

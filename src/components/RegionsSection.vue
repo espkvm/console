@@ -4,6 +4,7 @@
  * and the form for one. The rectangle is drawn on the picture itself - the
  * panel steps aside for that (App.vue), and the draft waits here.
  */
+import FoldNote from "./FoldNote.vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import {
@@ -133,12 +134,12 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 <template>
   <h3>Screen areas</h3>
-  <p class="setting-note">
-    Parts of the screen the device watches by itself: for a change, for a picture that stops
-    moving, for one it has seen before, or for a colour. An area can send a notification, keep a
-    dashcam clip, show in Home Assistant, and a runbook can wait for it with
-    <code>wait area Name</code>.
-  </p>
+  <FoldNote>
+    <template #lead>Parts of the screen the device watches by itself.</template>
+    It looks for a change, for a picture that stops moving, for one it has seen before, or for a
+    colour. An area can send a notification, keep a dashcam clip, show in Home Assistant, and a
+    runbook can wait for it with <code>wait area Name</code>.
+  </FoldNote>
 
   <ul v-if="regions.length" class="image-list">
     <li v-for="(r, i) in regions" :key="r.id ?? i" class="image-row rg-row">

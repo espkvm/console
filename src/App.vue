@@ -4,10 +4,19 @@
  * doing, a rail of panels that slide over the picture rather than displacing
  * it, and the target's screen filling everything else.
  */
-import { setUiHidden } from "./ui/features";
+import Keys from "./components/Keys.vue";
+import { setUiHidden, uiShown } from "./ui/features";
+import ActionMenu from "./components/ActionMenu.vue";
+import { parseQuick, quickLabel, runQuick, sendBuiltin, type QuickItem } from "./state/quick";
+import { loadMacros, runMacroScript } from "./macroScript";
+import { macrosForOs, macroLabel } from "./macros";
+import { loadRunbooks } from "./runbookScript";
+import type { Command } from "./ui/commands";
+import CommandPalette from "./components/CommandPalette.vue";
 import { useImmersive } from "./ui/immersive";
 import { setHaptic } from "./ui/haptic";
 import { pageTitle } from "./ui/title";
+import { createFavicon, faviconState } from "./ui/favicon";
 import { keyEcho, keyEchoOn } from "./input/keyEcho";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 
@@ -66,8 +75,11 @@ import {
   type VideoStatus,
   type ScreenText,
   enumName,
+  powerClick,
+  runRunbook,
   enumIndex,
   settingBlockedReason,
+  settingShown,
   loadCapabilities,
   loadSchema,
   loadSystemInfo,
@@ -721,15 +733,18 @@ watch(selectingText, (on) => {
 /* A section, and a group in it, to open Settings at, from the overview. */
 const settingsSection = ref("");
 const settingsGroup = ref("");
-function openSettingsAt(section: string, group: string) {
+const settingsKey = ref("");
+function openSettingsAt(section: string, group: string, key = "") {
   settingsSection.value = section;
   settingsGroup.value = group;
+  settingsKey.value = key;
   settingsOpen.value = true;
 }
 watch(settingsOpen, (open) => {
   if (!open) {
     settingsSection.value = "";
     settingsGroup.value = "";
+    settingsKey.value = "";
   }
 });
 const suggestLater = ref("");
@@ -827,7 +842,8 @@ const netlogOpen = ref(false);
 const netlogReady = computed(() => Boolean(caps.value.netlog?.available));
 /* The gamepad drawn over the picture: the engage prompt would sit on its
    controls, and a press on the pad takes control anyway. */
-const padLook = ref<"window" | "overlay">("window");
+/* GamepadPanel says which look it opened with; overlay is its default. */
+const padLook = ref<"window" | "overlay">("overlay");
 const padOverlay = computed(() => gamepadOpen.value && !!system.value?.usbPad && padLook.value === "overlay");
 
 /* Touch trackpad speed, driven by the same "Relative sensitivity" slider as the
@@ -850,6 +866,61 @@ watchEffect(() =>
   ),
 );
 const layout = computed(() => enumName(schema.value, values.value, "kbd_layout") ?? DEFAULT_LAYOUT);
+
+/* The medium the target sees now, for the dot on the disc button. */
+const mediumIn = computed(() =>
+  values.value.msc_enable && storage.value?.active ? storage.value.active : "",
+);
+
+/* The target is off by its own power LED and sends no picture: offer the
+   power button right on the black screen. */
+const targetOff = computed(
+  () =>
+    !signedInToWatch.value &&
+    !!system.value?.atx?.enabled &&
+    !!system.value.atx.known &&
+    !system.value.atx.on &&
+    status.value?.signal === false,
+);
+const powering = ref(false);
+async function powerOnFromScreen() {
+  powering.value = true;
+  try {
+    await powerClick();
+    toast.info("Power button pressed");
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    window.setTimeout(() => (powering.value = false), 5000);
+  }
+}
+
+/* Buttons pinned to the bar from the Input panel. */
+const quickItems = computed(() => (signedInToWatch.value ? [] : parseQuick(values.value.quick_json)));
+const quickOs = computed(() => {
+  const choice = enumName(schema.value, values.value, "target_os") ?? "auto";
+  return choice === "auto" ? (usbProbe.value?.os ?? "unknown") : choice;
+});
+const quickBusy = ref<string | null>(null);
+async function pressQuick(q: QuickItem) {
+  if (quickBusy.value) return;
+  quickBusy.value = q.t + q.v;
+  try {
+    await runQuick(q, {
+      control: input.control,
+      layout: layout.value,
+      typeDelay: Math.max(1, Number(values.value.type_delay) || 8),
+      os: quickOs.value,
+      macros: loadMacros(values.value.macros_json),
+      runRunbook,
+    });
+    if (q.t === "runbook") toast.info(`Runbook ${q.v} started`);
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    quickBusy.value = null;
+  }
+}
 
 const input = useInput({
   engaged,
@@ -948,6 +1019,14 @@ const NO_CONTROL_TEXT = computed(() =>
 /* A real controller as a mouse; it gives way to the gamepad window, which
    sends it to the target as a pad. */
 const padToPad = computed(() => gamepadOpen.value && usbPad.value);
+/* Whether the rail has any floating window to offer, for its separator. */
+const railWindows = computed(
+  () =>
+    serialReady.value ||
+    agentReady.value ||
+    netlogReady.value ||
+    (!signedInToWatch.value && (Boolean(cecSource.value) || usbPad.value)),
+);
 const padMouse = usePadMouse({
   control: input.control,
   active: computed(() => padMouseOn.value && !padToPad.value && !heldByOther.value),
@@ -1235,6 +1314,23 @@ async function refreshStatus() {
   }
 }
 
+/* The tab's icon follows the device too, for a console left in the background. */
+const favicon = createFavicon();
+watchEffect(() => {
+  const u = input.updateState.value;
+  const updating = restartWatch.active || (!!u && u.phase !== "failed");
+  favicon.set(
+    faviconState({
+      online: online.value,
+      signal: status.value?.signal,
+      targetOff: targetOff.value,
+      recording: !!record.value?.on,
+      update: updating ? (u && u.phase !== "restarting" ? (u.phase === "verifying" ? 100 : u.percent) : null) : undefined,
+    }),
+  );
+});
+onUnmounted(() => favicon.stop());
+
 /*
  * The device is updating itself, and this console did not ask for it. The one
  * that did has its own splash; this is for everybody else, who would otherwise
@@ -1272,6 +1368,19 @@ function span(seconds: number): string {
 
 /* What the dashcam button says: what a press will do, what it is doing, or that
    the file is being made - so a first press is not a mystery. */
+/* The bar's Capture button: whatever of screenshot, clip and record this
+   firmware has and Settings -> UI has not hidden. */
+const captureItems = computed(() => {
+  if (signedInToWatch.value) return { shot: false, clip: false, rec: false };
+  return {
+    shot: Boolean(status.value && status.value.screenshotBlocked !== undefined) && uiShown("screenshot"),
+    clip: Boolean(record.value && clipState.value) && uiShown("clip"),
+    rec: Boolean(record.value) && uiShown("record"),
+  };
+});
+const captureAny = computed(() => captureItems.value.shot || captureItems.value.clip || captureItems.value.rec);
+const textAny = computed(() => uiShown("select") || uiShown("copy"));
+
 const clipState = computed(() => {
   const r = record.value;
   if (!r?.dashcam) return null;
@@ -1939,6 +2048,7 @@ async function startConsole() {
   loadProfiles().catch(() => {});
 
   window.addEventListener("keydown", onGlobalKey);
+  window.addEventListener("keydown", onPaletteKey, true);
   document.addEventListener("fullscreenchange", onFullscreenChange);
 }
 
@@ -2029,6 +2139,7 @@ onUnmounted(() => {
   clearInterval(demoAskId);
   clearTimeout(engageNudgeId);
   window.removeEventListener("keydown", onGlobalKey);
+  window.removeEventListener("keydown", onPaletteKey, true);
   document.removeEventListener("fullscreenchange", onFullscreenChange);
   window.removeEventListener("beforeunload", confirmClose);
   if (keyLockOn.value) {
@@ -2037,8 +2148,25 @@ onUnmounted(() => {
   }
 });
 
+/* The palette: Ctrl+Shift+P, and Ctrl+K for Firefox, which keeps Ctrl+Shift+P
+   for a private window. Cmd on a Mac. Caught before the page's own handlers,
+   so it works from a text field or the serial console too - except Ctrl+K in
+   a terminal, where it is the target's (kill to the end of the line). */
+function onPaletteKey(e: KeyboardEvent) {
+  if (engaged.value || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+  /* By the key's place, not its letter: on a Russian layout e.key is "л". */
+  const k = e.code;
+  const terminal = (e.target as HTMLElement | null)?.closest?.(".ser-term");
+  if ((e.shiftKey && k === "KeyP") || (!e.shiftKey && k === "KeyK" && !terminal)) {
+    e.preventDefault();
+    e.stopPropagation();
+    paletteOpen.value = !paletteOpen.value;
+  }
+}
+
 function onGlobalKey(e: KeyboardEvent) {
   if (engaged.value) return;
+  if (paletteOpen.value) return;
   // Don't hijack the key while the user is typing in a field (e.g. the login
   // password) or when a modifier is held - Cmd/Ctrl+F belongs to the browser.
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -2076,6 +2204,111 @@ function onGlobalKey(e: KeyboardEvent) {
 
 /* The list of shortcuts ("?"). */
 const shortcutsOpen = ref(false);
+
+/* The command palette (Ctrl+Shift+P / Ctrl+K): the same actions as the
+   buttons, panels and Input, by name. Only what this device and this sign-in
+   can do is in the list. */
+const paletteOpen = ref(false);
+const paletteCommands = computed<Command[]>(() => {
+  const out: Command[] = [];
+  const add = (c: Command) => out.push(c);
+  const watchOnly = signedInToWatch.value;
+  const ctl = !watchOnly;
+  const typeDelay = Math.max(1, Number(values.value.type_delay) || 8);
+  const tryRun = (what: () => Promise<unknown>) => () =>
+    what().catch((err) => toast.error(err instanceof Error ? err.message : String(err)));
+
+  /* Panels and windows */
+  if (ctl) add({ id: "panel:input", title: "Input", group: "Panels", hint: "I", keywords: "keys combinations macros paste", run: () => togglePanel("input") });
+  if (ctl && caps.value.msc?.available)
+    add({ id: "panel:media", title: "Virtual media", group: "Panels", hint: "M", keywords: "iso image usb drive disc boot", run: () => togglePanel("media") });
+  if (ctl && caps.value.runbooks?.available)
+    add({ id: "panel:automation", title: "Automation", group: "Panels", hint: "A", keywords: "runbooks schedules notifications areas", run: () => togglePanel("automation") });
+  if (record.value) add({ id: "panel:captures", title: "Recordings and screenshots", group: "Panels", hint: "R", run: () => togglePanel("captures") });
+  if (serialReady.value) add({ id: "win:serial", title: serialOpen.value ? "Hide the serial console" : "Serial console", group: "Windows", keywords: "uart terminal", run: () => (serialOpen.value = !serialOpen.value) });
+  if (agentReady.value) add({ id: "win:agent", title: agentOpen.value ? "Hide the agent" : "Agent", group: "Windows", run: () => (agentOpen.value = !agentOpen.value) });
+  if (netlogReady.value) add({ id: "win:netlog", title: netlogOpen.value ? "Hide the target log" : "Target log", group: "Windows", keywords: "netconsole kernel", run: () => (netlogOpen.value = !netlogOpen.value) });
+  if (ctl && cecSource.value) add({ id: "win:cec", title: remoteOpen.value ? "Hide the TV remote" : "TV remote", group: "Windows", keywords: "cec hdmi", run: () => (remoteOpen.value = !remoteOpen.value) });
+  if (ctl && usbPad.value) add({ id: "win:pad", title: gamepadOpen.value ? "Hide the gamepad" : "Gamepad", group: "Windows", keywords: "controller xbox switch", run: () => (gamepadOpen.value = !gamepadOpen.value) });
+
+  /* Capture and text */
+  const cap = captureItems.value;
+  if (cap.shot) add({ id: "cap:shot", title: "Screenshot", group: "Capture", keywords: "photo picture save", run: () => screenshot() });
+  if (cap.clip && clipState.value) add({ id: "cap:clip", title: "Save clip", group: "Capture", keywords: "dashcam", run: () => clip() });
+  if (cap.rec && record.value) add({ id: "cap:rec", title: record.value.on ? "Stop recording" : "Start recording", group: "Capture", keywords: "video record", run: () => toggleRecording() });
+  if (uiShown("select")) add({ id: "text:select", title: selectingText.value ? "Stop selecting text" : "Select text on the screen", group: "Screen text", run: () => toggleSelectText() });
+  if (uiShown("copy")) add({ id: "text:copy", title: "Copy the screen as text", group: "Screen text", keywords: "clipboard ocr", run: () => copyScreenText() });
+
+  /* Keys, macros, runbooks */
+  if (ctl) {
+    const os = quickOs.value;
+    for (const m of macrosForOs(os)) {
+      const label = macroLabel(m, os);
+      const title = m.id.startsWith("tty_") && !label.startsWith("TTY") ? `TTY ${label}` : label;
+      add({ id: `combo:${m.id}`, title: `Send ${title}`, group: "Keys", keywords: m.hint, run: tryRun(() => sendBuiltin(input.control, m, os)) });
+    }
+    for (const m of loadMacros(values.value.macros_json))
+      add({ id: `macro:${m.name}`, title: `Macro: ${m.name}`, group: "Keys", run: tryRun(() => runMacroScript(m.script, input.control, layout.value, typeDelay)) });
+    if (caps.value.runbooks?.available)
+      for (const r of loadRunbooks(values.value.runbooks_json))
+        add({
+          id: `runbook:${r.name}`,
+          title: `Run runbook: ${r.name}`,
+          group: "Automation",
+          run: tryRun(async () => {
+            await runRunbook(r.name);
+            toast.info(`Runbook ${r.name} started`);
+          }),
+        });
+    if (values.value.atx_enable)
+      add({
+        id: "power:click",
+        title: "Press the power button",
+        group: "Power",
+        keywords: "atx turn on off",
+        run: tryRun(async () => {
+          if (!confirm("Press the target's power button?")) return;
+          await powerClick();
+          toast.info("Power button pressed");
+        }),
+      });
+  }
+
+  /* View */
+  add({ id: "view:full", title: "Full screen", group: "View", hint: "F", run: () => toggleFullscreen() });
+  if (pipSupported) add({ id: "view:pip", title: "Picture in a small window", group: "View", hint: "P", keywords: "pip float", run: () => openPip() });
+  add({ id: "view:fit", title: "Scale: fit", group: "View", run: () => (fit.value = "fit") });
+  add({ id: "view:stretch", title: "Scale: stretch", group: "View", run: () => (fit.value = "stretch") });
+  add({ id: "view:actual", title: "Scale: 1:1", group: "View", keywords: "actual size pixels", run: () => (fit.value = "actual") });
+  if (!updateHoldsStream.value)
+    add({ id: "view:pause", title: paused.value ? "Resume the video" : "Pause the video", group: "View", keywords: "stream bandwidth", run: () => (paused.value = !paused.value) });
+  if (ctl) add({ id: "view:osk", title: oskOpen.value ? "Hide the on-screen keyboard" : "On-screen keyboard", group: "View", run: () => (oskOpen.value = !oskOpen.value) });
+  add({ id: "view:touch", title: touchMode.value ? "Touch mode off" : "Touch mode on", group: "View", run: () => (touchMode.value = !touchMode.value) });
+  if (keyLockSupported && ctl)
+    add({ id: "view:keylock", title: keyLockWanted.value ? "All keys off" : "All keys on", group: "View", keywords: "keyboard lock alt tab win", run: () => (keyLockWanted.value = !keyLockWanted.value) });
+  add({ id: "view:theme", title: theme.value === "dark" ? "Light theme" : "Dark theme", group: "View", run: () => toggleTheme() });
+
+  /* Settings */
+  add({ id: "settings", title: "Settings", group: "Settings", run: () => (settingsOpen.value = true) });
+  for (const sec of sections.value)
+    add({ id: `settings:${sec.id}`, title: `Settings: ${sec.title}`, group: "Settings", keywords: sec.blurb, run: () => openSettingsAt(sec.id, "") });
+  /* Each setting by its name, only once something is typed: a hundred of them
+     would bury the rest of the list. Not one this board lacks or one hidden
+     because the setting it depends on is off. */
+  const secTitle = new Map(sections.value.map((s) => [s.id, s.title]));
+  for (const s of schema.value) {
+    if (!secTitle.has(s.section) || settingBlockedReason(s, caps.value) || !settingShown(schema.value, values.value, s)) continue;
+    const firstSentence = (s.help ?? "").split(/(?<=\.)\s/)[0];
+    add({ id: `setting:${s.key}`, title: s.title, group: `${secTitle.get(s.section)} setting`, keywords: `setting ${s.key} ${firstSentence}`, searchOnly: true, run: () => openSettingsAt(s.section, "", s.key) });
+  }
+
+  /* Help and the rest */
+  add({ id: "help:keys", title: "Keyboard shortcuts", group: "Help", hint: "?", run: () => (shortcutsOpen.value = true) });
+  add({ id: "help:tour", title: "What this device can do", group: "Help", keywords: "tour features overview", run: () => openTour() });
+  add({ id: "console:reload", title: "Reload the console", group: "Console", run: () => reload() });
+  add({ id: "console:signout", title: "Sign out", group: "Console", keywords: "log out logout", run: () => signOutFromRail() });
+  return out;
+});
 
 function reload() {
   location.reload();
@@ -2505,6 +2738,15 @@ const LED_BITS: Array<[number, string]> = [
 
       <button
         type="button"
+        class="btn btn-sm btn-icon wide-only"
+        aria-label="Commands"
+        title="Commands (Ctrl+K or Ctrl+Shift+P)"
+        @click="paletteOpen = true"
+      >
+        <Icon name="search" :size="15" />
+      </button>
+      <button
+        type="button"
         class="btn btn-sm btn-icon"
         :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
         @click="toggleTheme"
@@ -2528,10 +2770,10 @@ const LED_BITS: Array<[number, string]> = [
         <button
           v-if="!signedInToWatch"
           type="button"
-          :class="['rail-btn', { 'rail-btn-active': panel === 'media', asking: askingMedia }]"
+          :class="['rail-btn', { 'rail-btn-active': panel === 'media', asking: askingMedia, 'rail-btn-dot': mediumIn }]"
           aria-label="Virtual media"
           :disabled="!caps.msc?.available"
-          :title="caps.msc?.reason ?? 'Virtual media'"
+          :title="caps.msc?.reason ?? (mediumIn ? `Virtual media: ${mediumIn === '@rescue' ? 'the rescue image' : mediumIn === '@wholesd' ? 'the whole microSD card' : mediumIn} is in` : 'Virtual media')"
           @click="togglePanel('media')"
         >
           <Icon name="disc" :size="18" />
@@ -2558,6 +2800,70 @@ const LED_BITS: Array<[number, string]> = [
         >
           <Icon name="film" :size="18" />
         </button>
+        <!-- The windows that float over the picture, each only while it has
+             something to show. On a phone they are in the bar's More menu. -->
+        <template v-if="railWindows">
+          <div class="rail-sep rail-win" />
+          <button
+            v-if="serialReady"
+            type="button"
+            :class="['rail-btn', 'rail-win', { 'rail-btn-active': serialOpen }]"
+            data-ui="serial"
+            aria-label="Serial console"
+            :title="serialOpen ? 'Hide the serial console' : 'The target\'s serial console'"
+            @click="serialOpen = !serialOpen"
+          >
+            <Icon name="terminal" :size="18" />
+          </button>
+          <button
+            v-if="agentReady"
+            type="button"
+            :class="[
+              'rail-btn',
+              'rail-win',
+              { 'rail-btn-active': agentOpen, 'rail-btn-idle': !system?.agent?.connected },
+            ]"
+            data-ui="agent"
+            aria-label="Agent"
+            :title="agentOpen ? 'Hide the agent' : system?.agent?.connected ? 'The agent on the target' : 'No agent on the target yet'"
+            @click="agentOpen = !agentOpen"
+          >
+            <Icon name="agent" :size="18" />
+          </button>
+          <button
+            v-if="netlogReady"
+            type="button"
+            :class="['rail-btn', 'rail-win', { 'rail-btn-active': netlogOpen }]"
+            data-ui="netlog"
+            aria-label="Target log (netconsole)"
+            :title="netlogOpen ? 'Hide the target log' : 'The target\'s log, received over the network (netconsole)'"
+            @click="netlogOpen = !netlogOpen"
+          >
+            <Icon name="logs" :size="18" />
+          </button>
+          <button
+            v-if="cecSource && !signedInToWatch"
+            type="button"
+            :class="['rail-btn', 'rail-win', { 'rail-btn-active': remoteOpen }]"
+            data-ui="cec"
+            aria-label="Remote control (HDMI-CEC)"
+            :title="remoteOpen ? 'Hide the remote' : `A remote for ${cecSource.name || 'the HDMI source'}, over HDMI-CEC`"
+            @click="remoteOpen = !remoteOpen"
+          >
+            <Icon name="remote" :size="18" />
+          </button>
+          <button
+            v-if="usbPad && !signedInToWatch"
+            type="button"
+            :class="['rail-btn', 'rail-win', { 'rail-btn-active': gamepadOpen }]"
+            data-ui="gamepad"
+            aria-label="Gamepad"
+            :title="gamepadOpen ? 'Hide the gamepad' : 'A gamepad for a console (Switch, Steam Deck)'"
+            @click="gamepadOpen = !gamepadOpen"
+          >
+            <Icon name="gamepad" :size="18" />
+          </button>
+        </template>
         <div class="rail-spacer" />
         <PowerWidget
           :caps="caps"
@@ -2628,6 +2934,13 @@ const LED_BITS: Array<[number, string]> = [
             @wake="wakeTarget(false)"
           />
 
+          <div v-if="targetOff" class="power-off-card">
+            <span>The target is off.</span>
+            <button type="button" class="btn" :disabled="powering" @click="powerOnFromScreen">
+              <Icon name="power" :size="15" /> {{ powering ? "Pressed" : "Press power" }}
+            </button>
+          </div>
+
           <button
             v-if="
               !engaged && (!paused || textView) && !touchMode && !heldByOther && !selectingText && !padOverlay
@@ -2641,13 +2954,13 @@ const LED_BITS: Array<[number, string]> = [
                 ? "Pointer follows the mouse. Click to send keystrokes."
                 : "Click to control the target"
             }}
-            <span class="screen-engage-hint">Esc gives control back. ? lists the shortcuts.</span>
+            <span class="screen-engage-hint"><Keys combo="Esc" /> gives control back. <Keys combo="?" /> lists the shortcuts.</span>
           </button>
 
           <!-- While the keys are ours, say so and say the way out: a captured
                Alt+Tab that does nothing locally reads as a hung browser. -->
           <div v-if="keyLockOn" class="screen-keylock">
-            All keys go to the target &mdash; Esc gives them back
+            All keys go to the target &mdash; <Keys combo="Esc" /> gives them back
           </div>
 
           <!-- Text mode sets `paused` to stop the video, but the keyboard still
@@ -2699,6 +3012,7 @@ const LED_BITS: Array<[number, string]> = [
             @settings="openSettingsAt"
             @panel="tourPanel"
             @select="tourSelect"
+            @palette="paletteOpen = true"
             @unfold="tourFoldedBy = ''"
             @done="closeTour"
           />
@@ -2804,31 +3118,6 @@ const LED_BITS: Array<[number, string]> = [
     <footer class="actionbar">
       <div class="actionbar-left" :class="{ 'actionbar-left-grow': keysShown }">
         <span class="conns" aria-label="Connections">
-          <!-- The serial console is a line to the target like HDMI and USB, so
-               it sits with them, first. Only once the device has the port up. -->
-          <button
-            v-if="serialReady"
-            type="button"
-            :class="['conn', 'conn-on', { 'conn-open': serialOpen }]"
-            :title="serialOpen ? 'Hide the serial console' : 'The target\'s serial console'"
-            data-ui="serial"
-            aria-label="Serial console"
-            @click="serialOpen = !serialOpen"
-          >
-            <Icon name="terminal" :size="16" />
-          </button>
-          <!-- The agent rides the same USB cable; dim until it says hello. -->
-          <button
-            v-if="agentReady"
-            type="button"
-            :class="['conn', system?.agent?.connected ? 'conn-on' : 'conn-idle', { 'conn-open': agentOpen }]"
-            :title="agentOpen ? 'Hide the agent' : system?.agent?.connected ? 'The agent on the target' : 'No agent on the target yet'"
-            data-ui="agent"
-            aria-label="Agent"
-            @click="agentOpen = !agentOpen"
-          >
-            <Icon name="agent" :size="16" />
-          </button>
           <button
             v-for="c in conns"
             :key="c.id"
@@ -2991,6 +3280,19 @@ const LED_BITS: Array<[number, string]> = [
       </div>
       <div class="actionbar-right">
         <button
+          v-for="q in quickItems"
+          :key="'q' + q.t + q.v"
+          type="button"
+          class="btn btn-sm quick-btn wide-only"
+          :class="{ 'btn-on': quickBusy === q.t + q.v }"
+          :disabled="!!quickBusy"
+          :title="q.t === 'runbook' ? `Run the runbook ${q.v}` : q.t === 'macro' ? `Run the macro ${q.v}` : `Send ${quickLabel(q, quickOs)}`"
+          @click="pressQuick(q)"
+        >
+          {{ quickLabel(q, quickOs) }}
+        </button>
+        <span v-if="quickItems.length" class="quick-sep wide-only" />
+        <button
           v-if="!signedInToWatch"
           type="button"
           class="btn btn-sm btn-icon"
@@ -3001,32 +3303,6 @@ const LED_BITS: Array<[number, string]> = [
           @click="oskOpen = !oskOpen"
         >
           <Icon name="keyboard" :size="15" />
-        </button>
-        <!-- Only while a source answers over HDMI-CEC. -->
-        <button
-          v-if="cecSource && !signedInToWatch"
-          type="button"
-          class="btn btn-sm btn-icon"
-          :class="{ 'btn-on': remoteOpen }"
-          data-ui="cec"
-          aria-label="Remote control (HDMI-CEC)"
-          :title="remoteOpen ? 'Hide the remote' : `A remote for ${cecSource.name || 'the HDMI source'}, over HDMI-CEC`"
-          @click="remoteOpen = !remoteOpen"
-        >
-          <Icon name="remote" :size="15" />
-        </button>
-        <!-- Only while the device shows a gamepad over USB. -->
-        <button
-          v-if="usbPad && !signedInToWatch"
-          type="button"
-          class="btn btn-sm btn-icon"
-          :class="{ 'btn-on': gamepadOpen }"
-          data-ui="gamepad"
-          aria-label="Gamepad"
-          :title="gamepadOpen ? 'Hide the gamepad' : 'A gamepad for a console (Switch, Steam Deck)'"
-          @click="gamepadOpen = !gamepadOpen"
-        >
-          <Icon name="gamepad" :size="15" />
         </button>
         <!-- Only while the browser sees a controller it can read. -->
         <button
@@ -3090,25 +3366,162 @@ const LED_BITS: Array<[number, string]> = [
         </button>
         <div v-if="moreOpen" class="ab-more-backdrop" @click="moreOpen = false" />
         <div :class="['ab-more', { 'ab-more-open': moreOpen }]" @click="moreOpen = false">
-        <!-- The target's log received over the network, once the receiver is on. -->
+        <button
+          type="button"
+          class="btn btn-sm btn-icon narrow-only"
+          data-label="Commands"
+          aria-label="Commands"
+          @click="paletteOpen = true"
+        >
+          <Icon name="search" :size="15" />
+        </button>
+        <!-- The rail's windows, which a phone's rail has no room for. -->
+        <button
+          v-if="serialReady"
+          type="button"
+          class="btn btn-sm btn-icon narrow-only"
+          :class="{ 'btn-on': serialOpen }"
+          data-ui="serial"
+          data-label="Serial console"
+          aria-label="Serial console"
+          @click="serialOpen = !serialOpen"
+        >
+          <Icon name="terminal" :size="15" />
+        </button>
+        <button
+          v-if="agentReady"
+          type="button"
+          class="btn btn-sm btn-icon narrow-only"
+          :class="{ 'btn-on': agentOpen }"
+          data-ui="agent"
+          data-label="Agent"
+          aria-label="Agent"
+          @click="agentOpen = !agentOpen"
+        >
+          <Icon name="agent" :size="15" />
+        </button>
         <button
           v-if="netlogReady"
           type="button"
-          class="btn btn-sm btn-icon"
+          class="btn btn-sm btn-icon narrow-only"
           :class="{ 'btn-on': netlogOpen }"
           data-ui="netlog"
           data-label="Target log"
           aria-label="Target log (netconsole)"
-          :title="netlogOpen ? 'Hide the target log' : 'The target\'s log, received over the network (netconsole)'"
           @click="netlogOpen = !netlogOpen"
         >
           <Icon name="logs" :size="15" />
         </button>
+        <button
+          v-if="cecSource && !signedInToWatch"
+          type="button"
+          class="btn btn-sm btn-icon narrow-only"
+          :class="{ 'btn-on': remoteOpen }"
+          data-ui="cec"
+          data-label="TV remote"
+          aria-label="Remote control (HDMI-CEC)"
+          @click="remoteOpen = !remoteOpen"
+        >
+          <Icon name="remote" :size="15" />
+        </button>
+        <button
+          v-if="usbPad && !signedInToWatch"
+          type="button"
+          class="btn btn-sm btn-icon narrow-only"
+          :class="{ 'btn-on': gamepadOpen }"
+          data-ui="gamepad"
+          data-label="Gamepad"
+          aria-label="Gamepad"
+          @click="gamepadOpen = !gamepadOpen"
+        >
+          <Icon name="gamepad" :size="15" />
+        </button>
+        <button
+          v-for="q in quickItems"
+          :key="'qm' + q.t + q.v"
+          type="button"
+          class="btn btn-sm menu-only"
+          :data-label="quickLabel(q, quickOs)"
+          :aria-label="quickLabel(q, quickOs)"
+          :disabled="!!quickBusy"
+          @click="pressQuick(q)"
+        >
+          <Icon name="play" :size="15" />
+        </button>
+        <!-- On a wide screen, screenshot, clip and record are one button with a
+             list, and so are the two text actions. The single buttons below
+             stay for a phone's More list, which already has words. -->
+        <ActionMenu
+          v-if="captureAny"
+          class="wide-only"
+          icon="camera"
+          label="Capture"
+          :badge="record?.on ? clock(record.seconds) : clipState?.on ? clipState.label : undefined"
+          :alert="record?.on || clipState?.on"
+          title="Screenshot, clip, recording"
+        >
+          <button
+            v-if="captureItems.shot && status"
+            type="button"
+            class="am-item"
+            role="menuitem"
+            :title="status.screenshotBlocked ?? 'Save a screenshot to the microSD card (SCREENSHOTS)'"
+            :disabled="!!status.screenshotBlocked || shotBusy"
+            @click="screenshot"
+          >
+            <Icon name="camera" :size="15" /> Screenshot
+          </button>
+          <button
+            v-if="captureItems.clip && clipState"
+            type="button"
+            :class="['am-item', { 'rec-on': clipState.on }]"
+            role="menuitem"
+            :title="record?.on && !record.event ? 'The dashcam waits while a recording runs' : clipState.title"
+            :disabled="clipBusy || (!!record?.on && !record.event)"
+            @click="clip"
+          >
+            <Icon name="film" :size="15" /> {{ clipState.label }}
+          </button>
+          <button
+            v-if="captureItems.rec && record"
+            type="button"
+            :class="['am-item', { 'rec-on': record.on }]"
+            role="menuitem"
+            :title="record.on ? `${record.timelapse ? 'Timelapse' : 'Recording'} to ${record.file}` : (record.blocked ?? 'Record the screen to the microSD card (VIDEO)')"
+            :disabled="(!record.on && !!record.blocked) || recordBusy"
+            @click="toggleRecording"
+          >
+            <Icon :name="record.on ? 'stop' : 'record'" :size="15" />
+            {{ record.on ? `Stop recording (${clock(record.seconds)})` : "Record" }}
+          </button>
+        </ActionMenu>
+        <ActionMenu
+          v-if="textAny"
+          class="wide-only"
+          icon="text-select"
+          label="Screen text"
+          :on="selectingText"
+          :disabled="!textModeLikely"
+          :title="textModeLikely ? 'Select or copy the text on the screen' : 'The target is not showing a text screen'"
+        >
+          <button
+            v-if="uiShown('select')"
+            type="button"
+            class="am-item"
+            role="menuitem"
+            @click="toggleSelectText()"
+          >
+            <Icon name="text-select" :size="15" /> {{ selectingText ? "Stop selecting" : "Select text" }}
+          </button>
+          <button v-if="uiShown('copy')" type="button" class="am-item" role="menuitem" @click="copyScreenText()">
+            <Icon name="copy" :size="15" /> Copy the screen as text
+          </button>
+        </ActionMenu>
         <!-- Absent on firmware with no recorder. -->
         <button
           v-if="status && status.screenshotBlocked !== undefined && !signedInToWatch"
           type="button"
-          class="btn btn-sm btn-icon"
+          class="btn btn-sm btn-icon menu-only"
           data-ui="screenshot"
           data-label="Screenshot"
           aria-label="Save a screenshot to the microSD card"
@@ -3122,7 +3535,7 @@ const LED_BITS: Array<[number, string]> = [
         <button
           v-if="record && clipState && !signedInToWatch"
           type="button"
-          :class="['btn', 'btn-sm', 'rec-btn', { 'rec-on': clipState.on }]"
+          :class="['btn', 'btn-sm', 'rec-btn', 'menu-only', { 'rec-on': clipState.on }]"
           data-ui="clip"
           :aria-label="clipState.title"
           :title="record.on && !record.event ? 'The dashcam waits while a recording runs' : clipState.title"
@@ -3135,7 +3548,7 @@ const LED_BITS: Array<[number, string]> = [
         <button
           v-if="record && !signedInToWatch"
           type="button"
-          :class="['btn', 'btn-sm', 'rec-btn', { 'rec-on': record.on }]"
+          :class="['btn', 'btn-sm', 'rec-btn', 'menu-only', { 'rec-on': record.on }]"
           data-ui="record"
           :data-label="record.on ? 'Stop recording' : 'Record'"
           :aria-label="record.on ? 'Stop recording' : 'Record to the microSD card'"
@@ -3152,7 +3565,7 @@ const LED_BITS: Array<[number, string]> = [
         </button>
         <button
           type="button"
-          class="btn btn-sm btn-icon"
+          class="btn btn-sm btn-icon menu-only"
           :class="{ 'btn-on': selectingText, asking: askingSelect }"
           :disabled="!textModeLikely"
           :title="
@@ -3170,7 +3583,7 @@ const LED_BITS: Array<[number, string]> = [
         </button>
         <button
           type="button"
-          class="btn btn-sm btn-icon"
+          class="btn btn-sm btn-icon menu-only"
           :disabled="!textModeLikely"
           :title="
             textModeLikely
@@ -3266,6 +3679,7 @@ const LED_BITS: Array<[number, string]> = [
       </div>
     </footer>
 
+    <CommandPalette v-if="paletteOpen" :commands="paletteCommands" @close="paletteOpen = false" />
     <ShortcutHelp
       v-if="shortcutsOpen"
       :key-lock="keyLockWanted"
@@ -3319,6 +3733,7 @@ const LED_BITS: Array<[number, string]> = [
         :screen-h="status?.height ?? 0"
         :start-section="settingsSection"
         :start-group="settingsGroup"
+        :start-setting="settingsKey"
         @values="values = $event"
         @password-changed="onPasswordChanged"
         @tour="openTour"

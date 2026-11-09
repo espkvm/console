@@ -14,6 +14,7 @@
  * phone emulators do it - see-through controls at the edges, one finger per
  * control, the picture still visible and touchable between them.
  */
+import Keys from "./Keys.vue";
 import { haptic } from "../ui/haptic";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 
@@ -106,9 +107,11 @@ type Look = "window" | "overlay";
 const look = ref<Look>(
   (() => {
     try {
-      return localStorage.getItem("espkvm.gp.look") === "overlay" ? "overlay" : "window";
+      /* The overlay unless this browser chose the window: over the picture
+         is where a pad belongs, and it leaves the screen visible. */
+      return localStorage.getItem("espkvm.gp.look") === "window" ? "window" : "overlay";
     } catch {
-      return "window";
+      return "overlay";
     }
   })(),
 );
@@ -531,8 +534,9 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
       </div>
 
       <p class="gp-hint">
-        Keys here: arrows, Enter = confirm, Esc = back, the button letters, Q/E and 1/3 for the
-        shoulders, &minus;/=, H = home, WASD and IJKL for the sticks. A controller plugged into
+        Keys here: arrows, <Keys combo="Enter" /> = confirm, <Keys combo="Esc" /> = back, the button
+        letters, <Keys combo="Q" />/<Keys combo="E" /> and <Keys combo="1" />/<Keys combo="3" /> for the
+        shoulders, <Keys combo="-" />/<Keys combo="=" />, <Keys combo="H" /> = home, WASD and IJKL for the sticks. A controller plugged into
         this computer works too: press any button on it once, the browser only shows it after
         that.
       </p>
@@ -540,7 +544,7 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
   </Teleport>
   <!-- Inside the picture's area, under the page's own pop-ups and the side
        panel: it belongs to the picture, not above everything. -->
-  <Teleport to="main.stage">
+  <Teleport to="main.stage > .stage-view">
     <section
       v-if="look === 'overlay'"
       ref="popup"
