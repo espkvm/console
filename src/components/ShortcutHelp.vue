@@ -51,13 +51,14 @@ const list = props.watchOnly ? CONSOLE.filter(([k]) => !WATCH_ONLY.has(k)) : CON
       <h3>While you have control</h3>
       <dl class="sh-list">
         <dt><Keys combo="Esc" /></dt>
-        <dd>Gives control back. To send <Keys combo="Esc" /> to the target, use Input -> Esc.</dd>
+        <dd v-if="lockable && keyLock">Gives control back. In full screen it goes to the target, and holding it leaves full screen and gives control back.</dd>
+        <dd v-else>Gives control back. To send <Keys combo="Esc" /> to the target, use Input -> Esc.</dd>
         <dt><Keys combo="Ctrl+Alt+Del" /></dt>
         <dd>Windows on your own computer takes it. Use Input -> Ctrl+Alt+Del.</dd>
         <dt><Keys combo="Alt+Tab" /> <Keys combo="Win" /></dt>
         <dd v-if="!lockable">This browser keeps them. Chrome and Edge can pass them in full screen. Or use Input.</dd>
-        <dd v-else-if="keyLock">Go to the target in full screen, since All keys is on.</dd>
-        <dd v-else>Stay with this computer. Turn on All keys in the bottom bar and go full screen, or use Input.</dd>
+        <dd v-else-if="keyLock">Go to the target in full screen, since the keyboard lock in the bottom bar is on.</dd>
+        <dd v-else>Stay with this computer. Turn on the keyboard lock in the bottom bar and go full screen, or use Input.</dd>
       </dl>
       </template>
     </section>

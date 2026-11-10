@@ -48,6 +48,9 @@ export interface Setting {
   pin?: boolean;
   /** A device profile may hold its own value (see state/profiles.ts). */
   profile?: boolean;
+  /** An int that is a set of bits, one per choice. The mask settings of one
+   *  group are drawn as a table (MaskTable.vue). */
+  mask?: boolean;
   /** Show this setting only while another setting equals a given value, e.g. the
    *  GC9A01's SPI pins appear only when the round LCD is the chosen display type. */
   showIf?: { key: string; eq?: number; ne?: number; in?: number[]; notIn?: number[] };
@@ -660,6 +663,8 @@ export interface NotifyStatus {
   /** "ok", or why the last send failed; "nothing sent yet" at first. */
   lastResult: string;
   lastAt: string;
+  /** Per route setting (notify_tg_ev...), whether that channel is set up. */
+  ready?: Record<string, boolean>;
   /** The last "find chats" run; missing on firmware that predates it. */
   telegram?: TelegramChats;
 }
@@ -1818,6 +1823,47 @@ export interface Captures {
   screenshots?: CaptureFile[];
   /** False while a recording runs or the card is not writable. */
   canDelete: boolean;
+  /** An upload folder is set (Settings, Video, Upload); missing on older firmware. */
+  canUpload?: boolean;
+}
+
+/** One file in the upload queue, and how it went. */
+export interface UploadItem {
+  path: string;
+  state: "queued" | "sending" | "done" | "error" | "cancelled";
+  bytes: number;
+  total: number;
+  message: string;
+  /** Queued, and the server did not answer: the next try is this many seconds away. */
+  retryIn?: number;
+  /** Queued by the device itself (Settings, Video, Upload automatically). */
+  auto?: boolean;
+}
+
+export interface UploadStatus {
+  ready: boolean;
+  /** Where files go: "WebDAV". */
+  dest: string;
+  test: { state: "idle" | "running" | "ok" | "error"; message: string };
+  items: UploadItem[];
+}
+
+export function loadUploads(): Promise<UploadStatus> {
+  return getJson<UploadStatus>("/api/v1/captures/upload");
+}
+
+/** Queue a file (a recording takes its subtitles with it). */
+export function uploadCapture(path: string): Promise<UploadStatus> {
+  return postCapture(`/api/v1/captures/upload?path=${encodeURIComponent(path)}`, "could not queue the upload");
+}
+
+export function cancelUploads(): Promise<UploadStatus> {
+  return postCapture("/api/v1/captures/upload/cancel", "could not cancel");
+}
+
+/** Reach the upload folder and make the device's folder there; the answer is in test. */
+export function testUpload(): Promise<UploadStatus> {
+  return postCapture("/api/v1/captures/upload/test", "could not test the upload folder");
 }
 
 export function loadCaptures(): Promise<Captures> {

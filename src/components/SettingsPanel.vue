@@ -36,8 +36,11 @@ import {
   choiceLabel,
   findTelegramChats,
   loadNotifyStatus,
+  loadUploads,
+  testUpload,
   type TelegramChats,
 } from "../state/device";
+import MaskTable from "./MaskTable.vue";
 import { changePassword, createViewToken, loadSession, logout, revokeViewToken } from "../state/auth";
 import {
   buildFile,
@@ -228,7 +231,7 @@ const searchHits = computed(() => {
   return props.schema.filter((entry) => {
     if (entry.section === "storage_hidden") return false;
     const haystack =
-      `${entry.title} ${entry.help ?? ""} ${entry.key}`.toLowerCase();
+      `${entry.title} ${entry.group ?? ""} ${entry.help ?? ""} ${entry.key}`.toLowerCase();
     return haystack.includes(q);
   });
 });
@@ -550,10 +553,14 @@ const grouped = computed(() => {
   const out: { name: string; rows: Setting[] }[] = [];
   const byName = new Map<string, { name: string; rows: Setting[] }>();
   for (const row of rowsNow) {
+    /* Mask settings keep their own group even in a search or under Changed:
+       they are drawn as a table, which a block of ordinary rows cannot hold. */
     const name =
-      query.value.trim() || currentSection.value === "changed"
-        ? sectionTitle(row.section)
-        : (row.group ?? "");
+      row.mask
+        ? (row.group ?? "")
+        : query.value.trim() || currentSection.value === "changed"
+          ? sectionTitle(row.section)
+          : (row.group ?? "");
     let block = byName.get(name);
     if (!block) {
       block = { name, rows: [] };
@@ -735,6 +742,48 @@ async function writeSecret(key: string, el: HTMLInputElement) {
  * The device asks Telegram with the saved token; the token never comes here.
  */
 const tgFind = ref<TelegramChats | null>(null);
+
+/*
+ * Checking the upload folder: the device makes its own folder there, which
+ * proves the address, the password and the certificate in one go.
+ */
+const upTest = ref<{ state: string; message: string } | null>(null);
+async function checkUpload() {
+  upTest.value = { state: "running", message: "" };
+  try {
+    let st = (await testUpload()).test;
+    for (let i = 0; i < 30 && st.state === "running"; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      st = (await loadUploads()).test;
+    }
+    upTest.value = st;
+  } catch (err) {
+    upTest.value = { state: "error", message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/* A block of mask settings is drawn as one table (MaskTable.vue). */
+function isMaskBlock(list: Setting[]): boolean {
+  return list.length > 0 && list.every((s) => s.mask);
+}
+
+/* Which notification channels are set up, so the table can say which column
+   would go nowhere yet. Asked when the section opens and after a save. */
+const notifyReady = ref<Record<string, boolean> | null>(null);
+async function loadNotifyReady() {
+  try {
+    notifyReady.value = (await loadNotifyStatus()).ready ?? null;
+  } catch {
+    notifyReady.value = null; /* the table works without it */
+  }
+}
+watch(
+  () => [currentSection.value, props.values],
+  () => {
+    if (currentSection.value === "notify") void loadNotifyReady();
+  },
+  { immediate: true },
+)
 const tgFinding = ref(false);
 async function findChats() {
   tgFinding.value = true;
@@ -1161,8 +1210,16 @@ async function doRevertCert() {
                 Show its settings
               </button>
             </p>
+            <MaskTable
+              v-if="isMaskBlock(block.rows) && !(block.blocked && !openedBlocked.has(block.name))"
+              :columns="block.rows"
+              :values="values"
+              :ready="notifyReady"
+              :disabled="busy || !!sectionBlocked"
+              :save="write"
+            />
             <div
-              v-for="s in block.blocked && !openedBlocked.has(block.name) ? [] : block.rows"
+              v-for="s in (block.blocked && !openedBlocked.has(block.name)) || isMaskBlock(block.rows) ? [] : block.rows"
               :key="s.key"
               :data-key="s.key"
               :class="[
@@ -1424,6 +1481,23 @@ async function doRevertCert() {
                 </button>
                 {{ hapticResult }}
               </p>
+
+              <div v-if="s.key === 'up_dav_pass' && values.up_dav_url" class="tg-find">
+                <button
+                  type="button"
+                  class="btn btn-sm"
+                  :disabled="busy || upTest?.state === 'running'"
+                  @click="checkUpload"
+                >
+                  {{ upTest?.state === "running" ? "Checking..." : "Check the folder" }}
+                </button>
+                <p
+                  v-if="upTest && upTest.state !== 'running' && upTest.message"
+                  :class="['setting-note', { 'setting-note-blocked': upTest.state === 'error' }]"
+                >
+                  {{ upTest.message }}
+                </p>
+              </div>
 
               <div
                 v-if="s.key === 'notify_tg_chat' && !blockedFor(s)"

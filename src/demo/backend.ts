@@ -46,6 +46,10 @@ import {
   demoRecordStatus,
   demoRecordStop,
   demoScreenshot,
+  demoUploads,
+  demoUpload,
+  demoUploadCancel,
+  demoUploadTest,
 } from "./captures";
 
 type Json = Record<string, unknown>;
@@ -710,6 +714,8 @@ async function route(
         return json(demoCaptures());
       case "/api/v1/captures/search":
         return json(demoCaptureSearch(new URLSearchParams(search).get("q") ?? ""));
+      case "/api/v1/captures/upload":
+        return json(demoUploads());
       case "/api/v1/record/status":
         return json(demoRecordStatus());
       case "/api/v1/system/install":
@@ -790,6 +796,8 @@ async function route(
           enabled: settings.notify_enable === true || settings.notify_enable === 1,
           lastResult: "ok",
           lastAt: "2026-09-13 10:00:00",
+          /* The demo has a bot and no webhook, so one column says so. */
+          ready: { notify_tg_ev: true, notify_hook_ev: false, notify_push_ev: true },
           telegram: tgFind,
         });
       case "/api/v1/schedules/status": {
@@ -989,6 +997,12 @@ async function route(
       }
       case "/api/v1/captures/delete":
         return json(demoCaptureDelete(new URLSearchParams(search).get("path") ?? ""));
+      case "/api/v1/captures/upload":
+        return json(demoUpload(new URLSearchParams(search).get("path") ?? ""));
+      case "/api/v1/captures/upload/cancel":
+        return json(demoUploadCancel());
+      case "/api/v1/captures/upload/test":
+        return json(demoUploadTest());
       /* A viewing token: shown once, as on the device. */
       case "/api/v1/auth/token":
         return json({

@@ -133,6 +133,18 @@ export const TOUR_FEATURES: TourFeature[] = [
     ui: ["screenshot", "clip", "record"],
   },
   {
+    icon: "upload",
+    title: "Upload",
+    line: "Send recordings and screenshots to a WebDAV folder, such as Nextcloud or a NAS, with one button or on their own as soon as they are saved.",
+    actions: [
+      { label: "Recordings", panel: "captures" },
+      { label: "Set the folder", section: "video", group: "Upload" },
+      { label: "What goes on its own", section: "video", group: "Upload automatically" },
+    ],
+    since: "0.81.0",
+    state: (c) => (c.values.up_dav_url ? "On" : "Off"),
+  },
+  {
     icon: "volume",
     title: "Sound",
     line: "The target's HDMI sound, live and in recordings.",

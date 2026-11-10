@@ -17,6 +17,13 @@ const PATHS = {
     "M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z",
     "M6 11h.01M10 11h.01M14 11h.01M18 11h.01M8 15h8",
   ],
+  /* A keyboard with a padlock: the keys are captured (Keyboard Lock). */
+  "keyboard-lock": [
+    "M19 9V8a2 2 0 0 0-2-2H3a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h9",
+    "M5 10h.01M9 10h.01M13 10h.01M5 14h6",
+    "M16 15h6a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1z",
+    "M17 15v-2a2 2 0 0 1 4 0v2",
+  ],
   disc: [
     "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z",
     "M12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z",
@@ -140,6 +147,7 @@ const PATHS = {
   video: ["M3 7h12v10H3z", "M15 10.5l6-3.5v10l-6-3.5"],
   image: ["M3 5h18v14H3z", "M8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z", "M21 15l-5-5-11 9"],
   download: ["M12 4v11", "M7 10l5 5 5-5", "M5 20h14"],
+  upload: ["M12 20V9", "M7 14l5-5 5 5", "M5 4h14"],
   /* A chevron pointing down: pull something out from the top. */
   "chevron-down": ["M6 9l6 6 6-6"],
   /* Leaving full screen: four corners pointing in. */

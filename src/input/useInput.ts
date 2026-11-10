@@ -37,6 +37,12 @@ export interface InputOptions {
   fit: Ref<"fit" | "stretch" | "actual">;
   /** When true, touch mode owns the surface and desktop pointer handling stands down. */
   touchActive?: Ref<boolean>;
+  /**
+   * Esc goes to the target instead of giving control back. True while the
+   * browser holds the keys for us (Keyboard Lock, full screen): holding Esc
+   * then leaves full screen, and the caller gives control back on that.
+   */
+  escToTarget?: Ref<boolean>;
   onDisengage(): void;
 }
 
@@ -337,8 +343,13 @@ export function useInput(opts: InputOptions) {
 
     const onDown = (e: KeyboardEvent) => {
       /* Esc hands control back rather than reaching the target; the macro bar
-         exists so it can still be sent deliberately. */
-      if (e.key === "Escape") {
+         exists so it can still be sent deliberately. With the keys captured it
+         is the target's, and holding it is the way out. Its repeats are not
+         sent: they come while it is held to leave, and the target needs one. */
+      if (e.key === "Escape" && opts.escToTarget?.value) {
+        e.preventDefault();
+        if (e.repeat) return;
+      } else if (e.key === "Escape") {
         e.preventDefault();
         /* Release synchronously, before disengaging - not through the async
            watchEffect, which could fire after the channel has moved on. */

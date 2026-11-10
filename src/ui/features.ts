@@ -25,7 +25,7 @@ export const UI_FEATURES: UiFeature[] = [
   { id: "gamepad", label: "Gamepad", group: "Input" },
   { id: "touch", label: "Touch mode", group: "Input" },
   { id: "padmouse", label: "Controller as mouse", group: "Input" },
-  { id: "keylock", label: "All keys (capture browser shortcuts)", group: "Input" },
+  { id: "keylock", label: "Keyboard lock (shortcuts to the target)", group: "Input" },
   { id: "pause", label: "Pause the stream", group: "Picture" },
   { id: "scale", label: "Scale", group: "Picture" },
   { id: "fullscreen", label: "Full screen", group: "Picture" },

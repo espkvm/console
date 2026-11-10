@@ -563,7 +563,7 @@ async function sendTest() {
     <FoldNote>
       <template #lead>A message to Telegram or a webhook when something shows on the screen.</template>
       A watched phrase, a blank screen, or a screen area that asks for it. Telegram gets a
-      screenshot on the MJPEG codec. Set the bot token, chat id or URL under Settings &rarr;
+      screenshot too. Set the bot token, chat id or URL under Settings &rarr;
       Notifications.
       <a href="https://github.com/espkvm/espkvm/blob/main/docs/NOTIFICATIONS.md" target="_blank"
         rel="noopener">How they work</a>.

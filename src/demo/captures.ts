@@ -189,7 +189,58 @@ export async function demoScreenshot(): Promise<Json | string> {
 }
 
 export function demoCaptures(): Json {
-  return { blocked: null, video: videos, screenshots: shots, canDelete: !rec.on };
+  return { blocked: null, video: videos, screenshots: shots, canDelete: !rec.on, canUpload: true };
+}
+
+/* Uploads in the demo: nothing leaves the browser, the bar just fills. */
+type DemoUpload = { path: string; state: string; bytes: number; total: number; message: string; t0: number };
+let uploads: DemoUpload[] = [];
+let uploadTest = { state: "idle", message: "" };
+
+export function demoUploads(): Json {
+  const now = Date.now();
+  let busy = false;
+  for (const u of uploads) {
+    if (u.state === "queued" && !busy) {
+      u.state = "sending";
+      u.t0 = now;
+    }
+    if (u.state === "sending") {
+      /* About 2 MB/s, a Nextcloud on the same network. */
+      u.bytes = Math.min(u.total, ((now - u.t0) / 1000) * 2_000_000);
+      if (u.bytes >= u.total) u.state = "done";
+      else busy = true;
+    }
+  }
+  return {
+    ready: true,
+    dest: "WebDAV",
+    test: uploadTest,
+    items: uploads.map(({ t0: _t0, ...u }) => u),
+  };
+}
+
+export function demoUpload(path: string): Json {
+  const f = [...videos, ...shots].find((x) => x.path === path);
+  if (f && !uploads.some((u) => u.path === path && (u.state === "queued" || u.state === "sending"))) {
+    uploads = [...uploads.slice(-31), { path, state: "queued", bytes: 0, total: f.size, message: "", t0: 0 }];
+  }
+  return demoUploads();
+}
+
+export function demoUploadCancel(): Json {
+  for (const u of uploads) {
+    if (u.state === "queued" || u.state === "sending") {
+      u.state = "cancelled";
+      u.message = "cancelled";
+    }
+  }
+  return demoUploads();
+}
+
+export function demoUploadTest(): Json {
+  uploadTest = { state: "ok", message: "the server took it: the device's folder is there" };
+  return demoUploads();
 }
 
 export function demoCaptureDelete(path: string): Json {

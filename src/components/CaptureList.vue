@@ -7,13 +7,22 @@
  *
  * Deleting is refused while a recording runs - freeing a large file rewrites
  * the card's allocation table under the file being written.
+ *
+ * With an upload folder set (Settings, Video, Upload) each file has an Upload
+ * button. The device sends the files one at a time; while any is waiting or
+ * going, the panel asks how it goes once a second.
  */
 import FoldNote from "./FoldNote.vue";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import {
+  cancelUploads,
   captureUrl,
   deleteCapture,
+  loadUploads,
+  uploadCapture,
+  type UploadItem,
+  type UploadStatus,
   formatBytes,
   loadCaptures,
   searchCaptures,
@@ -73,6 +82,8 @@ async function refresh() {
   loading.value = true;
   try {
     captures.value = await loadCaptures();
+    /* Files the device sends on its own show up without a click. */
+    if (captures.value?.canUpload) void pollUploads();
   } catch (err) {
     toast.error(err instanceof Error ? err.message : String(err));
   } finally {
@@ -82,6 +93,100 @@ async function refresh() {
 
 onMounted(refresh);
 watch(() => props.changed, refresh);
+
+/* Uploads. */
+const uploads = ref<UploadStatus | null>(null);
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+const activeUploads = computed(
+  () => uploads.value?.items.filter((i) => i.state === "queued" || i.state === "sending") ?? [],
+);
+
+function schedulePoll() {
+  if (pollTimer) clearTimeout(pollTimer);
+  /* Slower while the whole queue only waits for the server. */
+  const waiting = activeUploads.value.length > 0 && activeUploads.value.every((i) => (i.retryIn ?? 0) > 0);
+  pollTimer = activeUploads.value.length ? setTimeout(pollUploads, waiting ? 5000 : 1000) : null;
+}
+
+async function pollUploads() {
+  try {
+    uploads.value = await loadUploads();
+  } catch {
+    /* the device is restarting, say: try again on the next tick */
+  }
+  schedulePoll();
+}
+
+watch(
+  () => captures.value?.canUpload,
+  (can) => {
+    if (can && !uploads.value && !pollTimer) void pollUploads();
+  },
+);
+onUnmounted(() => {
+  if (pollTimer) clearTimeout(pollTimer);
+});
+
+/* The newest entry for a file: one sent twice shows how the last try went. */
+function upItem(path: string): UploadItem | undefined {
+  const list = uploads.value?.items ?? [];
+  for (let i = list.length - 1; i >= 0; i--) if (list[i].path === path) return list[i];
+  return undefined;
+}
+
+function upNote(path: string): string {
+  const u = upItem(path);
+  if (!u) return "";
+  if (u.state === "queued" && u.retryIn)
+    return `waiting for the server (${u.message}), next try in ${u.retryIn} s`;
+  if (u.state === "queued") return "waiting to upload";
+  if (u.state === "sending")
+    return `uploading ${u.total ? Math.floor((u.bytes / u.total) * 100) : 0}%`;
+  if (u.state === "done") return "uploaded";
+  if (u.state === "cancelled") return "upload cancelled";
+  return `upload failed: ${u.message}`;
+}
+
+function upBusy(path: string): boolean {
+  const s = upItem(path)?.state;
+  return s === "queued" || s === "sending";
+}
+
+async function upload(path: string) {
+  try {
+    uploads.value = await uploadCapture(path);
+    schedulePoll();
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  }
+}
+
+/* Everything in the tab that has not gone yet, oldest first, so the folder
+   fills in order. */
+async function uploadAll() {
+  const list = (tab.value === "video" ? videos.value : shots.value)
+    .filter((f) => upItem(f.path)?.state !== "done" && !upBusy(f.path))
+    .reverse();
+  for (const f of list) {
+    try {
+      uploads.value = await uploadCapture(f.path);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+      break;
+    }
+  }
+  schedulePoll();
+}
+
+async function cancelAll() {
+  try {
+    uploads.value = await cancelUploads();
+    schedulePoll();
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  }
+}
 
 /* Names are times ("20260917-140322", a clip "20260917-140322-event"), so reversed
    order is newest first. */
@@ -153,10 +258,26 @@ async function remove(path: string) {
   <section class="capture-list">
     <div class="capture-head">
       <span class="muted">On the microSD card, newest first</span>
-      <button type="button" class="btn btn-sm btn-quiet" :disabled="loading" @click="refresh">
-        Refresh
-      </button>
+      <span class="capture-head-actions">
+        <button
+          v-if="captures?.canUpload && !watchOnly"
+          type="button"
+          class="btn btn-sm btn-quiet"
+          :title="`Send every file in this tab that has not gone yet to the ${uploads?.dest ?? 'upload'} folder`"
+          @click="uploadAll"
+        >
+          Upload all
+        </button>
+        <button type="button" class="btn btn-sm btn-quiet" :disabled="loading" @click="refresh">
+          Refresh
+        </button>
+      </span>
     </div>
+    <p v-if="activeUploads.length" class="setting-note capture-uploading">
+      Uploading {{ activeUploads.length }} file{{ activeUploads.length === 1 ? "" : "s" }} to
+      {{ uploads?.dest }}.
+      <button type="button" class="btn-link" @click="cancelAll">Cancel</button>
+    </p>
 
 
     <p v-if="record?.dashcamNoMemory" class="setting-note setting-note-blocked">
@@ -241,6 +362,7 @@ async function remove(path: string) {
             <span class="image-text">
               <span class="image-name">{{ when(f.path) }}</span>
               <span class="muted image-sub">{{ kind(f.path) }} · {{ formatBytes(f.size) }}</span>
+              <span v-if="upNote(f.path)" :class="['muted', 'image-sub', { 'capture-upfail': upItem(f.path)?.state === 'error' }]">{{ upNote(f.path) }}</span>
             </span>
             <span class="capture-actions">
               <!-- Plays from the card as it streams, MP4 and .ts alike. -->
@@ -272,6 +394,17 @@ async function remove(path: string) {
               >
                 <Icon name="captions" :size="15" />
               </a>
+              <button
+                v-if="captures.canUpload && !watchOnly"
+                type="button"
+                class="btn btn-sm btn-icon btn-quiet"
+                :disabled="upBusy(f.path)"
+                aria-label="Upload"
+                :title="`Upload to the ${uploads?.dest ?? 'upload'} folder`"
+                @click="upload(f.path)"
+              >
+                <Icon name="upload" :size="15" />
+              </button>
               <button
                 v-if="captures.canDelete && !watchOnly"
                 type="button"
@@ -305,6 +438,7 @@ async function remove(path: string) {
             <span class="image-text">
               <span class="image-name">{{ when(f.path) }}</span>
               <span class="muted image-sub">screenshot · {{ formatBytes(f.size) }}</span>
+              <span v-if="upNote(f.path)" :class="['muted', 'image-sub', { 'capture-upfail': upItem(f.path)?.state === 'error' }]">{{ upNote(f.path) }}</span>
             </span>
             <span class="capture-actions">
               <a
@@ -326,6 +460,17 @@ async function remove(path: string) {
               >
                 <Icon name="download" :size="15" />
               </a>
+              <button
+                v-if="captures.canUpload && !watchOnly"
+                type="button"
+                class="btn btn-sm btn-icon btn-quiet"
+                :disabled="upBusy(f.path)"
+                aria-label="Upload"
+                :title="`Upload to the ${uploads?.dest ?? 'upload'} folder`"
+                @click="upload(f.path)"
+              >
+                <Icon name="upload" :size="15" />
+              </button>
               <button
                 v-if="captures.canDelete && !watchOnly"
                 type="button"

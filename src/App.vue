@@ -931,6 +931,7 @@ const input = useInput({
   surface,
   fit,
   touchActive: touchMode,
+  escToTarget: computed(() => keyLockOn.value),
   onDisengage: () => (engaged.value = false),
 });
 
@@ -2285,7 +2286,7 @@ const paletteCommands = computed<Command[]>(() => {
   if (ctl) add({ id: "view:osk", title: oskOpen.value ? "Hide the on-screen keyboard" : "On-screen keyboard", group: "View", run: () => (oskOpen.value = !oskOpen.value) });
   add({ id: "view:touch", title: touchMode.value ? "Touch mode off" : "Touch mode on", group: "View", run: () => (touchMode.value = !touchMode.value) });
   if (keyLockSupported && ctl)
-    add({ id: "view:keylock", title: keyLockWanted.value ? "All keys off" : "All keys on", group: "View", keywords: "keyboard lock alt tab win", run: () => (keyLockWanted.value = !keyLockWanted.value) });
+    add({ id: "view:keylock", title: keyLockWanted.value ? "Shortcuts to the target: off" : "Shortcuts to the target: on", group: "View", keywords: "keyboard lock all keys alt tab win esc", run: () => (keyLockWanted.value = !keyLockWanted.value) });
   add({ id: "view:theme", title: theme.value === "dark" ? "Light theme" : "Dark theme", group: "View", run: () => toggleTheme() });
 
   /* Settings */
@@ -2443,6 +2444,12 @@ watch(keyLockWanted, (on) => {
   }
 });
 function onFullscreenChange() {
+  /* Holding Esc is how the browser lets go of full screen while it holds the
+     keys for us, and Esc itself went to the target: leaving is the way to give
+     control back, as Esc is everywhere else. */
+  if (!document.fullscreenElement && keyLockOn.value && engaged.value) {
+    engaged.value = false;
+  }
   void applyKeyLock();
 }
 
@@ -2960,7 +2967,7 @@ const LED_BITS: Array<[number, string]> = [
           <!-- While the keys are ours, say so and say the way out: a captured
                Alt+Tab that does nothing locally reads as a hung browser. -->
           <div v-if="keyLockOn" class="screen-keylock">
-            All keys go to the target &mdash; <Keys combo="Esc" /> gives them back
+            Shortcuts and <Keys combo="Esc" /> go to the target &mdash; hold <Keys combo="Esc" /> to give them back
           </div>
 
           <!-- Text mode sets `paused` to stop the video, but the keyboard still
@@ -3621,17 +3628,18 @@ const LED_BITS: Array<[number, string]> = [
           v-if="keyLockSupported && !signedInToWatch"
           data-ui="keylock"
           type="button"
-          class="btn btn-sm"
+          class="btn btn-sm btn-icon"
           :class="{ 'btn-on': keyLockWanted }"
           :title="
             keyLockWanted
-              ? 'Alt+Tab, Ctrl+W and the Windows key go to the target in full screen, while you have control. Esc gives them back.'
-              : 'Alt+Tab, Ctrl+W and the Windows key stay with this computer'
+              ? 'Shortcuts go to the target in full screen: Alt+Tab, Win, Ctrl+W and Esc. Hold Esc to leave full screen.'
+              : 'Shortcuts stay with this computer'
           "
+          aria-label="Send shortcuts to the target"
           :aria-pressed="keyLockWanted"
           @click="keyLockWanted = !keyLockWanted"
         >
-          All keys
+          <Icon name="keyboard-lock" :size="15" />
         </button>
         </div>
         <button

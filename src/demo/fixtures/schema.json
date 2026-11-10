@@ -264,6 +264,63 @@
       "requires": "h264"
     },
     {
+      "key": "up_dav_url",
+      "section": "video",
+      "group": "Upload",
+      "title": "WebDAV folder",
+      "help": "Where the Upload button sends a recording or a screenshot: a folder on a WebDAV server, such as https://cloud.example.com/remote.php/dav/files/me/espkvm/ on Nextcloud, or a share on a NAS. Files go into a folder named after this device, with VIDEO and SCREENSHOTS in it. HTTPS needs a certificate the device trusts; plain http sends the password unencrypted, so keep it to your own network.",
+      "type": "string",
+      "maxLength": 200,
+      "default": ""
+    },
+    {
+      "key": "up_dav_user",
+      "section": "video",
+      "group": "Upload",
+      "title": "User name",
+      "help": "For the WebDAV server. Empty if it needs none.",
+      "type": "string",
+      "maxLength": 64,
+      "default": ""
+    },
+    {
+      "key": "up_dav_pass",
+      "section": "video",
+      "group": "Upload",
+      "title": "Password",
+      "help": "On Nextcloud, an app password made under Settings, Security.",
+      "type": "string",
+      "maxLength": 128,
+      "default": "",
+      "secret": true
+    },
+    {
+      "key": "up_dav_ev",
+      "section": "video",
+      "group": "Upload automatically",
+      "title": "WebDAV",
+      "help": "What goes to the WebDAV folder on its own, as soon as it is saved on the card. Files wait on the card while the server cannot be reached, also over a restart.",
+      "type": "int",
+      "min": 0,
+      "max": 31,
+      "choices": [
+        "recording",
+        "clip",
+        "dashcam",
+        "screenshot",
+        "timelapse"
+      ],
+      "labels": [
+        "Recording",
+        "Clip saved by hand",
+        "Dashcam clip",
+        "Screenshot",
+        "Timelapse"
+      ],
+      "default": 0,
+      "mask": true
+    },
+    {
       "key": "rec_subs",
       "section": "video",
       "group": "Recording",
@@ -731,61 +788,17 @@
     {
       "key": "notify_enable",
       "section": "notify",
-      "group": "When",
       "title": "Send notifications",
-      "help": "Push a message when a watched phrase appears or the screen goes blank.",
+      "help": "Send a message when something happens on the target: a watched phrase, a blank screen, a dashcam clip. The table below picks what goes where.",
       "type": "bool",
       "default": 0,
       "requires": "notify"
     },
     {
-      "key": "notify_watch",
-      "section": "notify",
-      "group": "When",
-      "title": "On a screen-watch phrase",
-      "help": "Notify when one of the phrases the screen is watched for appears.",
-      "type": "bool",
-      "default": 1,
-      "requires": "notify",
-      "showIf": {
-        "key": "notify_enable",
-        "eq": 1
-      }
-    },
-    {
-      "key": "notify_flat",
-      "section": "notify",
-      "group": "When",
-      "title": "On a blank screen",
-      "help": "Notify when the output stays one flat colour - a stop screen, a blanked display.",
-      "type": "bool",
-      "default": 0,
-      "requires": "notify",
-      "showIf": {
-        "key": "notify_enable",
-        "eq": 1
-      }
-    },
-    {
       "key": "notify_snap",
       "section": "notify",
-      "group": "When",
       "title": "Attach a screenshot",
-      "help": "Send the screen with the message.",
-      "type": "bool",
-      "default": 1,
-      "requires": "notify",
-      "showIf": {
-        "key": "notify_enable",
-        "eq": 1
-      }
-    },
-    {
-      "key": "notify_clip",
-      "section": "notify",
-      "group": "When",
-      "title": "Send dashcam clips",
-      "help": "When the dashcam saves a clip, send it: to Telegram as a video that plays in the chat (up to 50 MB; bigger ones are named instead), to the webhook as a message with the file's name.",
+      "help": "Send the screen with the message, where the channel can carry a picture.",
       "type": "bool",
       "default": 1,
       "requires": "notify",
@@ -797,7 +810,6 @@
     {
       "key": "notify_log",
       "section": "notify",
-      "group": "When",
       "title": "Attach recent log",
       "help": "Include the tail of the device log with the message - the context around an alert.",
       "type": "bool",
@@ -848,6 +860,105 @@
       "type": "string",
       "maxLength": 200,
       "default": "",
+      "requires": "notify",
+      "showIf": {
+        "key": "notify_enable",
+        "eq": 1
+      }
+    },
+    {
+      "key": "notify_tg_ev",
+      "section": "notify",
+      "group": "What goes where",
+      "title": "Telegram",
+      "help": "A dashcam clip under 50 MB plays in the chat. A bigger one is named.",
+      "type": "int",
+      "min": 0,
+      "max": 63,
+      "choices": [
+        "watch",
+        "flat",
+        "area",
+        "clip",
+        "netlog",
+        "tskey"
+      ],
+      "labels": [
+        "A watched phrase on the screen",
+        "Blank screen",
+        "Screen area",
+        "Dashcam clip",
+        "Target log alert",
+        "Tailscale key running out"
+      ],
+      "mask": true,
+      "default": 61,
+      "requires": "notify",
+      "showIf": {
+        "key": "notify_enable",
+        "eq": 1
+      }
+    },
+    {
+      "key": "notify_hook_ev",
+      "section": "notify",
+      "group": "What goes where",
+      "title": "Webhook",
+      "help": "A dashcam clip is named, with its file on the card.",
+      "type": "int",
+      "min": 0,
+      "max": 63,
+      "choices": [
+        "watch",
+        "flat",
+        "area",
+        "clip",
+        "netlog",
+        "tskey"
+      ],
+      "labels": [
+        "A watched phrase on the screen",
+        "Blank screen",
+        "Screen area",
+        "Dashcam clip",
+        "Target log alert",
+        "Tailscale key running out"
+      ],
+      "mask": true,
+      "default": 61,
+      "requires": "notify",
+      "showIf": {
+        "key": "notify_enable",
+        "eq": 1
+      }
+    },
+    {
+      "key": "notify_push_ev",
+      "section": "notify",
+      "group": "What goes where",
+      "title": "Browsers",
+      "help": "Text only: a push message has no room for a picture.",
+      "type": "int",
+      "min": 0,
+      "max": 63,
+      "choices": [
+        "watch",
+        "flat",
+        "area",
+        "clip",
+        "netlog",
+        "tskey"
+      ],
+      "labels": [
+        "A watched phrase on the screen",
+        "Blank screen",
+        "Screen area",
+        "Dashcam clip",
+        "Target log alert",
+        "Tailscale key running out"
+      ],
+      "mask": true,
+      "default": 61,
       "requires": "notify",
       "showIf": {
         "key": "notify_enable",
@@ -2541,6 +2652,22 @@
       "showIf": {
         "key": "disp_enable",
         "eq": 1
+      }
+    },
+    {
+      "key": "disp_picture",
+      "section": "display",
+      "group": "Screen",
+      "title": "Picture page",
+      "help": "Adds a page with a small copy of the target's screen. It redraws ten times a second, or twice while a browser is watching. Colour panels only.",
+      "type": "bool",
+      "default": 0,
+      "showIf": {
+        "key": "disp_type",
+        "in": [
+          2,
+          15
+        ]
       }
     },
     {

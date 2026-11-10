@@ -1478,6 +1478,17 @@
   gap: var(--space-2);
 }
 
+/* A failed upload says why in full: the reason is the useful part. */
+.capture-upfail {
+  white-space: normal;
+  color: var(--danger, #e5534b);
+}
+
+.capture-head-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
 /* Timelapse: a label, the interval and Start on one line. */
 .capture-timelapse {
   display: flex;
