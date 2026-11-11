@@ -136,3 +136,29 @@ test("a file from before profiles plans as it always did", () => {
   assert.deepEqual(plan.apply, { vid_fps: 60 });
   assert.deepEqual(plan.profiles, []);
 });
+
+const maskSchema: Setting[] = [
+  {
+    key: "notify_tg_ev", type: "int", section: "notify", title: "Telegram", mask: true, default: 125,
+    choices: ["watch", "flat", "area", "clip", "netlog", "tskey", "release"],
+  },
+  {
+    key: "notify_push_ev", type: "int", section: "notify", title: "Browsers", mask: true, default: 125,
+    choices: ["watch", "flat", "area", "clip", "netlog", "tskey", "release"],
+  },
+] as unknown as Setting[];
+
+test("a file from before New firmware ticks it where the channel took anything, as a fresh device has it", () => {
+  const old = { kind: FILE_KIND, version: FILE_VERSION, exported: "", note: "", firmware: "v.0.81.0",
+    values: { notify_tg_ev: 61, notify_push_ev: 0 } };
+  const plan = planImport(old, maskSchema, { notify_tg_ev: 0, notify_push_ev: 125 });
+  assert.equal(plan.apply.notify_tg_ev, 125); /* 61 plus the new row */
+  assert.equal(plan.apply.notify_push_ev, 0); /* every box cleared stays cleared */
+});
+
+test("a file that knew the row keeps what it says about it", () => {
+  const file = buildFile({ notify_tg_ev: 61, notify_push_ev: 61 }, maskSchema);
+  assert.deepEqual(file.rows?.notify_tg_ev, maskSchema[0].choices);
+  const plan = planImport(readFile(JSON.stringify(file)), maskSchema, { notify_tg_ev: 125, notify_push_ev: 125 });
+  assert.equal(plan.apply.notify_tg_ev, 61); /* unticked on purpose */
+});

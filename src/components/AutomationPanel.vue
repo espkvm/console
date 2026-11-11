@@ -73,7 +73,10 @@ async function refresh() {
 
 /* Poll quickly while a run is on, and not at all otherwise: the status is a
    fact about the last run until somebody starts another. */
+/* Closed while a reading was on its way: nothing may be scheduled after. */
+let gone = false;
 function schedule() {
+  if (gone) return;
   if (timer !== null) window.clearTimeout(timer);
   timer = window.setTimeout(async () => {
     await refresh();
@@ -91,10 +94,12 @@ onMounted(async () => {
   if (running.value) schedule();
   await refreshSched();
   await refreshNotify();
+  if (gone) return;
   // The clock and the last-fired line change slowly; a look every 15 s is plenty.
   schedTimer = window.setInterval(refreshSched, 15000);
 });
 onBeforeUnmount(() => {
+  gone = true;
   if (timer !== null) window.clearTimeout(timer);
   if (schedTimer !== null) window.clearInterval(schedTimer);
 });

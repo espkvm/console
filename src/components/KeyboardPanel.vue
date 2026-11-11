@@ -399,6 +399,8 @@ const shifted = computed(() => (mods.value & (HID_MOD_LSHIFT | HID_MOD_RSHIFT)) 
 function pressMod(bit: number) {
   if (locked.value & bit) {
     locked.value &= ~bit;
+    /* The target still holds it from the last key: let it go there too. */
+    props.control.keyboard(locked.value, []);
   } else if (armed.value & bit) {
     armed.value &= ~bit;
     locked.value |= bit;
@@ -450,6 +452,9 @@ function release() {
 onUnmounted(() => {
   release();
   mq?.removeEventListener("change", onMediaQuery);
+  /* A locked modifier or a media key must not stay down after the panel goes. */
+  if (locked.value) props.control.keyboard(0, []);
+  if (mediaHeld) props.control.consumer(0);
 });
 
 /* A media key is held while the finger is on it: the target repeats volume

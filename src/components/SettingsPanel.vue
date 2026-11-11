@@ -36,11 +36,15 @@ import {
   choiceLabel,
   findTelegramChats,
   loadNotifyStatus,
+  loadWifiScan,
+  startWifiScan,
+  testNotify,
   loadUploads,
   testUpload,
   type TelegramChats,
 } from "../state/device";
 import MaskTable from "./MaskTable.vue";
+import { networkRows, type NetworkRow } from "../state/wifiScan";
 import { changePassword, createViewToken, loadSession, logout, revokeViewToken } from "../state/auth";
 import {
   buildFile,
@@ -678,6 +682,18 @@ async function commit(key: string, value: number | string) {
   delete drafts[key];
 }
 
+/* A cleared or unreadable number is not a 0: put the saved value back. */
+function commitNumber(key: string, el: HTMLInputElement) {
+  const text = el.value.trim();
+  const n = Number(text);
+  if (text === "" || !Number.isFinite(n)) {
+    delete drafts[key];
+    el.value = String(Number(props.values[key] ?? 0));
+    return;
+  }
+  void commit(key, n);
+}
+
 async function write(key: string, value: number | string | boolean) {
   /* The EDID, the gamepad and USB legacy apply at boot and stand alone, so
    * the restart can be offered at once. Others that need one come in groups
@@ -770,6 +786,11 @@ function isMaskBlock(list: Setting[]): boolean {
 /* Which notification channels are set up, so the table can say which column
    would go nowhere yet. Asked when the section opens and after a save. */
 const notifyReady = ref<Record<string, boolean> | null>(null);
+/* One channel's test, from its column in the table. */
+async function testChannel(key: string): Promise<string> {
+  await testNotify(key);
+  return "on its way";
+}
 async function loadNotifyReady() {
   try {
     notifyReady.value = (await loadNotifyStatus()).ready ?? null;
@@ -784,6 +805,45 @@ watch(
   },
   { immediate: true },
 )
+/*
+ * Picking a Wi-Fi network from a scan. One scan serves all three name fields:
+ * the button sits under each, and a pick fills the field it was pressed under.
+ */
+const WIFI_SSID_KEYS = ["wifi_ssid", "wifi2_ssid", "wifi3_ssid"];
+const wifiScanFor = ref("");
+const wifiScanning = ref(false);
+const wifiNets = ref<NetworkRow[] | null>(null);
+const wifiScanError = ref("");
+async function scanWifi(key: string) {
+  wifiScanFor.value = key;
+  wifiScanning.value = true;
+  wifiScanError.value = "";
+  try {
+    await startWifiScan();
+    // A full-channel scan takes a few seconds on the co-processor.
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const st = await loadWifiScan();
+      if (st.status === "scanning") continue;
+      if (st.status === "error") {
+        wifiNets.value = null;
+        wifiScanError.value = st.error || "The scan failed.";
+      } else {
+        wifiNets.value = networkRows(st.aps ?? []);
+      }
+      return;
+    }
+    wifiScanError.value = "The scan took too long. Try again.";
+  } catch (err) {
+    wifiScanError.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    wifiScanning.value = false;
+  }
+}
+async function pickWifi(key: string, ssid: string) {
+  await write(key, ssid);
+  wifiNets.value = null;
+}
 const tgFinding = ref(false);
 async function findChats() {
   tgFinding.value = true;
@@ -935,12 +995,16 @@ async function onSettingsFile(e: Event) {
   }
   if (!confirm(`Apply this file?\n\n${describePlan(plan, false).join("\n\n")}`)) return;
   busy.value = true;
+  /* The file's values are Default's: written with Default active, or a
+     profile's own keys would take them. */
+  const was = list?.active ?? 0;
+  let switched = false;
   try {
-    /* The file's values are Default's: written with Default active, or a
-       profile's own keys would take them. */
-    const was = list?.active ?? 0;
     if (Object.keys(plan.apply).length) {
-      if (was !== 0) await selectProfile(0);
+      if (was !== 0) {
+        await selectProfile(0);
+        switched = true;
+      }
       await saveSettings(plan.apply);
     }
     for (const p of plan.profiles) {
@@ -948,7 +1012,10 @@ async function onSettingsFile(e: Event) {
       if (same) await updateProfile(same.id, { match: p.match, set: p.set });
       else await createProfile("empty", p.name, p.match, p.set, false);
     }
-    if (was !== 0 && Object.keys(plan.apply).length) await selectProfile(was);
+    if (switched) {
+      switched = false;
+      await selectProfile(was);
+    }
     emit("values", await loadValues());
     importReport.value = describePlan(plan, true);
     toast.info("Settings loaded from the file");
@@ -956,6 +1023,8 @@ async function onSettingsFile(e: Event) {
     importReport.value = [];
     toast.error(err instanceof Error ? err.message : String(err));
   } finally {
+    /* A write that failed half way must not leave the device on Default. */
+    if (switched) await selectProfile(was).catch(() => undefined);
     busy.value = false;
   }
 }
@@ -1217,6 +1286,7 @@ async function doRevertCert() {
               :ready="notifyReady"
               :disabled="busy || !!sectionBlocked"
               :save="write"
+              :test="block.rows.some((r) => r.key.startsWith('notify_')) ? testChannel : undefined"
             />
             <div
               v-for="s in (block.blocked && !openedBlocked.has(block.name)) || isMaskBlock(block.rows) ? [] : block.rows"
@@ -1360,12 +1430,7 @@ async function doRevertCert() {
                     :value="shown(s.key, String(Number(values[s.key] ?? 0)))"
                     :disabled="!!sectionBlocked || !!blockedFor(s)"
                     @input="drafts[s.key] = ($event.target as HTMLInputElement).value"
-                    @change="
-                      commit(
-                        s.key,
-                        Number(($event.target as HTMLInputElement).value),
-                      )
-                    "
+                    @change="commitNumber(s.key, $event.target as HTMLInputElement)"
                     @wheel="guardWheel"
                   />
                   <span class="num-unit">{{ s.unit }}</span>
@@ -1481,6 +1546,38 @@ async function doRevertCert() {
                 </button>
                 {{ hapticResult }}
               </p>
+
+              <div v-if="WIFI_SSID_KEYS.includes(s.key) && !sectionBlocked && !blockedFor(s)" class="tg-find">
+                <button
+                  type="button"
+                  class="btn btn-sm"
+                  :disabled="busy || wifiScanning"
+                  @click="scanWifi(s.key)"
+                >
+                  {{ wifiScanning && wifiScanFor === s.key ? "Scanning..." : "Find networks" }}
+                </button>
+                <template v-if="wifiScanFor === s.key && !wifiScanning">
+                  <p v-if="wifiScanError" class="setting-note setting-note-blocked">
+                    {{ wifiScanError }}
+                  </p>
+                  <p v-else-if="wifiNets && !wifiNets.length" class="setting-note">
+                    No networks in sight.
+                  </p>
+                  <ul v-else-if="wifiNets" class="tg-chats">
+                    <li v-for="n in wifiNets" :key="n.ssid">
+                      <button
+                        type="button"
+                        :class="['btn', 'btn-sm', { 'btn-on': String(values[s.key] ?? '') === n.ssid }]"
+                        :disabled="busy"
+                        @click="pickWifi(s.key, n.ssid)"
+                      >
+                        {{ n.ssid }}
+                      </button>
+                      <span class="muted">{{ n.signal }} &middot; {{ n.rssi }} dBm{{ n.open ? " · open" : "" }}</span>
+                    </li>
+                  </ul>
+                </template>
+              </div>
 
               <div v-if="s.key === 'up_dav_pass' && values.up_dav_url" class="tg-find">
                 <button

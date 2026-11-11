@@ -3,9 +3,11 @@
  * Mask settings drawn as one table: a row per bit, a column per setting. The
  * notifications use it for what goes where - a row per kind of event, a column
  * per channel - but nothing here knows that: the rows are the settings'
- * choices, and the columns their titles.
+ * choices, and the columns their titles. A parent that can try a column out
+ * (send a test to that channel) passes test(), and each ready column gets a
+ * button for it.
  */
-import { computed, nextTick } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { choiceLabel, type Setting } from "../state/device";
 
 const props = defineProps<{
@@ -16,7 +18,23 @@ const props = defineProps<{
   disabled?: boolean;
   /** Saves one value; resolves once the parent has the result. */
   save: (key: string, value: number) => Promise<void>;
+  /** Tries one column out; resolves to a short word for under the button. */
+  test?: (key: string) => Promise<string>;
 }>();
+
+const testing = ref("");
+const tested = ref<Record<string, string>>({});
+async function runTest(key: string) {
+  if (!props.test) return;
+  testing.value = key;
+  try {
+    tested.value = { ...tested.value, [key]: await props.test(key) };
+  } catch (e) {
+    tested.value = { ...tested.value, [key]: (e as Error).message };
+  } finally {
+    testing.value = "";
+  }
+}
 
 /* The rows come from the first column: the columns of one table share them. */
 const rows = computed(() => (props.columns[0]?.choices ?? []).map((_, i) => i));
@@ -65,6 +83,22 @@ async function flip(key: string, bit: number, e: Event) {
             />
           </td>
         </tr>
+        <tr v-if="test" class="mask-table-test">
+          <th scope="row"><span class="sr-only">Try it</span></th>
+          <td v-for="c in columns" :key="c.key">
+            <button
+              v-if="ready && ready[c.key]"
+              type="button"
+              class="btn btn-sm"
+              :disabled="disabled || !!testing"
+              :aria-label="`Send a test to ${c.title}`"
+              @click="runTest(c.key)"
+            >
+              {{ testing === c.key ? "Sending..." : "Test" }}
+            </button>
+            <span v-if="tested[c.key]" class="mask-table-off">{{ tested[c.key] }}</span>
+          </td>
+        </tr>
       </tbody>
     </table>
     <p v-for="c in columns.filter((x) => x.help)" :key="c.key" class="setting-note">
@@ -103,6 +137,10 @@ async function flip(key: string, bit: number, e: Event) {
 .mask-table input {
   width: 18px;
   height: 18px;
+}
+.mask-table-test td,
+.mask-table-test th {
+  border-bottom: none;
 }
 .mask-table-off {
   display: block;

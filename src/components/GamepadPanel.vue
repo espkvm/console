@@ -334,7 +334,14 @@ const dirHeld = (dir: string) => {
 };
 
 /* The computer keyboard, while this window has focus. */
+/* By the physical key: e.key changes with Shift ("1" -> "!") and with the
+   layout, and a keyup that names another key would leave the button held. */
 function keyName(e: KeyboardEvent) {
+  if (/^Key[A-Z]$/.test(e.code)) return e.code.slice(3).toLowerCase();
+  if (/^Digit[0-9]$/.test(e.code)) return e.code.slice(5);
+  if (e.code === "Minus") return "-";
+  if (e.code === "Equal") return "=";
+  if (e.code === "NumpadAdd") return "+";
   return e.key.length === 1 ? e.key.toLowerCase() : e.key;
 }
 function onKey(e: KeyboardEvent, down: boolean) {

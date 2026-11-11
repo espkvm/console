@@ -43,6 +43,35 @@ export interface SettingsFile {
   /** Device profiles besides Default, each with only its own values. Optional:
       older files have none, and an older console ignores it. */
   profiles?: FileProfile[];
+  /** The rows each mask setting had when this was written, by choice name, so
+      an import can tell a box cleared on purpose from a row that did not exist
+      yet. Optional: files from before 0.82.0 have none (see MASK_ROWS_BEFORE). */
+  rows?: Record<string, string[]>;
+}
+
+/* The rows the notification masks had before files said so: the table came in
+   0.81.0 with these six. */
+const NOTIFY_ROWS_081 = ["watch", "flat", "area", "clip", "netlog", "tskey"];
+const MASK_ROWS_BEFORE: Record<string, string[]> = {
+  notify_tg_ev: NOTIFY_ROWS_081,
+  notify_hook_ev: NOTIFY_ROWS_081,
+  notify_push_ev: NOTIFY_ROWS_081,
+};
+
+/**
+ * A mask from a file written before some of its rows existed: a channel that
+ * took anything takes the new rows as a fresh device would (its default), and
+ * one with every box cleared stays cleared. The firmware does the same once for
+ * a table it had saved itself.
+ */
+function withNewRows(setting: Setting, value: number, known: string[] | undefined): number {
+  if (!setting.mask || !setting.choices || !known || value === 0) return value;
+  const def = Number(setting.default) | 0;
+  let out = value;
+  setting.choices.forEach((name, bit) => {
+    if (!known.includes(name)) out |= def & (1 << bit);
+  });
+  return out;
 }
 
 export interface FileProfile {
@@ -79,6 +108,9 @@ export function buildFile(
     board: meta.board,
     note: NOTE,
     values: out,
+    rows: Object.fromEntries(
+      schema.filter((s) => s.mask && s.choices && known.has(s.key)).map((s) => [s.key, [...(s.choices ?? [])]]),
+    ),
     ...(meta.profiles?.some((p) => p.id !== 0)
       ? {
           profiles: meta.profiles
@@ -164,12 +196,14 @@ export function planImport(
     }
     plan.profiles.push({ name: p.name.slice(0, 31), match: p.match, set });
   }
-  for (const [key, value] of Object.entries(file.values)) {
+  const rows = file.rows ?? MASK_ROWS_BEFORE;
+  for (const [key, raw] of Object.entries(file.values)) {
     const setting = byKey.get(key);
     if (!setting || setting.secret) {
       plan.unknown.push(key);
       continue;
     }
+    const value = typeof raw === "number" ? withNewRows(setting, raw, rows[key]) : raw;
     if (!opts.withIdentity && IDENTITY_KEYS.includes(key)) {
       plan.identity.push(key);
       continue;

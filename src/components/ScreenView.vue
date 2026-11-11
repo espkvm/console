@@ -978,6 +978,10 @@ function startStream() {
     clearTimeout(wsRetry);
     wsRetry = null;
   }
+  /* A retry timer from before the pause must not reopen the stream behind it. */
+  if (props.paused) {
+    return;
+  }
   stream?.stop();
   /* Whatever the last attempt could not play, this one has not failed yet. */
   codecError.value = null;

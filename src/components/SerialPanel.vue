@@ -86,10 +86,14 @@ async function readInfo() {
 function send(text: string) {
   if (ws?.readyState !== WebSocket.OPEN || !text) return;
   const bytes = new TextEncoder().encode(text);
-  const msg = new Uint8Array(bytes.length + 1);
-  msg[0] = INPUT;
-  msg.set(bytes, 1);
-  ws.send(msg);
+  /* The device takes up to 4 KB a frame; a long paste goes in pieces. */
+  for (let at = 0; at < bytes.length; at += 2048) {
+    const part = bytes.subarray(at, at + 2048);
+    const msg = new Uint8Array(part.length + 1);
+    msg[0] = INPUT;
+    msg.set(part, 1);
+    ws.send(msg);
+  }
 }
 
 function onKeydown(e: KeyboardEvent) {

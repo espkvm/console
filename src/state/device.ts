@@ -696,9 +696,42 @@ export async function findTelegramChats(): Promise<void> {
   if (!res.ok) throw new Error(`finding chats failed (${res.status})`);
 }
 
-/** Queue a test notification on the device. */
-export async function testNotify(): Promise<void> {
-  const res = await fetch("/api/v1/notify/test", { method: "POST", headers: CONSOLE_HEADER });
+export interface WifiNetwork {
+  ssid: string;
+  /** dBm. */
+  rssi: number;
+  /** wifi_auth_mode_t: 0 = open. */
+  auth: number;
+}
+
+export interface WifiScan {
+  status: "idle" | "scanning" | "done" | "error";
+  aps: WifiNetwork[];
+  /** Why the scan failed; missing on older firmware. */
+  error?: string;
+}
+
+/** Start a Wi-Fi scan on the device; the results come from loadWifiScan(). */
+export async function startWifiScan(): Promise<void> {
+  const res = await fetch("/api/v1/wifi/scan", { method: "POST", headers: CONSOLE_HEADER });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(await errorFromResponse(res, `scan failed (${res.status})`));
+}
+
+export async function loadWifiScan(): Promise<WifiScan> {
+  return getJson<WifiScan>("/api/v1/wifi/scan");
+}
+
+/**
+ * Queue a test notification on the device: to every channel set up, or to the
+ * one whose routing setting is @p channel ("notify_ntfy_ev").
+ */
+export async function testNotify(channel?: string): Promise<void> {
+  const res = await fetch("/api/v1/notify/test", {
+    method: "POST",
+    headers: channel ? { ...CONSOLE_HEADER, "Content-Type": "application/json" } : CONSOLE_HEADER,
+    body: channel ? JSON.stringify({ channel }) : undefined,
+  });
   if (res.status === 401) throw new Unauthorized();
   if (!res.ok) throw new Error(`test failed (${res.status})`);
 }
@@ -1260,7 +1293,7 @@ export async function listReleases(boardId: string | undefined): Promise<Publish
     .map((r) => ({
       version: r.tag_name as string,
       published: r.published_at,
-      notes: r.html_url,
+      notes: webLink(r.html_url),
       /* Named exactly as the release workflow builds it, so an id this device
          reports and a file that exists are the same test. */
       hasImage: boardId
@@ -1338,8 +1371,19 @@ export async function fetchRelease(manifestUrl: string): Promise<FirmwareRelease
     url: new URL(body.file, manifestUrl).href,
     size: body.size,
     released: body.released,
-    notes: body.notes,
+    notes: webLink(body.notes),
   };
+}
+
+/** @p url when it is an http(s) link; a manifest is not trusted to give anything else. */
+export function webLink(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const p = new URL(url).protocol;
+    return p === "https:" || p === "http:" ? url : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

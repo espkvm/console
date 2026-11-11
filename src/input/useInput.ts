@@ -379,6 +379,9 @@ export function useInput(opts: InputOptions) {
       }
       const usage = usageForCode(e.code);
       if (usage) held.delete(usage);
+      /* macOS sends no keyup for a key pressed while Cmd is down (Cmd+C, Cmd+Tab),
+         so letting go of Cmd lets go of those too, or the target repeats them. */
+      if (e.code === "MetaLeft" || e.code === "MetaRight") held.clear();
       send(e);
     };
 

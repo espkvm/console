@@ -70,6 +70,11 @@ async function poll() {
     const atBottom = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 40;
     const parts = (partial + text).split("\n");
     partial = parts.pop() ?? "";
+    /* A source that never sends a newline (a progress bar on \r) would grow it for ever. */
+    if (partial.length > 8192) {
+      parts.push(partial);
+      partial = "";
+    }
     const add = parts.map((t) => ({ text: t, level: levelOf(t) }));
     const all = lines.value.concat(add);
     lines.value = all.length > MAX_LINES ? all.slice(all.length - MAX_LINES) : all;

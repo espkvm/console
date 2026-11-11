@@ -867,6 +867,37 @@
       }
     },
     {
+      "key": "notify_ntfy_url",
+      "section": "notify",
+      "group": "Where",
+      "title": "ntfy topic",
+      "help": "The topic to post to, such as https://ntfy.sh/a-long-name-nobody-guesses, or a topic on your own ntfy server. Subscribe to the same topic in the ntfy app. Anyone who knows a topic on ntfy.sh can read it, so pick a long name. Optional.",
+      "type": "string",
+      "maxLength": 200,
+      "default": "",
+      "requires": "notify",
+      "showIf": {
+        "key": "notify_enable",
+        "eq": 1
+      }
+    },
+    {
+      "key": "notify_ntfy_key",
+      "section": "notify",
+      "group": "Where",
+      "title": "ntfy access token",
+      "help": "For a topic that needs a login: an access token (tk_...), or user:password. Empty if it needs none.",
+      "type": "string",
+      "maxLength": 100,
+      "default": "",
+      "secret": true,
+      "requires": "notify",
+      "showIf": {
+        "key": "notify_enable",
+        "eq": 1
+      }
+    },
+    {
       "key": "notify_tg_ev",
       "section": "notify",
       "group": "What goes where",
@@ -874,14 +905,15 @@
       "help": "A dashcam clip under 50 MB plays in the chat. A bigger one is named.",
       "type": "int",
       "min": 0,
-      "max": 63,
+      "max": 127,
       "choices": [
         "watch",
         "flat",
         "area",
         "clip",
         "netlog",
-        "tskey"
+        "tskey",
+        "release"
       ],
       "labels": [
         "A watched phrase on the screen",
@@ -889,10 +921,11 @@
         "Screen area",
         "Dashcam clip",
         "Target log alert",
-        "Tailscale key running out"
+        "Tailscale key running out",
+        "New firmware"
       ],
       "mask": true,
-      "default": 61,
+      "default": 125,
       "requires": "notify",
       "showIf": {
         "key": "notify_enable",
@@ -907,14 +940,15 @@
       "help": "A dashcam clip is named, with its file on the card.",
       "type": "int",
       "min": 0,
-      "max": 63,
+      "max": 127,
       "choices": [
         "watch",
         "flat",
         "area",
         "clip",
         "netlog",
-        "tskey"
+        "tskey",
+        "release"
       ],
       "labels": [
         "A watched phrase on the screen",
@@ -922,10 +956,11 @@
         "Screen area",
         "Dashcam clip",
         "Target log alert",
-        "Tailscale key running out"
+        "Tailscale key running out",
+        "New firmware"
       ],
       "mask": true,
-      "default": 61,
+      "default": 125,
       "requires": "notify",
       "showIf": {
         "key": "notify_enable",
@@ -940,14 +975,15 @@
       "help": "Text only: a push message has no room for a picture.",
       "type": "int",
       "min": 0,
-      "max": 63,
+      "max": 127,
       "choices": [
         "watch",
         "flat",
         "area",
         "clip",
         "netlog",
-        "tskey"
+        "tskey",
+        "release"
       ],
       "labels": [
         "A watched phrase on the screen",
@@ -955,10 +991,46 @@
         "Screen area",
         "Dashcam clip",
         "Target log alert",
-        "Tailscale key running out"
+        "Tailscale key running out",
+        "New firmware"
       ],
       "mask": true,
-      "default": 61,
+      "default": 125,
+      "requires": "notify",
+      "showIf": {
+        "key": "notify_enable",
+        "eq": 1
+      }
+    },
+    {
+      "key": "notify_ntfy_ev",
+      "section": "notify",
+      "group": "What goes where",
+      "title": "ntfy",
+      "help": "The screenshot goes as an attachment where the server takes them, else the text alone. A dashcam clip is named, with its file on the card.",
+      "type": "int",
+      "min": 0,
+      "max": 127,
+      "choices": [
+        "watch",
+        "flat",
+        "area",
+        "clip",
+        "netlog",
+        "tskey",
+        "release"
+      ],
+      "labels": [
+        "A watched phrase on the screen",
+        "Blank screen",
+        "Screen area",
+        "Dashcam clip",
+        "Target log alert",
+        "Tailscale key running out",
+        "New firmware"
+      ],
+      "mask": true,
+      "default": 125,
       "requires": "notify",
       "showIf": {
         "key": "notify_enable",
@@ -1877,6 +1949,72 @@
       }
     },
     {
+      "key": "wifi2_ssid",
+      "section": "network",
+      "group": "WiFi",
+      "title": "Second WiFi network",
+      "help": "Another network the device knows, such as at a second site. With more than one, it joins the strongest one in range, and moves on when that one goes. Optional.",
+      "type": "string",
+      "maxLength": 32,
+      "default": "",
+      "requires": "wifi",
+      "reboot": true,
+      "showIf": {
+        "key": "net_mode",
+        "ne": 0
+      }
+    },
+    {
+      "key": "wifi2_pass",
+      "section": "network",
+      "group": "WiFi",
+      "title": "Second WiFi password",
+      "help": "Left blank for an open network. Stored write-only.",
+      "type": "string",
+      "maxLength": 63,
+      "default": "",
+      "requires": "wifi",
+      "reboot": true,
+      "secret": true,
+      "showIf": {
+        "key": "net_mode",
+        "ne": 0
+      }
+    },
+    {
+      "key": "wifi3_ssid",
+      "section": "network",
+      "group": "WiFi",
+      "title": "Third WiFi network",
+      "help": "Another network the device knows, such as at a second site. With more than one, it joins the strongest one in range, and moves on when that one goes. Optional.",
+      "type": "string",
+      "maxLength": 32,
+      "default": "",
+      "requires": "wifi",
+      "reboot": true,
+      "showIf": {
+        "key": "net_mode",
+        "ne": 0
+      }
+    },
+    {
+      "key": "wifi3_pass",
+      "section": "network",
+      "group": "WiFi",
+      "title": "Third WiFi password",
+      "help": "Left blank for an open network. Stored write-only.",
+      "type": "string",
+      "maxLength": 63,
+      "default": "",
+      "requires": "wifi",
+      "reboot": true,
+      "secret": true,
+      "showIf": {
+        "key": "net_mode",
+        "ne": 0
+      }
+    },
+    {
       "key": "ap_open",
       "section": "network",
       "group": "WiFi",
@@ -2395,7 +2533,7 @@
       "section": "system",
       "group": "Updates",
       "title": "Offer firmware updates",
-      "help": "The browser asks the address below whether a newer build exists and offers to install it. With the project's own address it also tells check.espkvm.io, at most once a day, this device's random id, its board, its version and the chip revision, so the author can count the devices in use. The id is not taken from the hardware; a settings reset makes a new one. The device never reaches out on its own - a KVM that phones home is not what belongs in an isolated network.",
+      "help": "The browser asks the address below whether a newer build exists and offers to install it. With the project's own address it also tells check.espkvm.io, at most once a day, this device's random id, its board, its version and the chip revision, so the author can count the devices in use. The id is not taken from the hardware; erasing the flash makes a new one. The device itself asks only when New firmware is ticked for a channel under Notifications: once a day, and it sends nothing about itself when it does.",
       "type": "bool",
       "default": 0,
       "requires": "ota"

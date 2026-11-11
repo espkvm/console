@@ -791,13 +791,26 @@ async function route(
           headers: { "Content-Type": "text/plain", "X-Log-Pos": String(since + body.length) },
         });
       }
+      case "/api/v1/wifi/scan":
+        return json({ status: "done", aps: [
+          { ssid: "Homelab", rssi: -47, auth: 3 },
+          { ssid: "Homelab", rssi: -71, auth: 3 },
+          { ssid: "Office-5G", rssi: -63, auth: 4 },
+          { ssid: "", rssi: -66, auth: 3 },
+          { ssid: "Guest", rssi: -80, auth: 0 },
+        ] });
       case "/api/v1/notify/status":
         return json({
           enabled: settings.notify_enable === true || settings.notify_enable === 1,
           lastResult: "ok",
           lastAt: "2026-09-13 10:00:00",
-          /* The demo has a bot and no webhook, so one column says so. */
-          ready: { notify_tg_ev: true, notify_hook_ev: false, notify_push_ev: true },
+          /* The demo has a bot; a webhook or an ntfy topic once one is typed in. */
+          ready: {
+            notify_tg_ev: true,
+            notify_hook_ev: Boolean(settings.notify_url),
+            notify_push_ev: true,
+            notify_ntfy_ev: Boolean(settings.notify_ntfy_url),
+          },
           telegram: tgFind,
         });
       case "/api/v1/schedules/status": {
@@ -928,6 +941,8 @@ async function route(
         return json({ ok: true });
       case "/api/v1/notify/test":
         return json({ status: "queued" }, 202);
+      case "/api/v1/wifi/scan":
+        return json({ status: "scanning" });
       case "/api/v1/notify/chats":
         tgFind = { state: "ok", error: "", bot: "espkvm_demo_bot", chats: [
           { id: "184467305", type: "private", name: "Alex" },

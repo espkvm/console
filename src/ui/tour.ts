@@ -237,6 +237,14 @@ export const TOUR_FEATURES: TourFeature[] = [
     },
   },
   {
+    icon: "wifi",
+    title: "Wi-Fi",
+    line: "Up to three networks to join, the strongest one in sight first. Find networks lists what the device can see.",
+    caps: ["wifi"],
+    since: "0.82.0",
+    actions: [{ label: "Wi-Fi", section: "network", group: "WiFi" }],
+  },
+  {
     icon: "mqtt",
     title: "Home Assistant",
     line: "The device and the target's state over MQTT, found by Home Assistant by itself.",
@@ -247,10 +255,13 @@ export const TOUR_FEATURES: TourFeature[] = [
   {
     icon: "info",
     title: "Notifications",
-    line: "A message to Telegram, a webhook or this browser when a phrase shows up on the screen or the screen goes blank.",
+    line: "A message to Telegram, ntfy, a webhook or this browser when a phrase shows up on the screen, the screen goes blank or a new release is out.",
     caps: ["notify"],
-    since: "0.77.0",
-    actions: [{ label: "Notifications", section: "notify" }],
+    since: "0.82.0",
+    actions: [
+      { label: "Notifications", section: "notify" },
+      { label: "What goes where", section: "notify", group: "What goes where" },
+    ],
     docs: DOCS + "NOTIFICATIONS.md",
     state: (c) => settingOn(c, "notify_enable"),
   },

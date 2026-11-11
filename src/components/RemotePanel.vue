@@ -52,13 +52,17 @@ async function refresh() {
   }
 }
 
+/* Closed while the first reading was on its way: no timer may start after. */
+let gone = false;
 onMounted(async () => {
   await nextTick();
   popup.value?.focus();
   await refresh();
+  if (gone) return;
   timer = window.setInterval(() => void refresh(), 2000);
 });
 onUnmounted(() => {
+  gone = true;
   if (timer !== null) clearInterval(timer);
 });
 
