@@ -255,8 +255,8 @@ export interface SystemInfo {
   chipRev?: number;
   /** The gamepad the USB device carries (Settings -> Input -> Gamepad, from boot): "" none. */
   usbPad?: "" | "switch" | "xinput" | "xbox";
-  /** espkvm-agent: the USB serial port is up in agent mode, and an agent said hello on it. */
-  agent?: { port: boolean; connected: boolean };
+  /** ESP-KVM Tools: the USB serial port is up in tools mode, and the program said hello on it. */
+  tools?: { port: boolean; connected: boolean };
   /** A battery-backed clock chip answered on the I2C bus. */
   rtc?: boolean;
   /** Which one: "DS3231", "PCF8563", "PCF85063", "PCF8523". */
@@ -300,6 +300,8 @@ export interface SystemInfo {
     apClients?: number;
     /** The name the device answers to; `<hostname>.local` over mDNS. */
     hostname?: string;
+    /** Where another device holds that name: what this one got instead, "" if its own. */
+    nameTaken?: { lan: string; tailnet: string };
     /** The active link's IPv4 address, "" on a network without one. */
     ip4?: string;
     /** In "auto", the standby WiFi station's address while Ethernet carries traffic. */
@@ -782,9 +784,9 @@ export interface CecStatus {
   log: CecLogEntry[];
 }
 
-/** espkvm-agent on the target, as the device sees it. */
-export interface AgentStatus {
-  mode: "off" | "console" | "agent";
+/** ESP-KVM Tools on the target, as the device sees it. */
+export interface ToolsStatus {
+  mode: "off" | "console" | "tools";
   port: boolean;
   connected: boolean;
   version?: string;
@@ -792,8 +794,8 @@ export interface AgentStatus {
   ops?: string[];
 }
 
-/** What the agent says about its machine. */
-export interface AgentMachine {
+/** What ESP-KVM Tools says about its machine. */
+export interface ToolsMachine {
   hostname: string;
   os: string;
   osName?: string;
@@ -804,10 +806,10 @@ export interface AgentMachine {
 }
 
 /**
- * An agent's refusal, with its code: not_allowed (switched off on the
+ * A refusal from ESP-KVM Tools, with its code: not_allowed (switched off on the
  * machine), no_desktop, locked, bad_params, failed.
  */
-export class AgentError extends Error {
+export class ToolsError extends Error {
   constructor(
     message: string,
     readonly code: string,
@@ -816,8 +818,8 @@ export class AgentError extends Error {
   }
 }
 
-async function agentFetch<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api/v1/agent${path}`, {
+async function toolsFetch<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`/api/v1/tools${path}`, {
     method: body === undefined ? "GET" : "POST",
     cache: "no-store",
     headers: body === undefined ? {} : { "Content-Type": "application/json", ...CONSOLE_HEADER },
@@ -825,15 +827,15 @@ async function agentFetch<T>(path: string, body?: unknown): Promise<T> {
   });
   if (res.status === 401) throw new Unauthorized();
   const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-  if (!res.ok) throw new AgentError(data.error ?? `the agent request failed (${res.status})`, data.code ?? "failed");
+  if (!res.ok) throw new ToolsError(data.error ?? `the ESP-KVM Tools request failed (${res.status})`, data.code ?? "failed");
   return data as T;
 }
 
-export const getAgent = () => agentFetch<AgentStatus>("");
-export const getAgentMachine = () => agentFetch<AgentMachine>("/info");
-export const getAgentClipboard = async () => (await agentFetch<{ text: string }>("/clipboard")).text;
-export const setAgentClipboard = async (text: string) => void (await agentFetch("/clipboard", { text }));
-export const agentPower = async (action: "shutdown" | "reboot") => void (await agentFetch("/power", { action }));
+export const getTools = () => toolsFetch<ToolsStatus>("");
+export const getToolsMachine = () => toolsFetch<ToolsMachine>("/info");
+export const getToolsClipboard = async () => (await toolsFetch<{ text: string }>("/clipboard")).text;
+export const setToolsClipboard = async (text: string) => void (await toolsFetch("/clipboard", { text }));
+export const toolsPower = async (action: "shutdown" | "reboot") => void (await toolsFetch("/power", { action }));
 
 export async function getCec(): Promise<CecStatus> {
   return getJson<CecStatus>("/api/v1/cec");

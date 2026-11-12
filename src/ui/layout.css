@@ -147,7 +147,7 @@
   color: var(--text);
 }
 
-/* The agent's button before the agent has said hello. */
+/* The ESP-KVM Tools button before the program has said hello. */
 .rail-btn-idle {
   opacity: 0.55;
 }

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /*
- * espkvm-agent on the target, as a small floating window: what the machine
- * is, its clipboard both ways, and a clean shutdown or restart. The agent
- * talks over the USB serial port the device gives the target in agent mode.
+ * ESP-KVM Tools on the target, as a small floating window: what the machine
+ * is, its clipboard both ways, and a clean shutdown or restart. The program
+ * talks over the USB serial port the device gives the target in tools mode.
  *
  * Reading the clipboard and power are switched on at the machine, not here,
  * so a refusal says what to switch on there.
@@ -10,14 +10,14 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 
 import {
-  AgentError,
-  agentPower,
-  getAgent,
-  getAgentClipboard,
-  getAgentMachine,
-  setAgentClipboard,
-  type AgentMachine,
-  type AgentStatus,
+  ToolsError,
+  toolsPower,
+  getTools,
+  getToolsClipboard,
+  getToolsMachine,
+  setToolsClipboard,
+  type ToolsMachine,
+  type ToolsStatus,
 } from "../state/device";
 import { toast } from "../state/toasts";
 import { useFloating } from "../ui/floating";
@@ -28,8 +28,8 @@ const emit = defineEmits<{ close: [] }>();
 /* The device takes at most 64 KB of clipboard text. */
 const MAX_TEXT = 64 * 1024;
 
-const status = ref<AgentStatus | null>(null);
-const machine = ref<AgentMachine | null>(null);
+const status = ref<ToolsStatus | null>(null);
+const machine = ref<ToolsMachine | null>(null);
 const text = ref("");
 const busy = ref(false);
 const clipNote = ref("");
@@ -41,7 +41,7 @@ const OS_NAMES: Record<string, string> = { linux: "Linux", windows: "Windows", d
 
 async function refresh() {
   try {
-    const st = await getAgent();
+    const st = await getTools();
     const came = st.connected && !status.value?.connected;
     status.value = st;
     if (came) await readMachine();
@@ -53,7 +53,7 @@ async function refresh() {
 
 async function readMachine() {
   try {
-    machine.value = await getAgentMachine();
+    machine.value = await getToolsMachine();
   } catch (err) {
     toast.error(err instanceof Error ? err.message : String(err));
   }
@@ -74,7 +74,7 @@ onUnmounted(() => {
 });
 
 const { pos, dragStart, dragMove, dragEnd } = useFloating({
-  key: "espkvm.agent",
+  key: "espkvm.tools",
   el: popup,
   initial: () => ({
     x: Math.max(8, window.innerWidth - 300 - 24),
@@ -99,16 +99,16 @@ const summary = computed(() => {
 
 /* What to do about a refusal, in words for the person at the console. */
 function why(err: unknown, op: "read" | "write" | "power"): string {
-  if (!(err instanceof AgentError)) return err instanceof Error ? err.message : String(err);
+  if (!(err instanceof ToolsError)) return err instanceof Error ? err.message : String(err);
   switch (err.code) {
     case "not_allowed":
       return op === "power"
-        ? "Power is off on the machine. Install the agent there with --allow-power."
-        : "Reading the clipboard is off on the machine. Install the agent there with --allow-clipboard-read.";
+        ? "Power is off on the machine. Install ESP-KVM Tools there with --allow-power."
+        : "Reading the clipboard is off on the machine. Install ESP-KVM Tools there with --allow-clipboard-read.";
     case "locked":
       return "The machine's screen is locked, so its clipboard is not read.";
     case "no_desktop":
-      return "The agent runs as a system service, which has no clipboard. Install it with --desktop.";
+      return "ESP-KVM Tools runs as a system service, which has no clipboard. Install it with --desktop.";
     default:
       return err.message;
   }
@@ -118,7 +118,7 @@ async function getClip() {
   busy.value = true;
   clipNote.value = "";
   try {
-    text.value = await getAgentClipboard();
+    text.value = await getToolsClipboard();
     if (!text.value) clipNote.value = "The clipboard is empty.";
   } catch (err) {
     clipNote.value = why(err, "read");
@@ -131,7 +131,7 @@ async function sendClip() {
   busy.value = true;
   clipNote.value = "";
   try {
-    await setAgentClipboard(text.value);
+    await setToolsClipboard(text.value);
     toast.info("On the machine's clipboard");
   } catch (err) {
     clipNote.value = why(err, "write");
@@ -145,7 +145,7 @@ async function power(action: "shutdown" | "reboot") {
   if (!confirm(action === "reboot" ? `Restart ${name}?` : `Shut ${name} down?`)) return;
   powerNote.value = "";
   try {
-    await agentPower(action);
+    await toolsPower(action);
     toast.info(action === "reboot" ? `${name} is restarting` : `${name} is shutting down`);
   } catch (err) {
     powerNote.value = why(err, "power");
@@ -162,7 +162,7 @@ const tooLong = computed(() => new TextEncoder().encode(text.value).length > MAX
       class="ag-menu"
       :style="{ left: pos.x + 'px', top: pos.y + 'px' }"
       tabindex="-1"
-      aria-label="Agent"
+      aria-label="ESP-KVM Tools"
     >
       <div
         class="ag-head"
@@ -171,14 +171,14 @@ const tooLong = computed(() => new TextEncoder().encode(text.value).length > MAX
         @pointerup="dragEnd"
         @pointercancel="dragEnd"
       >
-        <h3>Agent</h3>
+        <h3>ESP-KVM Tools</h3>
         <span v-if="status" :class="['pill', status.connected ? 'pill-on' : 'pill-off']">
           {{ status.connected ? `${OS_NAMES[status.os ?? ""] ?? status.os} ${status.version}` : "waiting" }}
         </span>
         <button
           type="button"
           class="btn btn-sm btn-icon btn-quiet ag-close"
-          aria-label="Close the agent window"
+          aria-label="Close the ESP-KVM Tools window"
           title="Close"
           @click="emit('close')"
         >
@@ -189,8 +189,8 @@ const tooLong = computed(() => new TextEncoder().encode(text.value).length > MAX
       <p v-if="!status" class="ag-note">Asking the device...</p>
       <template v-else-if="!status.connected">
         <p class="ag-note">
-          No agent on the machine yet. Install
-          <a href="https://github.com/espkvm/agent" target="_blank" rel="noopener">espkvm-agent</a>
+          ESP-KVM Tools is not on the machine yet. Install
+          <a href="https://github.com/espkvm/tools" target="_blank" rel="noopener">ESP-KVM Tools</a>
           there. It finds this USB port by itself.
         </p>
       </template>

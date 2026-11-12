@@ -125,7 +125,7 @@
   "ui_side": 0,
   "disp_enable": false,
   "disp_type": 0,
-  "disp_picture": false,
+  "disp_pages": 7,
   "disp_rotate_180": false,
   "disp_sclk": 20,
   "disp_mosi": 21,

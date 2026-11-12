@@ -47,7 +47,7 @@ import RemotePanel from "./components/RemotePanel.vue";
 import GamepadPanel from "./components/GamepadPanel.vue";
 import PointerStick from "./components/PointerStick.vue";
 import SerialPanel from "./components/SerialPanel.vue";
-import AgentPanel from "./components/AgentPanel.vue";
+import ToolsPanel from "./components/ToolsPanel.vue";
 import LogPanel from "./components/LogPanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import { pictureOf } from "./ui/picture";
@@ -825,16 +825,16 @@ watch(serialOpen, (open) => {
   }
 });
 const serialReady = computed(() => Boolean(caps.value.serial?.available));
-/* espkvm-agent on the target, offered once the device has the agent port up. */
-const agentOpen = ref(localStorage.getItem("espkvm.agent") === "1");
-watch(agentOpen, (open) => {
+/* ESP-KVM Tools on the target, offered once the device has its port up. */
+const toolsOpen = ref(localStorage.getItem("espkvm.tools") === "1");
+watch(toolsOpen, (open) => {
   try {
-    localStorage.setItem("espkvm.agent", open ? "1" : "0");
+    localStorage.setItem("espkvm.tools", open ? "1" : "0");
   } catch {
     /* a private window; it just will not be remembered */
   }
 });
-const agentReady = computed(() => Boolean(system.value?.agent?.port));
+const toolsReady = computed(() => Boolean(system.value?.tools?.port));
 /* The device's own log, live; opened from the diagnostics popup. */
 const logOpen = ref(false);
 /* The target's log over the network (netconsole), once the receiver is on. */
@@ -1024,7 +1024,7 @@ const padToPad = computed(() => gamepadOpen.value && usbPad.value);
 const railWindows = computed(
   () =>
     serialReady.value ||
-    agentReady.value ||
+    toolsReady.value ||
     netlogReady.value ||
     (!signedInToWatch.value && (Boolean(cecSource.value) || usbPad.value)),
 );
@@ -1803,6 +1803,31 @@ const restartOutcome = ref<{ bad: boolean; text: string } | null>(null);
  * bandwidth. MJPEG, or a 720p mode, is much faster there - say so once. The
  * bridge there holds its own EDID, so the mode is the target's to change.
  */
+/* Another device holds this one's name: on the LAN mDNS made it name-2, on the
+   tailnet Tailscale made it name-1. Dismissed per name, so a new clash shows. */
+const NAME_TAKEN_KEY = "espkvm.nameTakenDismissed";
+const nameTakenDismissed = ref("");
+try {
+  nameTakenDismissed.value = localStorage.getItem(NAME_TAKEN_KEY) ?? "";
+} catch {
+  /* no storage: it can be dismissed for this visit */
+}
+const nameTaken = computed(() => {
+  const t = system.value?.net?.nameTaken;
+  const got = t?.tailnet || t?.lan || "";
+  if (!got || got === nameTakenDismissed.value) return null;
+  return { got, where: t?.tailnet ? "your tailnet" : "this network" };
+});
+function dismissNameTaken() {
+  const got = nameTaken.value?.got ?? "";
+  nameTakenDismissed.value = got;
+  try {
+    localStorage.setItem(NAME_TAKEN_KEY, got);
+  } catch {
+    /* fine: gone for this visit */
+  }
+}
+
 const SLOW_H264_KEY = "espkvm.slowH264Dismissed";
 const slowH264Dismissed = ref(false);
 try {
@@ -2227,7 +2252,7 @@ const paletteCommands = computed<Command[]>(() => {
     add({ id: "panel:automation", title: "Automation", group: "Panels", hint: "A", keywords: "runbooks schedules notifications areas", run: () => togglePanel("automation") });
   if (record.value) add({ id: "panel:captures", title: "Recordings and screenshots", group: "Panels", hint: "R", run: () => togglePanel("captures") });
   if (serialReady.value) add({ id: "win:serial", title: serialOpen.value ? "Hide the serial console" : "Serial console", group: "Windows", keywords: "uart terminal", run: () => (serialOpen.value = !serialOpen.value) });
-  if (agentReady.value) add({ id: "win:agent", title: agentOpen.value ? "Hide the agent" : "Agent", group: "Windows", run: () => (agentOpen.value = !agentOpen.value) });
+  if (toolsReady.value) add({ id: "win:tools", title: toolsOpen.value ? "Hide ESP-KVM Tools" : "ESP-KVM Tools", group: "Windows", run: () => (toolsOpen.value = !toolsOpen.value) });
   if (netlogReady.value) add({ id: "win:netlog", title: netlogOpen.value ? "Hide the target log" : "Target log", group: "Windows", keywords: "netconsole kernel", run: () => (netlogOpen.value = !netlogOpen.value) });
   if (ctl && cecSource.value) add({ id: "win:cec", title: remoteOpen.value ? "Hide the TV remote" : "TV remote", group: "Windows", keywords: "cec hdmi", run: () => (remoteOpen.value = !remoteOpen.value) });
   if (ctl && usbPad.value) add({ id: "win:pad", title: gamepadOpen.value ? "Hide the gamepad" : "Gamepad", group: "Windows", keywords: "controller xbox switch", run: () => (gamepadOpen.value = !gamepadOpen.value) });
@@ -2604,6 +2629,16 @@ const LED_BITS: Array<[number, string]> = [
       </button>
       <button type="button" class="btn btn-sm" @click="dismissSlowH264">Dismiss</button>
     </div>
+    <div v-if="nameTaken" class="update-banner" role="status">
+      <span>
+        Another device on {{ nameTaken.where }} already has this name, so this one shows up as
+        "{{ nameTaken.got }}". Give it a name of its own to tell them apart.
+      </span>
+      <button type="button" class="btn btn-sm btn-primary" @click="openSettingsAt('network', 'Address', 'net_hostname')">
+        Rename
+      </button>
+      <button type="button" class="btn btn-sm" @click="dismissNameTaken">Dismiss</button>
+    </div>
     <div v-if="showUpdAsk" class="update-banner" role="status">
       <span>
         Get told when a new version is out? The browser checks whether a newer ESP-KVM is
@@ -2823,19 +2858,19 @@ const LED_BITS: Array<[number, string]> = [
             <Icon name="terminal" :size="18" />
           </button>
           <button
-            v-if="agentReady"
+            v-if="toolsReady"
             type="button"
             :class="[
               'rail-btn',
               'rail-win',
-              { 'rail-btn-active': agentOpen, 'rail-btn-idle': !system?.agent?.connected },
+              { 'rail-btn-active': toolsOpen, 'rail-btn-idle': !system?.tools?.connected },
             ]"
-            data-ui="agent"
-            aria-label="Agent"
-            :title="agentOpen ? 'Hide the agent' : system?.agent?.connected ? 'The agent on the target' : 'No agent on the target yet'"
-            @click="agentOpen = !agentOpen"
+            data-ui="tools"
+            aria-label="ESP-KVM Tools"
+            :title="toolsOpen ? 'Hide ESP-KVM Tools' : system?.tools?.connected ? 'ESP-KVM Tools on the target' : 'ESP-KVM Tools is not on the target yet'"
+            @click="toolsOpen = !toolsOpen"
           >
-            <Icon name="agent" :size="18" />
+            <Icon name="tools" :size="18" />
           </button>
           <button
             v-if="netlogReady"
@@ -3111,7 +3146,7 @@ const LED_BITS: Array<[number, string]> = [
       @close="remoteOpen = false"
     />
     <SerialPanel v-if="serialOpen && serialReady" @close="serialOpen = false" />
-    <AgentPanel v-if="agentOpen && agentReady" @close="agentOpen = false" />
+    <ToolsPanel v-if="toolsOpen && toolsReady" @close="toolsOpen = false" />
     <LogPanel v-if="logOpen" @close="logOpen = false" />
     <LogPanel v-if="netlogOpen && netlogReady" source="netlog" @close="netlogOpen = false" />
     <GamepadPanel
@@ -3396,16 +3431,16 @@ const LED_BITS: Array<[number, string]> = [
           <Icon name="terminal" :size="15" />
         </button>
         <button
-          v-if="agentReady"
+          v-if="toolsReady"
           type="button"
           class="btn btn-sm btn-icon narrow-only"
-          :class="{ 'btn-on': agentOpen }"
-          data-ui="agent"
-          data-label="Agent"
-          aria-label="Agent"
-          @click="agentOpen = !agentOpen"
+          :class="{ 'btn-on': toolsOpen }"
+          data-ui="tools"
+          data-label="Tools"
+          aria-label="ESP-KVM Tools"
+          @click="toolsOpen = !toolsOpen"
         >
-          <Icon name="agent" :size="15" />
+          <Icon name="tools" :size="15" />
         </button>
         <button
           v-if="netlogReady"

@@ -147,9 +147,10 @@ export const TOUR_FEATURES: TourFeature[] = [
   {
     icon: "volume",
     title: "Sound",
-    line: "The target's HDMI sound, live and in recordings.",
+    line: "The target's sound, live and in recordings: from HDMI, or through a USB speaker the device offers the target.",
     caps: ["audio"],
     actions: [{ label: "Audio", section: "audio" }],
+    since: "0.83.0",
     docs: DOCS + "HOW-IT-WORKS.md#sound",
     ui: ["sound"],
     state: (c) => capOn(c, "audio"),
@@ -213,14 +214,14 @@ export const TOUR_FEATURES: TourFeature[] = [
   },
   {
     icon: "terminal",
-    title: "Serial console and agent",
-    line: "The target's serial console, its log over the network, and an agent for the clipboard and a clean shutdown.",
+    title: "Serial console and ESP-KVM Tools",
+    line: "The target's serial console, its log over the network, and ESP-KVM Tools for the clipboard and a clean shutdown.",
     actions: [
       { label: "Serial", section: "power", group: "Serial console" },
       { label: "Netconsole", section: "network", group: "Netconsole" },
     ],
     docs: DOCS + "wiring.md#serial-console",
-    ui: ["serial", "agent", "netlog"],
+    ui: ["serial", "tools", "netlog"],
     state: (c) => capOn(c, "serial", "netlog"),
   },
   {
@@ -276,9 +277,10 @@ export const TOUR_FEATURES: TourFeature[] = [
   {
     icon: "screen",
     title: "Status display",
-    line: "A small screen on the device that shows its state.",
+    line: "A small screen on the device that shows its state. You pick its pages, and it can go dark after a while.",
     caps: ["display"],
     actions: [{ label: "Display", section: "display" }],
+    since: "0.83.0",
     docs: DOCS + "BOARDS.md#status-display-optional",
     state: (c) => capOn(c, "display"),
   },
