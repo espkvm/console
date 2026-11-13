@@ -127,6 +127,7 @@
   "disp_type": 0,
   "disp_pages": 7,
   "disp_rotate_180": false,
+  "disp_rotate": 0,
   "disp_sclk": 20,
   "disp_mosi": 21,
   "disp_cs": 22,

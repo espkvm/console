@@ -61,7 +61,7 @@ const props = defineProps<{
   sound?: boolean;
 }>();
 
-const emit = defineEmits<{ surface: [HTMLElement | null]; "open-serial": []; wake: [] }>();
+const emit = defineEmits<{ surface: [HTMLElement | null]; "open-serial": []; wake: []; "usb-power": [] }>();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const img = ref<HTMLImageElement | null>(null);
@@ -1556,6 +1556,14 @@ const fitClass = computed(() =>
             @click="emit('wake')"
           >
             Wake the target
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm"
+            title="Sends the USB wake signal a keyboard key sends. Turns the target on from off if its BIOS allows it"
+            @click="emit('usb-power')"
+          >
+            Power on over USB
           </button>
           <template v-if="reconnectState === 'counting'">
             <p class="muted">Reconnecting the HDMI in {{ reconnectLeft }} s.</p>

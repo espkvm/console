@@ -6,6 +6,7 @@
  */
 export type ScheduleAction =
   | "wol"
+  | "usbwake"
   | "power"
   | "reset"
   | "poweroff"
@@ -25,6 +26,7 @@ export interface Schedule {
 /** The actions, with the label the panel shows. */
 export const SCHEDULE_ACTIONS: { value: ScheduleAction; label: string }[] = [
   { value: "wol", label: "Wake-on-LAN" },
+  { value: "usbwake", label: "Power on over USB" },
   { value: "power", label: "Power button (tap)" },
   { value: "reset", label: "Reset" },
   { value: "poweroff", label: "Force off (hold power)" },

@@ -2533,7 +2533,7 @@
       "section": "system",
       "group": "Updates",
       "title": "Offer firmware updates",
-      "help": "The browser asks the address below whether a newer build exists and offers to install it. With the project's own address it also tells check.espkvm.io, at most once a day, this device's random id, its board, its version and the chip revision, so the author can count the devices in use. The id is not taken from the hardware; erasing the flash makes a new one. The device itself asks only when New firmware is ticked for a channel under Notifications: once a day, and it sends nothing about itself when it does.",
+      "help": "The browser asks the address below whether a newer build exists and offers to install it. With the project's own address it also tells check.espkvm.io, at most once a day, this device's random id, its board, its version and the chip revision, so the author can count the devices in use. The counts also go on to Google Analytics, under a hash of the id, never the id or your address. The id is not taken from the hardware; erasing the flash makes a new one. The device itself asks only when New firmware is ticked for a channel under Notifications: once a day, and it sends nothing about itself when it does.",
       "type": "bool",
       "default": 0,
       "requires": "ota"
@@ -2813,12 +2813,45 @@
       "section": "display",
       "group": "Screen",
       "title": "Upside down",
-      "help": "Turn the picture on the status display through 180 degrees, for a panel mounted the other way up because of where its connector or its enclosure put it. Takes effect at once: the panel is re-initialised where it stands, with no restart.",
+      "help": "Turn the picture on the OLED through 180 degrees, for a panel mounted the other way up because of where its connector or its enclosure put it. Takes effect at once: the panel is re-initialised where it stands, with no restart.",
       "type": "bool",
       "default": 0,
       "showIf": {
-        "key": "disp_enable",
-        "eq": 1
+        "key": "disp_type",
+        "notIn": [
+          2,
+          15
+        ]
+      }
+    },
+    {
+      "key": "disp_rotate",
+      "section": "display",
+      "group": "Screen",
+      "title": "Turned",
+      "help": "Turn the picture on the square colour panel by a quarter, a half or three quarters, for a panel mounted on its side or the other way up. Takes effect at once, with no restart.",
+      "type": "enum",
+      "min": 0,
+      "max": 3,
+      "choices": [
+        "0",
+        "90",
+        "180",
+        "270"
+      ],
+      "labels": [
+        "Upright",
+        "90° clockwise",
+        "Upside down",
+        "90° anticlockwise"
+      ],
+      "default": 0,
+      "showIf": {
+        "key": "disp_type",
+        "in": [
+          2,
+          15
+        ]
       }
     },
     {

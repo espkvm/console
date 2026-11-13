@@ -103,6 +103,8 @@ import {
   updateCoproc,
   getCec,
   type CecStatus,
+  powerOnUsb,
+  USB_POWER_TEXT,
 } from "./state/device";
 import { loadSession, logout, type SessionState } from "./state/auth";
 import { toast } from "./state/toasts";
@@ -1141,6 +1143,19 @@ function wakeTarget(auto: boolean) {
   input.control.mouseRelative(0, 1, 0);
   setTimeout(() => input.control.mouseRelative(0, -1, 0), 60);
   if (!auto) toast.info("Nudged the mouse - a dark screen should wake in a few seconds");
+}
+/* The USB wake signal, for a target that is off or asleep. Asks the device, not
+   the input channel: it has to go out while the target's USB is not running. */
+async function usbPowerOn() {
+  if (signedInToWatch.value) {
+    toast.info(NO_CONTROL_TEXT.value);
+    return;
+  }
+  try {
+    toast.info(USB_POWER_TEXT[await powerOnUsb()]);
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  }
 }
 let wokeOnOpen = false;
 let noSignalSince = 0;
@@ -2974,6 +2989,7 @@ const LED_BITS: Array<[number, string]> = [
             @surface="surface = $event"
             @open-serial="serialOpen = true"
             @wake="wakeTarget(false)"
+            @usb-power="usbPowerOn"
           />
 
           <div v-if="targetOff" class="power-off-card">

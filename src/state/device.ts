@@ -754,6 +754,28 @@ export async function wakeTarget(): Promise<void> {
   if (!res.ok) throw new Error(await errorFromResponse(res, `wake failed (${res.status})`));
 }
 
+/**
+ * Power the target on over USB: the wake signal a keyboard key sends. Wakes a
+ * sleeping target, and one that is off when its BIOS powers on from the
+ * keyboard. The device waits up to 3 s for the target to answer.
+ */
+export type UsbPowerResult = "awake" | "woke" | "no answer";
+
+export async function powerOnUsb(): Promise<UsbPowerResult> {
+  const res = await fetch("/api/v1/power/usb", { method: "POST", headers: CONSOLE_HEADER });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(await errorFromResponse(res, `power on failed (${res.status})`));
+  return ((await res.json()) as { status: UsbPowerResult }).status;
+}
+
+/** The toast for each answer, shared by the power menu and the no-signal screen. */
+export const USB_POWER_TEXT: Record<UsbPowerResult, string> = {
+  awake: "The target is already on: its USB is running",
+  woke: "The target woke up",
+  "no answer":
+    "Sent the USB wake signal. If the target stays off, its BIOS does not power on from USB",
+};
+
 /** A device on the HDMI-CEC line, as the device last heard it. */
 export interface CecDevice {
   la: number;

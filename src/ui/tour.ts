@@ -174,7 +174,7 @@ export const TOUR_FEATURES: TourFeature[] = [
   {
     icon: "power",
     title: "Power",
-    line: "Power and reset buttons over ATX wiring, the power and disk lights, Wake-on-LAN.",
+    line: "Power and reset buttons over ATX wiring, the power and disk lights, Wake-on-LAN, power on over USB.",
     caps: ["atx", "wol"],
     actions: [{ label: "Power", section: "power", group: "ATX wiring" }],
     docs: DOCS + "wiring.md",

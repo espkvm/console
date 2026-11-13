@@ -1066,6 +1066,8 @@ async function route(
       case "/api/v1/power/wake":
         demoPower("wake");
         return json({ status: "sent" });
+      case "/api/v1/power/usb":
+        return json({ status: "awake" });
       case "/api/v1/power/click":
         demoPower("click");
         return json({ status: "ok" });

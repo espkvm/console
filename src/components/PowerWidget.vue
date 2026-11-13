@@ -2,9 +2,9 @@
 /*
  * Target power as a rail button with a small menu, not a panel.
  *
- * There is very little here - three ATX buttons and Wake-on-LAN - and a whole
- * panel sliding over the picture to show them was more ceremony than the job
- * deserves: you press Power and you want to watch the screen while it happens,
+ * There is very little here - three ATX buttons, Wake-on-LAN, power on over
+ * USB - and a whole panel sliding over the picture to show them was more
+ * ceremony than the job deserves: you press Power and you want to watch the screen while it happens,
  * which is exactly what the panel covered up. The menu opens beside the rail,
  * over the stage, and closes on the first click anywhere else.
  *
@@ -17,6 +17,8 @@ import {
   powerClick,
   powerHold,
   powerReset,
+  powerOnUsb,
+  USB_POWER_TEXT,
   wakeTarget,
   type Capability,
 } from "../state/device";
@@ -39,11 +41,14 @@ const props = defineProps<{
 const open = ref(false);
 const busy = ref(false);
 const waking = ref(false);
+const usbBusy = ref(false);
 
 const hasAtx = computed(() => Boolean(props.caps.atx?.active));
 const hasWol = computed(() => Boolean(props.caps.wol?.available));
 const hasCec = computed(() => Boolean(props.caps.cec?.active));
-const available = computed(() => hasAtx.value || hasWol.value || hasCec.value);
+/* Every board has the USB port to the target, so power on over USB is always there. */
+const hasUsb = computed(() => Boolean(props.caps.hid?.available));
+const available = computed(() => hasAtx.value || hasWol.value || hasCec.value || hasUsb.value);
 const known = computed(() => Boolean(props.atx?.known));
 const on = computed(() => Boolean(props.atx?.on));
 
@@ -86,6 +91,17 @@ function hdmi(action: "standby" | "wake") {
     () => cecPower(action),
     action === "wake" ? "Asked the HDMI source to wake" : "Asked the HDMI source to sleep",
   );
+}
+
+async function usbOn() {
+  usbBusy.value = true;
+  try {
+    toast.info(USB_POWER_TEXT[await powerOnUsb()]);
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  } finally {
+    usbBusy.value = false;
+  }
 }
 
 async function wake() {
@@ -161,6 +177,11 @@ async function wake() {
             Set the target's MAC under Settings &rarr; Power to wake it from here.
           </p>
         </template>
+
+        <button v-if="hasUsb && !watchOnly" type="button" class="pw-item" :disabled="usbBusy" @click="usbOn">
+          {{ usbBusy ? "Waiting..." : "Power on over USB" }}
+          <small>Wakes it from sleep, or from off if its BIOS allows</small>
+        </button>
 
         <template v-if="hasCec && !watchOnly">
           <button type="button" class="pw-item" :disabled="busy" @click="hdmi('wake')">
