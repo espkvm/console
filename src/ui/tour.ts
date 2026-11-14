@@ -246,6 +246,15 @@ export const TOUR_FEATURES: TourFeature[] = [
     actions: [{ label: "Wi-Fi", section: "network", group: "WiFi" }],
   },
   {
+    icon: "ethernet",
+    title: "Safety net",
+    line: "A network change that cuts the device off goes back by itself in 10 minutes. With no network for long, the device restarts.",
+    since: "0.84.0",
+    actions: [{ label: "Safety net", section: "network", group: "Safety net" }],
+    docs: DOCS + "SETUP.md#changing-the-network-of-a-device-far-away",
+    state: (c) => settingOn(c, "net_trial"),
+  },
+  {
     icon: "mqtt",
     title: "Home Assistant",
     line: "The device and the target's state over MQTT, found by Home Assistant by itself.",
@@ -273,6 +282,13 @@ export const TOUR_FEATURES: TourFeature[] = [
     actions: [{ label: "Security", section: "security" }],
     docs: DOCS + "HOW-IT-WORKS.md#security",
     state: (c) => (c.passwordSet ? "Password set" : "No password"),
+  },
+  {
+    icon: "eye-off",
+    title: "Seen by the target",
+    line: "The name the target sees for the USB devices and the monitor: ESP-KVM, a plain one, or your own.",
+    since: "0.84.0",
+    actions: [{ label: "System", section: "system", group: "Seen by the target" }],
   },
   {
     icon: "screen",

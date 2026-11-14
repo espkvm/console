@@ -1641,7 +1641,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3) var(--space-3);
+  padding: var(--space-2) max(var(--space-3), env(safe-area-inset-right, 0px)) var(--space-3)
+    max(var(--space-3), env(safe-area-inset-left, 0px));
   background: var(--bg-raised);
   border-top: 1px solid var(--border);
 }
@@ -1791,6 +1792,64 @@
 
   .vk-hint {
     display: none;
+  }
+}
+
+/* A phone on its side has little height: the header's buttons go to a column
+   on the right, the keys get lower, and the picture keeps more of the screen. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 640px) {
+  .vk:not(.vk-floating) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "combos head"
+      "body head";
+    gap: 3px var(--space-2);
+    padding: 4px max(var(--space-2), env(safe-area-inset-right, 0px)) 4px
+      max(var(--space-2), env(safe-area-inset-left, 0px));
+  }
+
+  .vk:not(.vk-floating) .vk-head {
+    grid-area: head;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+  }
+
+  .vk:not(.vk-floating) .vk-hint {
+    display: none;
+  }
+
+  /* Three across, two down: lower than the shortest set of keys (two rows),
+     so the buttons never make the keyboard taller than its keys. */
+  .vk:not(.vk-floating) .vk-head-actions {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    gap: 3px;
+  }
+
+  .vk:not(.vk-floating) .vk-head-actions .btn-icon {
+    width: 30px;
+    min-height: 30px;
+  }
+
+  .vk:not(.vk-floating) .vk-combos {
+    grid-area: combos;
+  }
+
+  .vk:not(.vk-floating) .vk-body {
+    grid-area: body;
+    max-width: none;
+  }
+
+  .vk-keys,
+  .vk-row,
+  .vk-side {
+    gap: 3px;
+  }
+
+  .vk-key {
+    min-height: 30px;
   }
 }
 

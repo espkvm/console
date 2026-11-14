@@ -289,6 +289,58 @@ function toggleKeyboard() {
   flex: 0 0 44px;
 }
 
+/* A phone on its side (App.vue puts it in the picture's row): a column at the
+   right of the picture, which has black bars there anyway. The arrow pad opens
+   beside it, over the picture. */
+.touch-side.touch-docked {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  justify-content: flex-end;
+  padding: 6px max(6px, env(safe-area-inset-right, 0px)) 6px 6px;
+  border-width: 0 0 0 1px;
+}
+
+.touch-side .touch-row {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: 52px;
+  grid-auto-rows: 1fr;
+  gap: 6px;
+}
+
+/* Six buttons stay at least 40px tall: with less height (the browser's own
+   bars showing) they stand two or three across. The row they are in is the
+   size container (layout.css). */
+@container picture-row (max-height: 281px) {
+  .touch-side .touch-row {
+    grid-template-columns: repeat(2, 52px);
+  }
+}
+
+@container picture-row (max-height: 143px) {
+  .touch-side .touch-row {
+    grid-template-columns: repeat(3, 52px);
+  }
+}
+
+.touch-side.touch-docked .touch-row > .touch-btn {
+  min-width: 0;
+  min-height: 0;
+}
+
+.touch-side .touch-pad {
+  position: absolute;
+  right: calc(100% + 6px);
+  bottom: 6px;
+  z-index: 6;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-overlay) 88%, transparent);
+}
+
 .touch-btn-dock {
   min-width: 40px;
   padding: 0 8px;

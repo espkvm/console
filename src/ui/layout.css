@@ -69,6 +69,16 @@
   background: var(--bg-raised);
   border-right: 1px solid var(--border);
   flex: none;
+  /* A low window (a phone on its side with the keyboard open) has less height
+     than the buttons need: they scroll inside the rail instead of spilling
+     over whatever is under it. */
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.rail > * {
+  flex-shrink: 0;
 }
 
 .rail-spacer {
@@ -773,11 +783,30 @@
   box-shadow: 0 0 24px rgb(0 0 0 / 45%);
 }
 
+/* With the bars gone the picture would reach the camera cutout and the round
+   corners of a phone. env() is 0 where there is no cutout. */
+.console.immersive .stage {
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
+}
+
+/* The picture's row is a size container for the touch column beside it
+   (TouchControls.vue), which picks how many buttons stand across by its height. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 640px) {
+  .body {
+    container: picture-row / size;
+  }
+}
+
+/* The touch column beside the picture keeps clear of a cutout on that side itself. */
+.console.immersive .stage:has(+ .touch-side) {
+  padding-right: 0;
+}
+
 /* The way back for a finger: a small tab at the top edge. */
 .immersive-handle {
   position: fixed;
   z-index: 31;
-  top: 0;
+  top: env(safe-area-inset-top, 0px);
   left: 50%;
   transform: translateX(-50%);
   width: 64px;
@@ -806,8 +835,8 @@
   .immersive-exit {
     position: fixed;
     z-index: 31;
-    top: 8px;
-    right: 8px;
+    top: calc(8px + env(safe-area-inset-top, 0px));
+    right: calc(8px + env(safe-area-inset-right, 0px));
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -821,6 +850,13 @@
     opacity: 0.6;
     cursor: pointer;
   }
+}
+
+/* The touch column (a phone on its side) stands at the right edge: the exit
+   button moves to the top left, where the rail has slid away. */
+.console.immersive:has(.touch-side) .immersive-exit {
+  left: calc(8px + env(safe-area-inset-left, 0px));
+  right: auto;
 }
 
 @media (max-width: 640px) {

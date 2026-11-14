@@ -26,7 +26,11 @@ import { useFloating } from "../ui/floating";
 import Icon from "./Icon.vue";
 
 const props = defineProps<{ caps: Record<string, Capability> }>();
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{ close: []; enable: [] }>();
+
+/* Off in the settings: the panel says so and turns it on, since the remote
+   is where someone looks for it. */
+const cecOff = computed(() => props.caps.cec?.available === true && !props.caps.cec.enabled);
 
 const status = ref<CecStatus | null>(null);
 const chosen = ref<number | null>(null);
@@ -161,7 +165,14 @@ function onKeydown(e: KeyboardEvent) {
       </button>
     </div>
 
-    <template v-if="!status || !status.running">
+    <template v-if="cecOff">
+      <p class="rc-note">
+        HDMI-CEC is off. With it on, this remote sees what is connected over HDMI and can wake it,
+        put it to sleep and send it keys.
+      </p>
+      <button type="button" class="rc-wide" @click="emit('enable')">Turn on HDMI-CEC</button>
+    </template>
+    <template v-else-if="!status || !status.running">
       <p class="rc-note">{{ status ? "HDMI-CEC is not running." : "Reading the CEC line..." }}</p>
     </template>
     <template v-else-if="!target">

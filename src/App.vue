@@ -118,6 +118,7 @@ import {
   type RegionRect,
 } from "./state/regions";
 import { copyToClipboard } from "./ui/clipboard";
+import { PHONE_SIDEWAYS, useMedia } from "./ui/media";
 
 type PanelId = "input" | "media" | "automation" | "captures" | null;
 
@@ -147,6 +148,15 @@ const system = ref<SystemInfo | null>(null);
 const firmwareChanged = ref(false);
 const usbProbe = ref<UsbProbe | null>(null);
 const storage = ref<StorageInfo | null>(null);
+
+/* The remote's "Turn on HDMI-CEC". The capabilities follow the new value. */
+async function enableCec() {
+  try {
+    values.value = await saveSettings({ cec_enable: true });
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "the device would not take that");
+  }
+}
 
 /* Wake-on-LAN: the target MAC is a setting; the button lives in PowerWidget. */
 const wolMac = computed(() => String(values.value.pwr_wol_mac ?? "").trim());
@@ -973,6 +983,9 @@ const padMouseOn = ref(localStorage.getItem("espkvm.padmouse") === "1");
 const showRemote = computed(
   () => touchMode.value && (!paused.value || textView.value) && !heldByOther.value,
 );
+/* A phone on its side: the docked touch bar stands beside the picture, not under it. */
+const touchSide = useMedia(PHONE_SIDEWAYS);
+
 const remoteProps = computed(() => ({
   control: input.control,
   layout: layout.value,
@@ -2269,7 +2282,8 @@ const paletteCommands = computed<Command[]>(() => {
   if (serialReady.value) add({ id: "win:serial", title: serialOpen.value ? "Hide the serial console" : "Serial console", group: "Windows", keywords: "uart terminal", run: () => (serialOpen.value = !serialOpen.value) });
   if (toolsReady.value) add({ id: "win:tools", title: toolsOpen.value ? "Hide ESP-KVM Tools" : "ESP-KVM Tools", group: "Windows", run: () => (toolsOpen.value = !toolsOpen.value) });
   if (netlogReady.value) add({ id: "win:netlog", title: netlogOpen.value ? "Hide the target log" : "Target log", group: "Windows", keywords: "netconsole kernel", run: () => (netlogOpen.value = !netlogOpen.value) });
-  if (ctl && cecSource.value) add({ id: "win:cec", title: remoteOpen.value ? "Hide the TV remote" : "TV remote", group: "Windows", keywords: "cec hdmi", run: () => (remoteOpen.value = !remoteOpen.value) });
+  if (ctl && (cecSource.value || (caps.value.cec?.available && !caps.value.cec.enabled)))
+    add({ id: "win:cec", title: remoteOpen.value ? "Hide the TV remote" : "TV remote", group: "Windows", keywords: "cec hdmi", run: () => (remoteOpen.value = !remoteOpen.value) });
   if (ctl && usbPad.value) add({ id: "win:pad", title: gamepadOpen.value ? "Hide the gamepad" : "Gamepad", group: "Windows", keywords: "controller xbox switch", run: () => (gamepadOpen.value = !gamepadOpen.value) });
 
   /* Capture and text */
@@ -3138,13 +3152,21 @@ const LED_BITS: Array<[number, string]> = [
           </div>
         </aside>
       </main>
+      <TouchControls
+        v-if="showRemote && remoteDocked && touchSide"
+        class="touch-side"
+        v-bind="remoteProps"
+        @stick="stickOn = $event"
+        @keyboard="oskOpen = !oskOpen"
+        @dock="remoteDocked = $event"
+      />
     </div>
 
     <!-- Never the main way in: the real keyboard is, once the picture is
          engaged. This opens on request, under the picture and across the whole
          width, or floating if that suits better. -->
     <TouchControls
-      v-if="showRemote && remoteDocked"
+      v-if="showRemote && remoteDocked && !touchSide"
       v-bind="remoteProps"
       @stick="stickOn = $event"
       @keyboard="oskOpen = !oskOpen"
@@ -3157,9 +3179,10 @@ const LED_BITS: Array<[number, string]> = [
       @close="oskOpen = false"
     />
     <RemotePanel
-      v-if="remoteOpen && cecSource"
+      v-if="remoteOpen && caps.cec?.available"
       :caps="caps"
       @close="remoteOpen = false"
+      @enable="enableCec"
     />
     <SerialPanel v-if="serialOpen && serialReady" @close="serialOpen = false" />
     <ToolsPanel v-if="toolsOpen && toolsReady" @close="toolsOpen = false" />
