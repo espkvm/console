@@ -176,6 +176,20 @@ export interface VideoStatus {
   profile?: number;
   /** The target's HDD LED: lit or blinking now. null when it is not wired, absent on older firmware. */
   hdd?: boolean | null;
+  /** Internal RAM ran low and the device closed connections to free some.
+   *  null when it has not, absent on older firmware. */
+  memLow?: MemLow | null;
+}
+
+/** A low-memory episode, as the device reports it while it lasts. */
+export interface MemLow {
+  seconds: number;
+  freeKb: number;
+  lowestKb: number;
+  /** Connections closed so far in this episode. */
+  closed: number;
+  /** Allocations that failed in this episode. */
+  failed: number;
 }
 
 export interface RecordStatus {

@@ -42,6 +42,8 @@ import ScreenView from "./components/ScreenView.vue";
 import DiagWidget from "./components/DiagWidget.vue";
 import OsWidget from "./components/OsWidget.vue";
 import MediaPanel from "./components/MediaPanel.vue";
+import FileDrop from "./components/FileDrop.vue";
+import { useWakeLock } from "./ui/wakeLock";
 import PowerWidget from "./components/PowerWidget.vue";
 import RemotePanel from "./components/RemotePanel.vue";
 import GamepadPanel from "./components/GamepadPanel.vue";
@@ -73,6 +75,7 @@ import {
   type Values,
   type SystemInfo,
   type VideoStatus,
+  type MemLow,
   type ScreenText,
   enumName,
   powerClick,
@@ -552,6 +555,8 @@ const paused = ref(false);
    its socket and the device's attention until the update is done. Kept apart
    from `paused` so it neither flips the pause button nor survives the update. */
 const updateHoldsStream = ref(false);
+/* The screen stays on while there is a picture to watch. */
+useWakeLock(computed(() => Boolean(status.value?.signal) && !paused.value && !updateHoldsStream.value));
 /* Which connection pill has its detail popover open (tap to toggle). Touch has
    no hover, so the pill title is shown on tap instead. */
 const connDetail = ref<string | null>(null);
@@ -1502,7 +1507,7 @@ async function setCodec(name: "mjpeg" | "h264") {
    lit, "idle" is present-but-inactive (HDMI cable up, no picture), "off" is
    nothing. */
 type Conn = {
-  id: "hdmi" | "usb" | "sd" | "ethernet" | "wifi" | "ap" | "vpn" | "mqtt";
+  id: "hdmi" | "usb" | "sd" | "ethernet" | "wifi" | "ap" | "vpn" | "mqtt" | "mem";
   title: string;
   state: "on" | "idle" | "off";
 };
@@ -1803,8 +1808,28 @@ const conns = computed<Conn[]>(() => {
       state: m.connected ? "on" : "idle",
     });
   }
+  /* Only while the device is short of memory: what it gave up to keep going. */
+  const mem = status.value?.memLow;
+  if (mem) {
+    list.push({ id: "mem", title: memLowText(mem), state: "idle" });
+  }
   return list;
 });
+
+function memLowText(m: MemLow): string {
+  const closed = m.closed
+    ? ` It closed ${m.closed} connection${m.closed === 1 ? "" : "s"} that only carried requests, so a button may need a second press.`
+    : "";
+  return `The device is low on memory (${m.freeKb} KB free).${closed} The picture keeps going.`;
+}
+
+/* Say it once a time it happens, not on every poll. */
+watch(
+  () => Boolean(status.value?.memLow),
+  (low) => {
+    if (low) toast.error("The device is low on memory and gave up some connections. The picture keeps going.");
+  },
+);
 
 let pollId = 0;
 let systemPollId = 0;
@@ -2005,6 +2030,12 @@ async function startConsole() {
     }
     watchForTextAgain();
   } catch (err) {
+    /* A 401 here is a session that ended between the check and these loads:
+       the sign-in form is the answer, not "cannot reach the device". */
+    if (err instanceof Unauthorized) {
+      session.value = await loadSession().catch(() => session.value);
+      if (locked.value) return;
+    }
     loadError.value = err instanceof Error ? err.message : String(err);
   }
 
@@ -2376,6 +2407,18 @@ function toggleTheme() {
 
 function togglePanel(id: Exclude<PanelId, null>) {
   panel.value = panel.value === id ? null : id;
+}
+
+/* A file dropped on the console, handed to the panel that deals with it. */
+const droppedFile = ref<File | null>(null);
+const droppedText = ref<string | null>(null);
+function dropToCard(f: File) {
+  droppedFile.value = f;
+  panel.value = "media";
+}
+function dropToType(text: string) {
+  droppedText.value = text;
+  panel.value = "input";
 }
 
 function onEngage(e: PointerEvent) {
@@ -3006,6 +3049,13 @@ const LED_BITS: Array<[number, string]> = [
             @usb-power="usbPowerOn"
           />
 
+          <FileDrop
+            :card="!signedInToWatch && Boolean(caps.msc?.available)"
+            :type="!signedInToWatch"
+            @card="dropToCard"
+            @type="dropToType"
+          />
+
           <div v-if="targetOff" class="power-off-card">
             <span>The target is off.</span>
             <button type="button" class="btn" :disabled="powering" @click="powerOnFromScreen">
@@ -3127,13 +3177,17 @@ const LED_BITS: Array<[number, string]> = [
               :values="values"
               :attached="input.target.value.attached"
               :detected-os="usbProbe?.os ?? 'unknown'"
+              :dropped="droppedText"
               @values="values = $event"
+              @dropped-taken="droppedText = null"
             />
             <MediaPanel
               v-else-if="panel === 'media'"
               :values="values"
               :stream-paused="paused"
+              :dropped="droppedFile"
               @values="values = $event"
+              @dropped-taken="droppedFile = null"
               @pause-stream="paused = true"
             />
             <AutomationPanel
@@ -3208,7 +3262,7 @@ const LED_BITS: Array<[number, string]> = [
             :aria-label="c.title"
             @click="connDetail = connDetail === c.id ? null : c.id"
           >
-            <Icon :name="c.id" :size="16" />
+            <Icon :name="c.id === 'mem' ? 'warning' : c.id" :size="16" />
           </button>
 
           <!-- Tap detail popover: touch has no hover, so show the pill's

@@ -9,13 +9,21 @@
  * translated to a key position through the same layout table the paste feature
  * uses (see layouts.ts), so what the target types matches its own layout. The
  * field never keeps its text - every input is intercepted and re-sent as HID.
+ *
+ * Chrome on Android hides its keyboard on the system Back gesture and leaves
+ * the field focused, so focus alone does not say whether the keyboard is up:
+ * the button would then close a keyboard already gone and need a second tap.
+ * Where the VirtualKeyboard API exists the field asks for the keyboard itself
+ * (virtualkeyboardpolicy="manual") and the keyboard's own geometry says
+ * whether it is showing.
  */
-import { onUnmounted, ref } from "vue";
+import { onUnmounted, ref, watch } from "vue";
 import Icon from "./Icon.vue";
 
 
 import { charToHid } from "../layouts";
 import { usageForCode } from "../input/keymap";
+import { keyboardUp, virtualKeyboard } from "../input/keyboardInset";
 import type { Control } from "../input/control";
 import { haptic } from "../ui/haptic";
 
@@ -39,6 +47,14 @@ const TAB = 0x2b;
 
 const field = ref<HTMLInputElement | null>(null);
 const oskOpen = ref(false);
+
+const vk = virtualKeyboard;
+
+/* Hidden by Back or by its own button: let go of the field too, so the next
+   tap on the button opens it again. */
+watch(keyboardUp, (up) => {
+  if (!up && oskOpen.value) field.value?.blur();
+});
 
 function tap(button: number) {
   haptic();
@@ -146,9 +162,11 @@ function toggleKeyboard() {
     return;
   }
   if (oskOpen.value) {
+    vk?.hide();
     field.value?.blur();
   } else {
     field.value?.focus();
+    vk?.show();
   }
 }
 </script>
@@ -228,6 +246,7 @@ function toggleKeyboard() {
       class="touch-osk"
       type="text"
       inputmode="text"
+      :virtualkeyboardpolicy="vk ? 'manual' : undefined"
       autocapitalize="off"
       autocomplete="off"
       autocorrect="off"

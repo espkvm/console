@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useRailPopup } from "../ui/railPopup";
 import Icon from "./Icon.vue";
 /*
  * Live diagnostics as a rail button above Settings: the button carries the chip
@@ -18,6 +19,8 @@ const props = defineProps<{ system: SystemInfo | null; side: "left" | "right" }>
 const emit = defineEmits<{ liveLog: [] }>();
 
 const open = ref(false);
+const root = ref<HTMLElement | null>(null);
+useRailPopup(root, open);
 
 const tempLabel = computed(() => {
   const t = props.system?.tempC ?? 0;
@@ -55,7 +58,7 @@ async function eraseDump() {
 </script>
 
 <template>
-  <div class="dw" :data-side="side" v-if="system">
+  <div class="dw" :data-side="side" ref="root" v-if="system">
     <button
       type="button"
       class="rail-btn dw-btn"
@@ -223,11 +226,14 @@ async function eraseDump() {
   z-index: 40;
 }
 
-/* Anchored to the button and opening inward (away from the rail's edge); the
-   rail sets no overflow, so an absolute popup escapes it over the stage. */
+/* Anchored to the button and opening inward (away from the rail's edge). Fixed,
+   not absolute: the rail scrolls and would clip it (see ui/railPopup.ts). */
 .dw-popup {
-  position: absolute;
-  bottom: 0;
+  position: fixed;
+  top: var(--pop-top, auto);
+  bottom: var(--pop-bottom, 0);
+  max-height: var(--pop-max-h, 80vh);
+  overflow-y: auto;
   z-index: 41;
   width: 300px;
   max-width: 80vw;
@@ -242,11 +248,11 @@ async function eraseDump() {
 }
 
 .dw[data-side="left"] .dw-popup {
-  left: calc(100% + 8px);
+  left: var(--pop-left);
 }
 
 .dw[data-side="right"] .dw-popup {
-  right: calc(100% + 8px);
+  right: var(--pop-right);
 }
 
 .dw-head {

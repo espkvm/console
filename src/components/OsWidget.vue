@@ -11,6 +11,7 @@
  * The popup also shows the device profile in effect, lets one be picked by
  * hand, and saves the settings as a profile for the device attached now.
  */
+import { useRailPopup } from "../ui/railPopup";
 import { computed, ref, watch } from "vue";
 
 import OsIcon from "./OsIcon.vue";
@@ -37,6 +38,8 @@ const props = defineProps<{
 const emit = defineEmits<{ values: [Values] }>();
 
 const open = ref(false);
+const root = ref<HTMLElement | null>(null);
+useRailPopup(root, open);
 const busy = ref(false);
 
 watch(open, (o) => {
@@ -121,7 +124,7 @@ const usbName = computed(() => OS_NAMES[props.probe?.os ?? ""] ?? props.probe?.o
 </script>
 
 <template>
-  <div class="ow" :data-side="side" v-if="show">
+  <div class="ow" :data-side="side" ref="root" v-if="show">
     <button
       type="button"
       class="rail-btn ow-btn"
@@ -194,11 +197,14 @@ const usbName = computed(() => OS_NAMES[props.probe?.os ?? ""] ?? props.probe?.o
   z-index: 40;
 }
 
-/* Same anchoring as the diagnostics widget: absolute, opening inward past the
-   rail's edge (the rail sets no overflow, so it is not clipped). */
+/* Same anchoring as the diagnostics widget: fixed, opening inward past the
+   rail's edge (see ui/railPopup.ts). */
 .ow-popup {
-  position: absolute;
-  bottom: 0;
+  position: fixed;
+  top: var(--pop-top, auto);
+  bottom: var(--pop-bottom, 0);
+  max-height: var(--pop-max-h, 80vh);
+  overflow-y: auto;
   z-index: 41;
   width: min(340px, 80vw);
   padding: var(--space-4);
@@ -209,11 +215,11 @@ const usbName = computed(() => OS_NAMES[props.probe?.os ?? ""] ?? props.probe?.o
 }
 
 .ow[data-side="left"] .ow-popup {
-  left: calc(100% + 8px);
+  left: var(--pop-left);
 }
 
 .ow[data-side="right"] .ow-popup {
-  right: calc(100% + 8px);
+  right: var(--pop-right);
 }
 
 .ow-head {

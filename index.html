@@ -33,6 +33,15 @@
           navigator.serviceWorker.register("/sw.js").catch(() => {});
         });
       }
+      /* The worker puts the count of unseen notifications on the installed
+         app's icon. Looking at the console is seeing them. */
+      if ("clearAppBadge" in navigator) {
+        const seen = () => {
+          if (!document.hidden) navigator.clearAppBadge().catch(() => {});
+        };
+        seen();
+        document.addEventListener("visibilitychange", seen);
+      }
     </script>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -317,11 +317,20 @@ export function useInput(opts: InputOptions) {
       }
     };
     document.addEventListener("pointerlockchange", onChange);
+    /* Chrome returns a promise, and refuses it without a recent click.
+       unadjustedMovement asks for the mouse's own counts, without this
+       computer's pointer acceleration: the target applies its own, and two
+       curves on top of each other make the pointer overshoot. Where it is not
+       offered the lock is asked for again without it. */
+    const lock = (opt?: { unadjustedMovement: boolean }) =>
+      (el.requestPointerLock as (o?: object) => Promise<void> | undefined).call(el, opt);
     try {
-      /* Chrome returns a promise, and refuses it without a recent click. */
-      const r = el.requestPointerLock() as unknown as Promise<void> | undefined;
-      r?.catch?.(() => {
-        /* refused: relative still works, with the browser's cursor shown */
+      lock({ unadjustedMovement: true })?.catch?.((err: unknown) => {
+        if (err instanceof DOMException && err.name === "NotSupportedError") {
+          lock()?.catch?.(() => {
+            /* refused: relative still works, with the browser's cursor shown */
+          });
+        }
       });
     } catch {
       /* not allowed here; the same */

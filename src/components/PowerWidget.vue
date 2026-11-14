@@ -10,6 +10,7 @@
  *
  * `side` is the rail's edge, so the menu always opens inward.
  */
+import { useRailPopup } from "../ui/railPopup";
 import { computed, ref } from "vue";
 
 import {
@@ -39,6 +40,8 @@ const props = defineProps<{
 }>();
 
 const open = ref(false);
+const root = ref<HTMLElement | null>(null);
+useRailPopup(root, open);
 const busy = ref(false);
 const waking = ref(false);
 const usbBusy = ref(false);
@@ -118,7 +121,7 @@ async function wake() {
 </script>
 
 <template>
-  <div class="pw" :data-side="side">
+  <div class="pw" :data-side="side" ref="root">
     <button
       type="button"
       class="rail-btn"
@@ -258,8 +261,11 @@ async function wake() {
 
 /* Anchored to the button and opening inward, like the diagnostics popup. */
 .pw-menu {
-  position: absolute;
-  bottom: 0;
+  position: fixed;
+  top: var(--pop-top, auto);
+  bottom: var(--pop-bottom, 0);
+  max-height: var(--pop-max-h, 80vh);
+  overflow-y: auto;
   z-index: 41;
   width: 260px;
   max-width: 80vw;
@@ -274,11 +280,11 @@ async function wake() {
 }
 
 .pw[data-side="left"] .pw-menu {
-  left: calc(100% + 8px);
+  left: var(--pop-left);
 }
 
 .pw[data-side="right"] .pw-menu {
-  right: calc(100% + 8px);
+  right: var(--pop-right);
 }
 
 .pw-head {
@@ -346,6 +352,7 @@ async function wake() {
     transform: translateY(-50%);
     width: auto;
     max-width: none;
+    max-height: 80dvh;
   }
 }
 </style>

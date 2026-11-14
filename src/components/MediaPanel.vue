@@ -11,6 +11,8 @@
  *
  * The device can also download an image itself, from a URL: netboot.xyz into
  * the rescue slot in one click, or any link onto the card.
+ *
+ * A file dropped on the console comes here too and goes onto the card.
  */
 import FoldNote from "./FoldNote.vue";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -38,8 +40,17 @@ import {
 import { toast } from "../state/toasts";
 import UploadChart from "./UploadChart.vue";
 
-const props = defineProps<{ values: Values; streamPaused?: boolean }>();
-const emit = defineEmits<{ (e: "values", v: Values): void; (e: "pause-stream"): void }>();
+const props = defineProps<{
+  values: Values;
+  streamPaused?: boolean;
+  /** A file dropped on the console, to go onto the card. */
+  dropped?: File | null;
+}>();
+const emit = defineEmits<{
+  (e: "values", v: Values): void;
+  (e: "pause-stream"): void;
+  (e: "dropped-taken"): void;
+}>();
 
 /* Whether the drive is presented to the target at all. Selecting a medium below
  * only chooses what the drive holds; without this on, the target sees no drive. */
@@ -154,6 +165,36 @@ async function onImageChosen(e: Event) {
   const input = e.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!file) return;
+  try {
+    await uploadToCard(file);
+  } finally {
+    input.value = "";
+  }
+}
+
+/* A dropped file waits for the card listing: whether it can be written is the
+   device's call, and its reason is better than a failed upload. */
+watch(
+  () => [props.dropped, storage.value] as const,
+  ([file, st]) => {
+    if (!file || !st) return;
+    emit("dropped-taken");
+    if (uploadingImage.value || uploadingRescue.value) {
+      toast.error("An upload is already running");
+    } else if (!st.mounted || st.handedOver) {
+      toast.error(`${file.name}: no microSD card the device can write to right now`);
+    } else if (!st.writable) {
+      toast.error(sentence(st.writeReason ?? "The card is read-only on this device."));
+    } else if (file.size > st.freeBytes) {
+      toast.error(`${file.name} is larger than the ${formatBytes(st.freeBytes)} free on the card`);
+    } else {
+      void uploadToCard(file);
+    }
+  },
+  { immediate: true },
+);
+
+async function uploadToCard(file: File) {
   uploadingImage.value = true;
   uploadPct.value = 0;
   uploadRate.value = 0;
@@ -180,7 +221,6 @@ async function onImageChosen(e: Event) {
   } finally {
     uploadAbort = null;
     uploadingImage.value = false;
-    input.value = "";
   }
 }
 

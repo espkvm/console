@@ -9,7 +9,7 @@
  * layout the target is known to have active.
  */
 import FoldNote from "./FoldNote.vue";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 
 import { macrosForOs, macroLabel, type Macro } from "../macros";
 import { loadRunbooks } from "../runbookScript";
@@ -43,9 +43,11 @@ const props = defineProps<{
   attached: boolean;
   /** OS guessed from USB enumeration; "auto" resolves to this. */
   detectedOs: string;
+  /** Text of a file dropped on the console. */
+  dropped?: string | null;
 }>();
 
-const emit = defineEmits<{ (e: "values", v: Values): void }>();
+const emit = defineEmits<{ (e: "values", v: Values): void; (e: "dropped-taken"): void }>();
 
 const layout = computed(() => enumName(props.schema, props.values, "kbd_layout") ?? DEFAULT_LAYOUT);
 const typeDelay = computed(() => Math.max(1, Number(props.values.type_delay) || 8));
@@ -97,6 +99,22 @@ async function paste() {
 
 /* Text typed into the box here, for when the clipboard cannot be read. */
 const draft = ref("");
+const draftBox = ref<HTMLTextAreaElement | null>(null);
+
+/* A dropped text file goes into the box, not straight to the target: the
+   operator sees what will be typed and presses Type it. */
+watch(
+  () => props.dropped,
+  async (text) => {
+    if (text == null) return;
+    emit("dropped-taken");
+    draft.value = text;
+    await nextTick();
+    draftBox.value?.scrollIntoView({ block: "nearest" });
+    draftBox.value?.focus({ preventScroll: true });
+  },
+  { immediate: true },
+);
 
 async function typeDraft() {
   if (await typeText(draft.value)) draft.value = "";
@@ -442,6 +460,7 @@ function moveQuick(i: number, by: number) {
     <template v-else>
       <button type="button" class="btn btn-sm" @click="paste">Paste from clipboard</button>
       <textarea
+        ref="draftBox"
         v-model="draft"
         rows="3"
         class="type-draft"

@@ -16,7 +16,29 @@
  * browser's own chrome, innerHeight does not - and subtracting one from the
  * other left a toolbar's worth of console hanging below the screen, which is
  * how the bottom bar came to be clipped.
+ *
+ * Where the VirtualKeyboard API exists (Chrome on Android) the keyboard is
+ * told to overlay the page instead, and its own geometry gives the height at
+ * once: no waiting for the viewports to settle, and a true "is it up", which
+ * focus is not (Back hides it and leaves the field focused).
  */
+import { ref } from "vue";
+
+interface VirtualKeyboard extends EventTarget {
+  overlaysContent: boolean;
+  boundingRect: DOMRect;
+  show(): void;
+  hide(): void;
+}
+
+/** The VirtualKeyboard API, where the browser has it. */
+export const virtualKeyboard: VirtualKeyboard | undefined =
+  typeof navigator === "undefined"
+    ? undefined
+    : (navigator as Navigator & { virtualKeyboard?: VirtualKeyboard }).virtualKeyboard;
+
+/** Whether the phone's keyboard is showing; only known with the API. */
+export const keyboardUp = ref(false);
 
 /* Small differences between the two viewports are normal - a browser toolbar
    sliding in, a rounding of dvh - and reacting to those would make the layout
@@ -51,8 +73,20 @@ export function consoleHeight(layoutHeight: number, visualHeight: number): numbe
 export function installKeyboardInset(): () => void {
   const vv = window.visualViewport;
   if (!vv) return () => {};
+  const vk = virtualKeyboard;
+  let vkPx = 0;
+  if (vk) vk.overlaysContent = true;
 
   const apply = () => {
+    if (vk) {
+      /* The keyboard overlays now: neither viewport shrinks for it, so the
+         console is the window less the keyboard's own height. */
+      const full = Math.round(document.fullscreenElement ? vv.height : window.innerHeight);
+      const h = vkPx ? full - vkPx : document.fullscreenElement ? full : null;
+      if (h === null) document.documentElement.style.removeProperty("--app-h");
+      else document.documentElement.style.setProperty("--app-h", `${h}px`);
+      return;
+    }
     /* In full screen there is no browser chrome for dvh to follow, and Chrome on
        Android was seen to leave dvh taller than the screen after going full
        screen: the bottom bar sat below the edge, and the page does not scroll.
@@ -79,7 +113,14 @@ export function installKeyboardInset(): () => void {
     late = window.setTimeout(apply, 350);
   };
 
+  const onGeometry = () => {
+    vkPx = Math.round(vk?.boundingRect.height ?? 0);
+    keyboardUp.value = vkPx > 0;
+    apply();
+  };
+
   apply();
+  vk?.addEventListener("geometrychange", onGeometry);
   vv.addEventListener("resize", apply);
   vv.addEventListener("scroll", apply);
   window.addEventListener("orientationchange", onFullscreen);
@@ -88,6 +129,8 @@ export function installKeyboardInset(): () => void {
 
   return () => {
     window.clearTimeout(late);
+    vk?.removeEventListener("geometrychange", onGeometry);
+    if (vk) vk.overlaysContent = false;
     vv.removeEventListener("resize", apply);
     vv.removeEventListener("scroll", apply);
     window.removeEventListener("orientationchange", onFullscreen);

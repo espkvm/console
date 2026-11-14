@@ -115,7 +115,7 @@ export const TOUR_FEATURES: TourFeature[] = [
   {
     icon: "disc",
     title: "Virtual media",
-    line: "Boot the target from an image on the microSD card or the device's flash.",
+    line: "Boot the target from an image on the microSD card or the device's flash. Drop a file on the picture to put it on the card.",
     caps: ["msc"],
     actions: [{ label: "Open", panel: "media" }],
     docs: DOCS + "HOW-IT-WORKS.md#virtual-media",
