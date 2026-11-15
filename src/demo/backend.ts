@@ -360,7 +360,7 @@ function liveStatus(): Json {
    is kept here, so the console's verdict after its reload is the true one. */
 const VERSION_KEY = "espkvm-demo-version";
 const OTHER_KEY = "espkvm-demo-other";
-const NEXT_VERSION = "v.0.60.1";
+const NEXT_VERSION = "v.0.85.1";
 const fixtureOta = (systemInfo as { ota: { version: string }[] }).ota;
 function stored(key: string, fallback: string): string {
   try {
@@ -591,7 +591,7 @@ async function bodyJson(init?: RequestInit, req?: Request): Promise<Json> {
    (static assets, anything not part of the device API). */
 /* The release the demo offers, and an image of the right size to "download".
    Fetching the real one would push megabytes at a visitor for nothing. */
-const IMAGE_BYTES = 1_612_800;
+const IMAGE_BYTES = 2_531_712;
 
 function fakeManifest(): Json {
   return {
@@ -674,7 +674,7 @@ async function route(
         return json(usbprobe);
       case "/api/v1/auth/session":
         return json(authSession);
-      /* This tab, and a colleague watching from another desk. */
+      /* This tab, a colleague watching from another desk, and a VNC client. */
       case "/api/v1/viewers":
         return json({
           viewers: [
@@ -686,6 +686,15 @@ async function route(
               viewOnly: false,
               you: false,
               tailnet: { name: "studio-mac.tail0d1e.ts.net", user: "anna@example.com", userName: "Anna" },
+            },
+            {
+              ip: "192.168.1.31",
+              kind: "vnc",
+              control: false,
+              viewOnly: false,
+              you: false,
+              encrypted: true,
+              seconds: 1260,
             },
           ],
         });

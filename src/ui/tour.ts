@@ -255,6 +255,15 @@ export const TOUR_FEATURES: TourFeature[] = [
     state: (c) => settingOn(c, "net_trial"),
   },
   {
+    icon: "screen",
+    title: "VNC",
+    line: "The picture, keyboard and mouse in TigerVNC or Remmina, encrypted with VeNCrypt. Written by Jan Heil.",
+    since: "0.85.0",
+    actions: [{ label: "VNC server", section: "video", group: "VNC server" }],
+    docs: DOCS + "API.md#vnc",
+    state: (c) => settingOn(c, "vnc_enable"),
+  },
+  {
     icon: "mqtt",
     title: "Home Assistant",
     line: "The device and the target's state over MQTT, found by Home Assistant by itself.",

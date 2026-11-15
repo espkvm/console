@@ -8,6 +8,11 @@ interface Toast {
   id: number;
   kind: ToastKind;
   text: string;
+  /** When it last happened, ms since the epoch: an error waits for the
+      operator, who may come back hours later. */
+  at: number;
+  /** How many times the same notice came, shown as a count. */
+  count: number;
 }
 
 const list = reactive<Toast[]>([]);
@@ -21,8 +26,16 @@ export function dismissToast(id: number) {
 }
 
 function push(kind: ToastKind, text: string) {
+  /* The same notice again is one toast with a count and the latest time,
+     so a repeat does not push the others out. */
+  const same = list.findIndex((t) => t.kind === kind && t.text === text);
+  if (same >= 0 && kind === "error") {
+    const [t] = list.splice(same, 1);
+    list.push({ ...t, at: Date.now(), count: t.count + 1 });
+    return;
+  }
   const id = nextId++;
-  list.push({ id, kind, text });
+  list.push({ id, kind, text, at: Date.now(), count: 1 });
   if (list.length > 4) list.shift();
   /* Errors stay: an operator who missed one has no other way to learn what
      the device refused. */

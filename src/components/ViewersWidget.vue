@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /*
- * Who else has this console open: a chip in the status bar when anyone besides
- * this sign-in does, and the list on a click - each one's address, whether it
- * is in control, and whether it signed in as the viewer. Plus a "View only"
+ * Who else is watching: a chip in the status bar when anyone besides this
+ * sign-in is, and the list on a click - each one's address, whether it is in
+ * control, and whether it signed in as the viewer. A VNC client is listed too. Plus a "View only"
  * badge when this console is the viewer. Asked every few seconds; firmware
  * without /api/v1/viewers is asked once and then left alone.
  */
@@ -20,6 +20,12 @@ interface Viewer {
   you: boolean;
   /** Over Tailscale: the device and its owner. */
   tailnet?: { name: string; user: string; userName: string };
+  /** Not a console tab: "vnc" for a VNC client. */
+  kind?: string;
+  /** VNC: whether the link is TLS (VeNCrypt). */
+  encrypted?: boolean;
+  /** VNC: how long it has been connected. */
+  seconds?: number;
 }
 
 const viewers = ref<Viewer[]>([]);
@@ -59,7 +65,7 @@ onUnmounted(() => clearInterval(timer));
 const others = computed(() => viewers.value.filter((v) => !v.you));
 const title = computed(() => {
   const n = others.value.length;
-  return n === 1 ? "One more console is open" : `${n} more consoles are open`;
+  return n === 1 ? "One more viewer is connected" : `${n} more viewers are connected`;
 });
 
 /* "spev, laptop" over the tailnet, else the address. */
@@ -71,7 +77,16 @@ function who(v: Viewer): string {
   return person ? `${person}, ${device}` : device;
 }
 
+function since(s: number): string {
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min`;
+  return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
+}
+
 function describe(v: Viewer): string {
+  if (v.kind === "vnc") {
+    return `VNC, ${v.encrypted ? "encrypted" : "not encrypted"}, ${since(v.seconds ?? 0)}`;
+  }
   const who = v.you ? "You" : v.viewOnly ? "Viewer" : "Owner";
   return v.control ? `${who}, in control` : v.viewOnly ? `${who}, watching` : who;
 }
@@ -100,10 +115,10 @@ function describe(v: Viewer): string {
       <div
         class="vws-pop"
         role="dialog"
-        aria-label="Open consoles"
+        aria-label="Viewers"
         :style="{ top: `${at.top}px`, left: `${at.left}px` }"
       >
-        <h3>Open consoles</h3>
+        <h3>Viewers</h3>
         <ul>
           <li v-for="(v, i) in viewers" :key="i">
             <span :class="{ mono: !v.tailnet }" :title="v.tailnet ? `${v.ip} over Tailscale` : undefined">{{ who(v) }}</span>

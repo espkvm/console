@@ -81,6 +81,46 @@
       "requires": "video"
     },
     {
+      "key": "vnc_enable",
+      "section": "video",
+      "group": "VNC server",
+      "title": "VNC server",
+      "help": "For VNC clients such as TigerVNC and Remmina. Set a password first. With VeNCrypt the link is encrypted (TigerVNC uses it by itself). Plain VNC is not, so use that on your own network or over Tailscale. One client at a time: a new one that signs in takes over.",
+      "type": "bool",
+      "default": 0
+    },
+    {
+      "key": "vnc_port",
+      "section": "video",
+      "group": "VNC server",
+      "title": "VNC port",
+      "help": "5900 is what VNC clients try when no port is given.",
+      "type": "int",
+      "min": 1,
+      "max": 65535,
+      "default": 5900
+    },
+    {
+      "key": "vnc_pass",
+      "section": "video",
+      "group": "VNC server",
+      "title": "VNC password",
+      "help": "Up to 8 characters, a limit of VNC itself, so use all 8. It is never shown again. Changing it disconnects the client.",
+      "type": "string",
+      "maxLength": 8,
+      "default": "",
+      "secret": true
+    },
+    {
+      "key": "vnc_hotspot",
+      "section": "video",
+      "group": "VNC server",
+      "title": "VNC over the hotspot",
+      "help": "Take VNC clients that connect through the device's own Wi-Fi hotspot.",
+      "type": "bool",
+      "default": 0
+    },
+    {
       "key": "h264_guard",
       "section": "video",
       "group": "Picture",
