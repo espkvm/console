@@ -118,6 +118,22 @@ export class Control {
     this.#connect();
   }
 
+  /* Signed out: the device would refuse every retry until the next sign-in,
+     which calls start() again. */
+  pause() {
+    if (this.#retry !== null) clearTimeout(this.#retry);
+    this.#retry = null;
+    const ws = this.#ws;
+    this.#ws = null;
+    if (ws) {
+      ws.onclose = null;
+      ws.close();
+    }
+    if (this.#ping !== null) clearInterval(this.#ping);
+    this.#ping = null;
+    this.#handlers.onConnection("closed");
+  }
+
   get open(): boolean {
     return this.#ws?.readyState === WebSocket.OPEN;
   }

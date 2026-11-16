@@ -2157,6 +2157,7 @@ async function onSignedOut() {
   if (!locked.value) return;
   clearTimeout(pollId);
   clearInterval(systemPollId);
+  input.control.pause();
   status.value = null;
 }
 

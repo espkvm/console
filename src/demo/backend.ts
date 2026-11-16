@@ -360,7 +360,7 @@ function liveStatus(): Json {
    is kept here, so the console's verdict after its reload is the true one. */
 const VERSION_KEY = "espkvm-demo-version";
 const OTHER_KEY = "espkvm-demo-other";
-const NEXT_VERSION = "v.0.85.1";
+const NEXT_VERSION = "v.0.86.1";
 const fixtureOta = (systemInfo as { ota: { version: string }[] }).ota;
 function stored(key: string, fallback: string): string {
   try {
