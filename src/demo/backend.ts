@@ -353,8 +353,13 @@ function liveStatus(): Json {
     fps: Math.round(drift(24, 1.6, 11) * 10) / 10,
     kbps: Math.round(drift(8500, 900, 9)),
     record: { ...((videoStatus as Json).record as Json), ...demoRecordStatus() },
+    kvmSwitch: { machine: demoMachineNo, machines: 2, busy: false, error: false },
   };
 }
+
+/* The demo's KVM switch, "NAS, Desktop" in the settings. Only the button
+   moves: the picture is the same fake machine either way. */
+let demoMachineNo = 1;
 
 /* An update in the demo really does install: the version it reports afterwards
    is kept here, so the console's verdict after its reload is the true one. */
@@ -883,6 +888,18 @@ async function route(
        the setting, so the two have to stay in step - otherwise the choice looks
        like it fell back to "ejected" the next time the list is fetched. */
     images = { ...images, active: String(settings.msc_image ?? "") };
+    /* An image at a URL: the demo has no server to ask, so it answers at once
+       with a plausible size. */
+    const mscUrl = String(settings.msc_url ?? "");
+    images = {
+      ...images,
+      url: {
+        url: mscUrl,
+        state: mscUrl && settings.msc_image === "@url" ? "ready" : "off",
+        message: "",
+        size: mscUrl && settings.msc_image === "@url" ? 734003200 : 0,
+      },
+    };
     return json(effectiveSettings());
   }
   if (method === "POST" && path === "/api/v1/storage/fetch") {
@@ -1083,6 +1100,11 @@ async function route(
       case "/api/v1/power/hold":
         demoPower("hold");
         return json({ status: "ok" });
+      case "/api/v1/power/switch": {
+        const want = Number(new URLSearchParams(search).get("machine") || 0);
+        demoMachineNo = want >= 1 && want <= 2 ? want : (demoMachineNo % 2) + 1;
+        return json({ status: "ok", ports: 2 });
+      }
       case "/api/v1/power/reset":
         demoPower("reset");
         return json({ status: "ok" });
@@ -1201,7 +1223,7 @@ class DemoSocket extends EventTarget {
       /* On the control channel, report a target attached (status frame 0x81,
          flags bit0 = attached, bit1 = the bus is alive) so the demo shows a
          live USB connection. */
-      if (this.url.includes("/ws")) {
+      if (this.url.includes("/ws") && !this.url.includes("/ws/media")) {
         const status = new Uint8Array([0x81, 0x03, 0x00]);
         const m = new MessageEvent("message", { data: status.buffer });
         this.onmessage?.(m);
@@ -1219,6 +1241,15 @@ class DemoSocket extends EventTarget {
       (data as ArrayBufferView).byteOffset,
       (data as ArrayBufferView).byteLength,
     );
+    /* /ws/media: the demo has no drive to read from, so it only says yes to
+       serving a file - see state/browserMedia.ts. */
+    if (this.url.includes("/ws/media")) {
+      if (b[0] === 0x01) {
+        const m = new MessageEvent("message", { data: new Uint8Array([0x82, 0]).buffer });
+        setTimeout(() => this.onmessage?.(m), 0);
+      }
+      return;
+    }
     if (this.#serial) {
       /* 0x01 subscribe, 0x02 + bytes typed - see components/SerialPanel.vue. */
       if (b[0] === 0x01) this.#serial.start();

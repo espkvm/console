@@ -10,7 +10,10 @@
  * slot's IO LDO) the upload is shown disabled with the device's reason.
  *
  * The device can also download an image itself, from a URL: netboot.xyz into
- * the rescue slot in one click, or any link onto the card.
+ * the rescue slot in one click, or any link onto the card. Or it serves a link
+ * as it is: the target reads the image from the web server part by part, and
+ * nothing goes onto the card. Or this tab serves a file from this computer the
+ * same way (state/browserMedia.ts).
  *
  * A file dropped on the console comes here too and goes onto the card.
  */
@@ -32,12 +35,14 @@ import {
   uploadRescue,
   UploadCancelled,
   RESCUE_MEDIUM,
+  URL_MEDIUM,
   WHOLE_SD_MEDIUM,
   type FetchStatus,
   type StorageInfo,
   type Values,
 } from "../state/device";
 import { toast } from "../state/toasts";
+import { browserMedia, mobileBrowser, serveFile } from "../state/browserMedia";
 import UploadChart from "./UploadChart.vue";
 
 const props = defineProps<{
@@ -344,6 +349,68 @@ async function selectImage(name: string) {
   }
 }
 
+/* The image stays on the server: the device reads the parts the target asks
+   for, so this works without a card and with images bigger than it. */
+async function bootFromUrl(url: string) {
+  writes++;
+  try {
+    emit("values", await saveSettings({ msc_url: url, msc_image: URL_MEDIUM }));
+    fetchUrl.value = "";
+    await refreshImages(true);
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  }
+}
+
+/* The link without a user name or password in it, short enough for a row. */
+const urlLabel = computed(() => {
+  const raw = storage.value?.url?.url ?? "";
+  try {
+    const u = new URL(raw);
+    const last = u.pathname.split("/").filter(Boolean).pop();
+    return last ? `${u.host}/.../${decodeURIComponent(last)}` : u.host;
+  } catch {
+    return raw;
+  }
+});
+
+const urlSub = computed(() => {
+  const u = storage.value?.url;
+  if (!u || storage.value?.active !== URL_MEDIUM) return "from a web server";
+  if (u.state === "ready") return `from a web server · ${formatBytes(u.size)}`;
+  if (u.state === "error") return `${u.message} · trying again`;
+  return "connecting...";
+});
+
+/* A file served by a console tab: this one, or another. */
+const BROWSER_MEDIUM = "@browser";
+const servedHere = computed(
+  () => browserMedia.state !== "off" && storage.value?.browser?.name === browserMedia.name,
+);
+const browserSub = computed(() => {
+  const b = storage.value?.browser;
+  if (!b || b.state === "off") return "the tab that served it is closed";
+  const where = servedHere.value ? "from this computer" : "from another console tab";
+  if (b.state === "waiting") return `${where} · waiting for the tab to come back`;
+  return `${where} · ${formatBytes(b.size)}`;
+});
+
+/* As the device decides for a card file: Media type wins, else a .iso is a CD. */
+function onServeChosen(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const f = input.files?.[0];
+  input.value = "";
+  if (!f) return;
+  const mode = Number(props.values.msc_mode ?? 0);
+  serveFile(f, mode === 1 || (mode === 0 && /\.iso$/i.test(f.name)));
+  writes++;
+  window.setTimeout(() => void refreshImages(true), 1000);
+}
+
+const canDownload = computed(
+  () => !!storage.value?.mounted && !storage.value.handedOver && storage.value.writable,
+);
+
 async function removeImage(name: string) {
   if (!confirm(`Delete ${name} from the card?`)) return;
   writes++;
@@ -450,6 +517,52 @@ async function removeImage(name: string) {
               <span class="muted image-sub">
                 every file on the card · {{ formatBytes(storage.totalBytes) }}
               </span>
+            </span>
+          </label>
+        </li>
+
+        <li
+          v-if="storage.active === BROWSER_MEDIUM || (storage.browser && storage.browser.state !== 'off')"
+          :class="['image-row', { 'image-active': storage.active === BROWSER_MEDIUM }]"
+        >
+          <label class="image-pick">
+            <input type="radio" name="active-image" :checked="storage.active === BROWSER_MEDIUM" disabled />
+            <span class="image-text">
+              <span class="mono image-name">{{ storage.browser?.name || "A file from a computer" }}</span>
+              <span class="muted image-sub">{{ browserSub }}</span>
+            </span>
+          </label>
+          <p v-if="servedHere && browserMedia.rate > 0" class="setting-note">
+            The target reads {{ formatBytes(browserMedia.rate) }}/s.<template v-if="!streamPaused">
+              Video runs at 2 fps meanwhile -
+              <button type="button" class="btn-link" @click="emit('pause-stream')">pause it</button>
+              for full speed.</template
+            >
+          </p>
+        </li>
+
+        <li
+          v-if="storage.url?.url"
+          :class="['image-row', { 'image-active': storage.active === URL_MEDIUM }]"
+        >
+          <label class="image-pick">
+            <input
+              type="radio"
+              name="active-image"
+              :checked="storage.active === URL_MEDIUM"
+              @change="selectImage(URL_MEDIUM)"
+            />
+            <span class="image-text">
+              <span class="mono image-name">{{ urlLabel }}</span>
+              <span
+                :class="[
+                  'image-sub',
+                  storage.active === URL_MEDIUM && storage.url.state === 'error'
+                    ? 'image-sub-bad'
+                    : 'muted',
+                ]"
+                >{{ urlSub }}</span
+              >
             </span>
           </label>
         </li>
@@ -574,36 +687,65 @@ async function removeImage(name: string) {
           <button type="button" class="btn-link" @click="emit('pause-stream')">pause it</button>
           for full speed.
         </p>
-        <form
-          v-if="storage.writable"
-          class="fetch-form"
-          @submit.prevent="beginFetch(fetchUrl.trim(), 'card', fetchName.trim())"
-        >
-          <input
-            v-model="fetchUrl"
-            type="url"
-            required
-            placeholder="https://.../image.iso"
-            aria-label="Image URL"
-            :disabled="fetching"
-          />
-          <input
-            v-model="fetchName"
-            class="mono"
-            required
-            placeholder="name.iso"
-            aria-label="Save as"
-            :disabled="fetching"
-          />
-          <button type="submit" class="btn btn-sm" :disabled="fetching || !fetchUrl.trim()">
-            Download to card
-          </button>
-        </form>
-        <p v-if="storage.writable" class="setting-note">
-          The device downloads the link itself, so it needs internet (or your NAS) - not this
-          browser.
-        </p>
       </template>
+
+      <label v-if="exposed" class="btn btn-sm">
+        Boot from this computer...
+        <input type="file" class="sr-only" @change="onServeChosen" />
+      </label>
+      <p v-if="exposed" class="setting-note">
+        The target reads the file from this tab as it boots. Nothing is uploaded first or put on the
+        card, so keep the tab open meanwhile. It is slow, about 11 minutes a gigabyte, so I suggest it
+        for images up to 1 GB. A bigger one is faster from the card or a URL. Video runs at 2 fps while
+        the target reads.<template v-if="mobileBrowser">
+          On a phone, keep it in front: a tab in the background may be stopped.</template
+        >
+      </p>
+
+      <form class="fetch-form" @submit.prevent="beginFetch(fetchUrl.trim(), 'card', fetchName.trim())">
+        <input
+          v-model="fetchUrl"
+          type="url"
+          required
+          placeholder="https://.../image.iso"
+          aria-label="Image URL"
+          :disabled="fetching"
+        />
+        <input
+          v-if="canDownload"
+          v-model="fetchName"
+          class="mono"
+          required
+          placeholder="name.iso"
+          aria-label="Save as"
+          :disabled="fetching"
+        />
+        <button
+          type="button"
+          class="btn btn-sm"
+          :disabled="!fetchUrl.trim()"
+          @click="bootFromUrl(fetchUrl.trim())"
+        >
+          Boot from URL
+        </button>
+        <button
+          v-if="canDownload"
+          type="submit"
+          class="btn btn-sm btn-quiet"
+          :disabled="fetching || !fetchUrl.trim()"
+        >
+          Download to card
+        </button>
+      </form>
+      <FoldNote>
+        <template #lead>The device opens the link itself, so it needs internet (or your NAS), not this browser.</template>
+        Boot from URL leaves the image on the server: the target reads it part by part as it boots,
+        and nothing goes onto the card. The server has to answer HTTP Range requests, as nginx,
+        Apache, Caddy and most NAS servers do.<template v-if="canDownload">
+          Download to card copies the whole file first, so it boots at card speed and without the
+          server.</template
+        >
+      </FoldNote>
     </template>
   </div>
 </template>
@@ -624,6 +766,10 @@ async function removeImage(name: string) {
 .fetch-form input.mono {
   flex: 0 1 10rem;
   min-width: 0;
+}
+
+.image-sub-bad {
+  color: var(--danger);
 }
 
 .fetch-progress progress {

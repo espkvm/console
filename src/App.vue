@@ -63,6 +63,7 @@ import KeyboardPanel from "./components/KeyboardPanel.vue";
 import TouchControls from "./components/TouchControls.vue";
 import UpdateWidget from "./components/UpdateWidget.vue";
 import TrialBanner from "./components/TrialBanner.vue";
+import BrowserMediaBanner from "./components/BrowserMediaBanner.vue";
 import { useInput } from "./input/useInput";
 import { soundHeld } from "./video/sound";
 import { NO_ZOOM, useTouch, type Zoom } from "./input/useTouch";
@@ -2666,6 +2667,7 @@ const LED_BITS: Array<[number, string]> = [
       <button type="button" class="btn btn-sm" @click="restartOutcome = null">Dismiss</button>
     </div>
     <TrialBanner :system="system" @kept="trialKept" />
+    <BrowserMediaBanner />
     <div v-if="suggested" class="update-banner" role="status">
       <span>
         This is a {{ suggested.name }}. Make a profile for it? Settings that suit it, used whenever
@@ -2987,6 +2989,8 @@ const LED_BITS: Array<[number, string]> = [
           :side="uiRight ? 'right' : 'left'"
           :hdd="status?.hdd"
           :watch-only="signedInToWatch"
+          :kvm-switch="status?.kvmSwitch ?? null"
+          :machine-names-setting="String(values.kvmsw_names ?? '')"
         />
         <OsWidget
           :probe="usbProbe"

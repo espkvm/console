@@ -176,6 +176,8 @@ export interface VideoStatus {
   profile?: number;
   /** The target's HDD LED: lit or blinking now. null when it is not wired, absent on older firmware. */
   hdd?: boolean | null;
+  /** The KVM switch in front of several machines, null when there is none. */
+  kvmSwitch?: KvmSwitch | null;
   /** Internal RAM ran low and the device closed connections to free some.
    *  null when it has not, absent on older firmware. */
   memLow?: MemLow | null;
@@ -1019,6 +1021,33 @@ export async function replugUsb(): Promise<void> {
   if (!res.ok) throw new Error(await errorFromResponse(res, `re-plug failed (${res.status})`));
 }
 
+/** Where the KVM switch is. `machine` counts from 1. */
+export interface KvmSwitch {
+  /** null while a network switch has not answered yet. */
+  machine: number | null;
+  machines: number;
+  /** Presses or a command are still going out. */
+  busy: boolean;
+  /** A network switch did not answer the last command. */
+  error?: boolean;
+}
+
+/** The machines' names from the kvmsw_names setting, "Machine N" where none is given. */
+export function machineNames(names: unknown, count: number): string[] {
+  const given = String(names ?? "")
+    .split(",")
+    .map((n) => n.trim());
+  return Array.from({ length: count }, (_, i) => given[i] || `Machine ${i + 1}`);
+}
+
+/** Move the KVM switch to @p machine (from 1), or to the next one without it. */
+export async function selectMachine(machine?: number): Promise<void> {
+  const q = machine ? `?machine=${machine}` : "";
+  const res = await fetch(`/api/v1/power/switch${q}`, { method: "POST", headers: CONSOLE_HEADER });
+  if (res.status === 401) throw new Unauthorized();
+  if (!res.ok) throw new Error(await errorFromResponse(res, `switching failed (${res.status})`));
+}
+
 export const powerClick = () => powerAction("click");
 export const powerHold = () => powerAction("hold");
 export const powerReset = () => powerAction("reset");
@@ -1510,6 +1539,18 @@ export const RESCUE_MEDIUM = "@rescue";
 /** The reserved active-medium name that hands the whole microSD card to the target. */
 export const WHOLE_SD_MEDIUM = "@wholesd";
 
+/** The reserved active-medium name that serves the image at the msc_url setting. */
+export const URL_MEDIUM = "@url";
+
+/** An image the target reads from a web server, without it going onto the card. */
+export interface UrlMediumInfo {
+  url: string;
+  /** "connecting" until the server answered, "error" while it does not (retried). */
+  state: "off" | "connecting" | "ready" | "error";
+  message: string;
+  size: number;
+}
+
 export interface StorageInfo {
   mounted: boolean;
   totalBytes: number;
@@ -1525,6 +1566,10 @@ export interface StorageInfo {
   handedOver?: boolean;
   /** The on-flash rescue image, present on devices whose table has it. */
   rescue?: RescueInfo;
+  /** The image at a URL, when the firmware has it. */
+  url?: UrlMediumInfo;
+  /** A file a console tab serves from its computer. */
+  browser?: { state: "off" | "serving" | "waiting"; name: string; size: number };
   /** Card clock now, kHz. It starts at the fastest that works and only goes down. */
   busKhz?: number;
   /** Failed transfers since the mount; each one slowed the bus. */

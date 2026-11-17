@@ -32,6 +32,7 @@ import {
   loadNotifyStatus,
   loadRunbookStatus,
   loadScheduleStatus,
+  machineNames,
   runRunbook,
   runSchedule,
   saveSettings,
@@ -54,6 +55,9 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: "values", v: Values): void }>();
 
 const runbooks = computed<Runbook[]>(() => loadRunbooks(props.values.runbooks_json));
+const switchMachines = computed(() =>
+  machineNames(props.values.kvmsw_names, Number(props.values.kvmsw_ports ?? 2)),
+);
 
 /* ---- the run ------------------------------------------------------------ */
 
@@ -326,7 +330,7 @@ async function saveSchedule() {
     name,
     cron: scCron.value.trim(),
     action: scAction.value,
-    arg: scAction.value === "runbook" ? scArg.value : undefined,
+    arg: scAction.value === "runbook" || scAction.value === "machine" ? scArg.value : undefined,
     enabled: scEnabled.value,
   };
   const list = schedules.value.slice();
@@ -548,6 +552,10 @@ async function sendTest() {
       <select v-if="scAction === 'runbook'" v-model="scArg">
         <option value="" disabled>Choose a runbook...</option>
         <option v-for="n in runbookNames" :key="n" :value="n">{{ n }}</option>
+      </select>
+      <select v-if="scAction === 'machine'" v-model="scArg">
+        <option value="">The next machine</option>
+        <option v-for="(n, i) in switchMachines" :key="i" :value="String(i + 1)">{{ n }}</option>
       </select>
       <label class="switch">
         <input v-model="scEnabled" type="checkbox" />

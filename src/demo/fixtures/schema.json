@@ -1142,6 +1142,17 @@
       "requires": "msc"
     },
     {
+      "key": "msc_url",
+      "section": "storage_hidden",
+      "title": "Image URL",
+      "help": "An image on a web server that the target boots without it being copied to the card, used while the mounted image is \"@url\". The server must answer HTTP Range requests.",
+      "type": "string",
+      "maxLength": 500,
+      "default": "",
+      "requires": "msc",
+      "secret": true
+    },
+    {
       "key": "pwr_wol_mac",
       "section": "power",
       "group": "Wake-on-LAN",
@@ -1295,6 +1306,137 @@
       "showIf": {
         "key": "atx_enable",
         "eq": 1
+      }
+    },
+    {
+      "key": "kvmsw_mode",
+      "section": "power",
+      "group": "KVM switch",
+      "title": "KVM switch",
+      "help": "A KVM switch between this device and several machines, so the console's Power menu lists them. \"button\": a GPIO wired to the switch's select button, each press moves it to the next machine. \"tesmart\": a TESmart switch told the machine over the network, no wires.",
+      "type": "enum",
+      "choices": [
+        "off",
+        "button",
+        "tesmart"
+      ],
+      "default": 0
+    },
+    {
+      "key": "kvmsw_gpio",
+      "section": "power",
+      "group": "KVM switch",
+      "title": "Switch button GPIO",
+      "help": "Wired to the switch's select button. -1 to leave it unwired.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": -1,
+      "pin": true,
+      "showIf": {
+        "key": "kvmsw_mode",
+        "eq": 1
+      }
+    },
+    {
+      "key": "kvmsw_host",
+      "section": "power",
+      "group": "KVM switch",
+      "title": "Switch address",
+      "help": "The TESmart switch's address on the network, with :port if it is not 5000. A new switch is at 192.168.1.10. It has no password, so keep it on a network you trust.",
+      "type": "string",
+      "maxLength": 63,
+      "default": "192.168.1.10",
+      "showIf": {
+        "key": "kvmsw_mode",
+        "eq": 2
+      }
+    },
+    {
+      "key": "kvmsw_direct",
+      "section": "power",
+      "group": "KVM switch",
+      "title": "Wired straight to the button",
+      "help": "On when the GPIO goes straight to the side of the switch's button that is not ground, with the grounds joined: a press pulls it low, and between presses the pin lets go. Only if that side is at 3.3 V or less. Off for an optocoupler module that presses on a high.",
+      "type": "bool",
+      "default": 1,
+      "showIf": {
+        "key": "kvmsw_mode",
+        "eq": 1
+      }
+    },
+    {
+      "key": "kvmsw_ports",
+      "section": "power",
+      "group": "KVM switch",
+      "title": "Machines",
+      "help": "How many machines the switch has.",
+      "type": "int",
+      "min": 2,
+      "max": 16,
+      "default": 2,
+      "showIf": {
+        "key": "kvmsw_mode",
+        "ne": 0
+      }
+    },
+    {
+      "key": "kvmsw_names",
+      "section": "power",
+      "group": "KVM switch",
+      "title": "Machine names",
+      "help": "Names for the console, in the switch's order, split by commas. For example: NAS, Desktop. Empty gives Machine 1, Machine 2.",
+      "type": "string",
+      "default": "",
+      "showIf": {
+        "key": "kvmsw_mode",
+        "ne": 0
+      },
+      "maxLength": 95
+    },
+    {
+      "key": "kvmsw_ms",
+      "section": "power",
+      "group": "KVM switch",
+      "title": "Press length",
+      "help": "How long each press of the switch's button is held.",
+      "type": "int",
+      "min": 50,
+      "max": 2000,
+      "default": 200,
+      "unit": "ms",
+      "showIf": {
+        "key": "kvmsw_mode",
+        "eq": 1
+      }
+    },
+    {
+      "key": "kvmsw_led_gpio",
+      "section": "power",
+      "group": "KVM switch",
+      "title": "First machine LED GPIO",
+      "help": "Optional. Reads the switch's light for the first machine, so the device knows where the switch is after someone presses its button by hand. Without it the device counts its own presses from the first machine. -1 if not wired.",
+      "type": "int",
+      "min": -1,
+      "max": 54,
+      "default": -1,
+      "pin": true,
+      "showIf": {
+        "key": "kvmsw_mode",
+        "eq": 1
+      }
+    },
+    {
+      "key": "kvmsw_led_ah",
+      "section": "power",
+      "group": "KVM switch",
+      "title": "LED active-high",
+      "help": "On if the LED input reads high while the first machine is selected.",
+      "type": "bool",
+      "default": 1,
+      "showIf": {
+        "key": "kvmsw_led_gpio",
+        "ne": -1
       }
     },
     {

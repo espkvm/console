@@ -115,8 +115,9 @@ export const TOUR_FEATURES: TourFeature[] = [
   {
     icon: "disc",
     title: "Virtual media",
-    line: "Boot the target from an image on the microSD card or the device's flash. Drop a file on the picture to put it on the card.",
+    line: "Boot the target from an image on the microSD card, in the device's flash, on a web server or on this computer. Drop a file on the picture to put it on the card.",
     caps: ["msc"],
+    since: "0.87.0",
     actions: [{ label: "Open", panel: "media" }],
     docs: DOCS + "HOW-IT-WORKS.md#virtual-media",
     state: (c) => capOn(c, "msc"),
@@ -179,6 +180,15 @@ export const TOUR_FEATURES: TourFeature[] = [
     actions: [{ label: "Power", section: "power", group: "ATX wiring" }],
     docs: DOCS + "wiring.md",
     state: (c) => capOn(c, "atx"),
+  },
+  {
+    icon: "power",
+    title: "KVM switch",
+    line: "Several machines behind one device: pick one by name in the Power menu. One wire to the switch's button, or a TESmart switch over the network.",
+    since: "0.87.0",
+    actions: [{ label: "Set up", section: "power", group: "KVM switch" }],
+    docs: DOCS + "wiring.md#a-kvm-switch",
+    state: (c) => (c.values.kvmsw_mode === undefined ? undefined : Number(c.values.kvmsw_mode) ? "On" : "Off"),
   },
   {
     icon: "remote",

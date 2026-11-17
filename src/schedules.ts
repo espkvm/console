@@ -13,13 +13,14 @@ export type ScheduleAction =
   | "runbook"
   | "clip"
   | "screenshot"
+  | "machine"
   | "restart";
 
 export interface Schedule {
   name: string;
   cron: string;
   action: ScheduleAction;
-  arg?: string; // the runbook name, for action "runbook"
+  arg?: string; // the runbook name, or the machine from 1 for "machine" (none = the next)
   enabled: boolean;
 }
 
@@ -33,6 +34,7 @@ export const SCHEDULE_ACTIONS: { value: ScheduleAction; label: string }[] = [
   { value: "runbook", label: "Run a runbook" },
   { value: "clip", label: "Save a dashcam clip" },
   { value: "screenshot", label: "Screenshot to the card" },
+  { value: "machine", label: "KVM switch: change machine" },
   { value: "restart", label: "Restart ESP-KVM" },
 ];
 
@@ -107,7 +109,7 @@ export function serializeSchedules(list: Schedule[]): string {
       name: s.name,
       cron: s.cron,
       action: s.action,
-      ...(s.action === "runbook" && s.arg ? { arg: s.arg } : {}),
+      ...((s.action === "runbook" || s.action === "machine") && s.arg ? { arg: s.arg } : {}),
       enabled: s.enabled,
     })),
   );

@@ -15,13 +15,16 @@ import { computed, ref } from "vue";
 
 import {
   cecPower,
+  machineNames,
   powerClick,
   powerHold,
   powerReset,
   powerOnUsb,
+  selectMachine,
   USB_POWER_TEXT,
   wakeTarget,
   type Capability,
+  type KvmSwitch,
 } from "../state/device";
 import { toast } from "../state/toasts";
 import Icon from "./Icon.vue";
@@ -37,6 +40,10 @@ const props = defineProps<{
   hdd?: boolean | null;
   /** A view-only sign-in: the lights, no buttons. */
   watchOnly?: boolean;
+  /** The KVM switch, null when there is none. */
+  kvmSwitch?: KvmSwitch | null;
+  /** The kvmsw_names setting. */
+  machineNamesSetting?: string;
 }>();
 
 const open = ref(false);
@@ -51,7 +58,12 @@ const hasWol = computed(() => Boolean(props.caps.wol?.available));
 const hasCec = computed(() => Boolean(props.caps.cec?.active));
 /* Every board has the USB port to the target, so power on over USB is always there. */
 const hasUsb = computed(() => Boolean(props.caps.hid?.available));
-const available = computed(() => hasAtx.value || hasWol.value || hasCec.value || hasUsb.value);
+const machines = computed(() =>
+  props.kvmSwitch ? machineNames(props.machineNamesSetting, props.kvmSwitch.machines) : [],
+);
+const available = computed(
+  () => hasAtx.value || hasWol.value || hasCec.value || hasUsb.value || machines.value.length > 0,
+);
 const known = computed(() => Boolean(props.atx?.known));
 const on = computed(() => Boolean(props.atx?.on));
 
@@ -94,6 +106,11 @@ function hdmi(action: "standby" | "wake") {
     () => cecPower(action),
     action === "wake" ? "Asked the HDMI source to wake" : "Asked the HDMI source to sleep",
   );
+}
+
+function pick(n: number) {
+  if (n === props.kvmSwitch?.machine) return;
+  void act(() => selectMachine(n), `Switching to ${machines.value[n - 1]}`);
 }
 
 async function usbOn() {
@@ -150,6 +167,25 @@ async function wake() {
         </div>
 
         <p v-if="watchOnly" class="pw-note">This sign-in can only watch.</p>
+        <template v-if="machines.length">
+          <div class="pw-machines" role="group" aria-label="KVM switch">
+            <button
+              v-for="(name, i) in machines"
+              :key="i"
+              type="button"
+              :class="['pw-machine', { 'pw-machine-on': kvmSwitch?.machine === i + 1 }]"
+              :disabled="watchOnly || busy || kvmSwitch?.busy"
+              :aria-pressed="kvmSwitch?.machine === i + 1"
+              @click="pick(i + 1)"
+            >
+              {{ name }}
+            </button>
+          </div>
+          <small v-if="kvmSwitch?.error" class="pw-note pw-note-bad">
+            The KVM switch does not answer. Check its address under Settings &rarr; Power.
+          </small>
+          <small v-else class="pw-note">KVM switch. The picture and USB move to the machine picked.</small>
+        </template>
         <template v-if="hasAtx && !watchOnly">
           <button type="button" class="pw-item" :disabled="busy" @click="press">
             Press power
@@ -331,6 +367,45 @@ async function wake() {
 
 .pw-item-danger:hover:not(:disabled) {
   border-color: var(--danger, #f87171);
+}
+
+.pw-note-bad {
+  color: var(--danger, #f87171);
+}
+
+.pw-machines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 var(--space-1);
+}
+
+.pw-machine {
+  flex: 1 1 40%;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pw-machine:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.pw-machine-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.pw-machine:disabled:not(.pw-machine-on) {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .pw-note {
