@@ -2414,9 +2414,9 @@
       "section": "vpn",
       "group": "Tailscale",
       "title": "Auth key",
-      "help": "Optional. A Tailscale auth key (tskey-auth-...) that authorises this device to join. Empty, the device shows a link to sign in with your Tailscale account instead. Generate a key in the Tailscale admin console; a reusable key survives re-registration across reboots.",
+      "help": "Optional. A Tailscale auth key (tskey-auth-...) or a Headscale one (hskey-auth-...) that authorises this device to join. Empty, the device shows a link to sign in with your Tailscale account instead. Generate a key in the Tailscale admin console. A reusable key survives re-registration across reboots.",
       "type": "string",
-      "maxLength": 63,
+      "maxLength": 127,
       "default": "",
       "requires": "tailscale",
       "secret": true
