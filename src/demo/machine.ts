@@ -86,7 +86,7 @@ function go(next: Stage, spent?: number) {
 /* The post, as it would scroll by: how long in, and what appears. */
 const POST: Array<[number, string]> = [
   [0, "ESP-KVM Demo BIOS v2.1"],
-  [200, "Copyright (C) 2026 ESP-KVM contributors"],
+  [200, "Copyright (C) 2026 Evgenij Spitsyn and ESP-KVM contributors"],
   [400, ""],
   [700, "CPU     : RISC-V dual core @ 400 MHz"],
   [1000, "Memory  : 32768 MB OK"],
