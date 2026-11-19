@@ -115,9 +115,9 @@ export const TOUR_FEATURES: TourFeature[] = [
   {
     icon: "disc",
     title: "Virtual media",
-    line: "Boot the target from an image on the microSD card, in the device's flash, on a web server or on this computer. Drop a file on the picture to put it on the card.",
+    line: "Boot the target from an image on the microSD card, in the device's flash, on a web server or on this computer. Drop a file on the picture to put it on the card. On a device with a screen and buttons, pick the image right there.",
     caps: ["msc"],
-    since: "0.87.0",
+    since: "0.89.0",
     actions: [{ label: "Open", panel: "media" }],
     docs: DOCS + "HOW-IT-WORKS.md#virtual-media",
     state: (c) => capOn(c, "msc"),
