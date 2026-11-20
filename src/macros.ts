@@ -21,6 +21,7 @@
  */
 
 import { HID_MOD_LALT, HID_MOD_LCTRL, HID_MOD_LGUI, HID_MOD_LSHIFT } from "./layouts";
+import { tm } from "./i18n";
 
 const KEY_TAB = 0x2b;
 const KEY_ESC = 0x29;
@@ -75,14 +76,14 @@ export const MACROS: Macro[] = [
     modifier: HID_MOD_LCTRL | HID_MOD_LALT,
     key: KEY_DELETE,
     destructive: true,
-    hint: "Security screen on Windows, logout prompt on most Linux desktops.",
+    hint: tm("Security screen on Windows, logout prompt on most Linux desktops."),
   },
   {
     id: "alt_tab",
     label: "Alt+Tab",
     modifier: HID_MOD_LALT,
     key: KEY_TAB,
-    hint: "Switch to the previously focused window.",
+    hint: tm("Switch to the previously focused window."),
   },
   {
     id: "meta",
@@ -91,14 +92,14 @@ export const MACROS: Macro[] = [
     labelByOs: { macos: "Cmd", linux: "Super" },
     modifier: HID_MOD_LGUI,
     key: 0,
-    hint: "Start menu, launcher or activities overview.",
+    hint: tm("Start menu, launcher or activities overview."),
   },
   {
     id: "prtsc",
     label: "PrtSc",
     modifier: 0,
     key: KEY_PRINTSCREEN,
-    hint: "Screenshot on the target.",
+    hint: tm("Screenshot on the target."),
   },
   {
     id: "esc",
@@ -112,7 +113,7 @@ export const MACROS: Macro[] = [
     os: "windows",
     modifier: HID_MOD_LCTRL | HID_MOD_LSHIFT,
     key: KEY_ESC,
-    hint: "Task Manager on Windows.",
+    hint: tm("Task Manager on Windows."),
   },
   {
     id: "meta_l",
@@ -120,7 +121,7 @@ export const MACROS: Macro[] = [
     modifier: HID_MOD_LGUI,
     key: KEY_L,
     destructive: true,
-    hint: "Locks the target. You will need its password to get back in.",
+    hint: tm("Locks the target. You will need its password to get back in."),
   },
   {
     id: "alt_f4",
@@ -128,7 +129,7 @@ export const MACROS: Macro[] = [
     modifier: HID_MOD_LALT,
     key: KEY_F4,
     destructive: true,
-    hint: "Closes the focused window, discarding unsaved work.",
+    hint: tm("Closes the focused window, discarding unsaved work."),
   },
 
   /* ---- Linux ----------------------------------------------------------- */
@@ -139,10 +140,11 @@ export const MACROS: Macro[] = [
     os: "linux",
     sysrq: "reisub",
     destructive: true,
-    hint:
+    hint: tm(
       "Safely reboot a hung Linux machine. Holds Alt+SysRq and taps R E I S U B: " +
-      "take back the keyboard, end processes, kill what is left, sync the disks, " +
-      "remount them read-only, then reboot. Takes several seconds.",
+        "take back the keyboard, end processes, kill what is left, sync the disks, " +
+        "remount them read-only, then reboot. Takes several seconds.",
+    ),
   },
   {
     id: "reisuo",
@@ -150,22 +152,23 @@ export const MACROS: Macro[] = [
     os: "linux",
     sysrq: "reisuo",
     destructive: true,
-    hint:
+    hint: tm(
       "Like REISUB but powers the machine off instead of rebooting: the last step " +
-      "is O rather than B. Syncs and remounts read-only first, so the disks are safe.",
+        "is O rather than B. Syncs and remounts read-only first, so the disks are safe.",
+    ),
   },
   { id: "tty_f1", label: "TTY F1", os: "linux", modifier: HID_MOD_LCTRL | HID_MOD_LALT, key: KEY_F1,
-    hint: "Switch to virtual terminal 1 (often the graphical session)." },
+    hint: tm("Switch to virtual terminal 1 (often the graphical session).") },
   { id: "tty_f2", label: "F2", os: "linux", modifier: HID_MOD_LCTRL | HID_MOD_LALT, key: KEY_F2,
-    hint: "Switch to virtual terminal 2." },
+    hint: tm("Switch to virtual terminal 2.") },
   { id: "tty_f3", label: "F3", os: "linux", modifier: HID_MOD_LCTRL | HID_MOD_LALT, key: KEY_F3,
-    hint: "Switch to virtual terminal 3 (a text console when the GUI is wedged)." },
+    hint: tm("Switch to virtual terminal 3 (a text console when the GUI is wedged).") },
   { id: "tty_f4", label: "F4", os: "linux", modifier: HID_MOD_LCTRL | HID_MOD_LALT, key: KEY_F4,
-    hint: "Switch to virtual terminal 4." },
+    hint: tm("Switch to virtual terminal 4.") },
   { id: "tty_f5", label: "F5", os: "linux", modifier: HID_MOD_LCTRL | HID_MOD_LALT, key: KEY_F5,
-    hint: "Switch to virtual terminal 5." },
+    hint: tm("Switch to virtual terminal 5.") },
   { id: "tty_f6", label: "F6", os: "linux", modifier: HID_MOD_LCTRL | HID_MOD_LALT, key: KEY_F6,
-    hint: "Switch to virtual terminal 6." },
+    hint: tm("Switch to virtual terminal 6.") },
 ];
 
 export function findMacro(id: string): Macro | null {

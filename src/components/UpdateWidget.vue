@@ -46,6 +46,7 @@ import {
   watchStep,
 } from "../state/restart";
 import { reportSeen, seenUrl } from "../state/seen";
+import { t } from "../i18n";
 import { toast } from "../state/toasts";
 
 const props = defineProps<{ system: SystemInfo | null; values: Values }>();
@@ -147,7 +148,7 @@ watch(
 const slots = computed<OtaSlot[]>(() => props.system?.ota ?? []);
 /* The running image is a fresh, not-yet-confirmed OTA: a reset would roll it back. */
 const runningPending = computed(() => slots.value.some((s) => s.running && s.state === "pending"));
-const otherLabel = computed(() => slots.value.find((s) => !s.running)?.label ?? "the other slot");
+const otherLabel = computed(() => slots.value.find((s) => !s.running)?.label ?? t("the other slot"));
 /* An update always lands on the inactive slot; the running one is left untouched
    until the new image verifies. Null on older firmware that doesn't report slots. */
 const updateTarget = computed(() => slots.value.find((s) => !s.running)?.label ?? null);
@@ -165,17 +166,17 @@ function canBoot(slot: OtaSlot): boolean {
 
 /** The state badge's short word. */
 function stateLabel(slot: OtaSlot): string {
-  if (slot.version === "") return "empty";
+  if (slot.version === "") return t("empty");
   switch (slot.state) {
     case "pending":
-      return slot.running ? "unconfirmed" : "pending";
+      return slot.running ? t("unconfirmed") : t("pending");
     case "invalid":
     case "aborted":
-      return "failed";
+      return t("failed");
     case "new":
-      return "new";
+      return t("new");
     default:
-      return slot.running ? "confirmed" : "standby";
+      return slot.running ? t("confirmed") : t("standby");
   }
 }
 
@@ -192,7 +193,7 @@ function badgeClass(slot: OtaSlot): string {
 async function switchSlot(slot: OtaSlot) {
   if (slot.running || switching.value) return;
   const ver = slot.version || "unknown version";
-  if (!confirm(`Boot from ${slot.label} (${ver}) and restart the device now?`)) return;
+  if (!confirm(t("Boot from {slot} ({version}) and restart the device now?", { slot: slot.label, version: slot.version || t("unknown version") }))) return;
   switchLost.value = false;
   switching.value = slot.label;
   try {
@@ -202,11 +203,11 @@ async function switchSlot(slot: OtaSlot) {
     toast.error(err instanceof Error ? err.message : String(err));
     return;
   }
-  beginWatchHere(`Booting ${slot.label}`);
+  beginWatchHere(t("Booting {slot}", { slot: slot.label }));
 
   rememberRestart({ kind: "slot", from: props.system?.version, to: ver });
   if (await watchBack()) {
-    watchStep("restart", "The device is back. Reloading the console...");
+    watchStep("restart", t("The device is back. Reloading the console..."));
     /* The reboot cleared the session; the reload lands on the sign-in page. */
     setTimeout(() => location.reload(), 1500);
     return;
@@ -229,15 +230,15 @@ const badgeShort = computed(() => {
 const statusText = computed(() => {
   switch (phase.value) {
     case "downloading":
-      return `Downloading ${firmwarePct.value}%...`;
+      return t("Downloading {pct}%...", { pct: firmwarePct.value });
     case "uploading":
-      return `Uploading ${firmwarePct.value}%...`;
+      return t("Uploading {pct}%...", { pct: firmwarePct.value });
     case "writing":
-      return "Writing and verifying...";
+      return t("Writing and verifying...");
     case "restarting":
-      return "Restarting...";
+      return t("Restarting...");
     case "back":
-      return "Back up, reloading...";
+      return t("Back up, reloading...");
     default:
       return "";
   }
@@ -302,7 +303,7 @@ function fail(message: string) {
   endWatch();
   phase.value = "idle";
   installError.value = message;
-  toast.error(message);
+  toast.error(t(message));
 }
 
 /**
@@ -318,10 +319,10 @@ function fail(message: string) {
 async function notAFirmwareImage(image: Blob): Promise<string | null> {
   if (image.size < 256 * 1024) {
     const kb = Math.round(image.size / 1024);
-    return `that file is only ${kb} KB - too small to be a firmware image`;
+    return t("that file is only {kb} KB - too small to be a firmware image", { kb });
   }
   const head = new Uint8Array(await image.slice(0, 1).arrayBuffer());
-  if (head[0] !== 0xe9) return "that file does not start like an ESP firmware image";
+  if (head[0] !== 0xe9) return t("that file does not start like an ESP firmware image");
   return null;
 }
 
@@ -345,13 +346,13 @@ async function sendImage(image: Blob, label: string, version?: string) {
   /* Installing a published build starts the watch earlier, at the download, and
      keeps its own longer list of steps. */
   if (!restartWatch.active) {
-    beginWatchHere(`Installing ${label}`, [
-      { key: "send", label: "Sending the image to the device" },
-      { key: "write", label: "Writing and verifying it" },
-      { key: "restart", label: "Restarting onto the new image" },
+    beginWatchHere(t("Installing {name}", { name: label }), [
+      { key: "send", label: t("Sending the image to the device") },
+      { key: "write", label: t("Writing and verifying it") },
+      { key: "restart", label: t("Restarting onto the new image") },
     ]);
   }
-  watchStep("send", "Sending the image to the device...", { pct: 0 });
+  watchStep("send", t("Sending the image to the device..."), { pct: 0 });
   let outcome;
   try {
     outcome = await uploadFirmware(
@@ -363,7 +364,7 @@ async function sendImage(image: Blob, label: string, version?: string) {
       },
       () => {
         phase.value = "writing";
-        watchStep("write", "Writing and verifying it on the device...", {
+        watchStep("write", t("Writing and verifying it on the device..."), {
           pct: null,
           expectedMs: EXPECTED_WRITE_MS,
         });
@@ -381,7 +382,7 @@ async function sendImage(image: Blob, label: string, version?: string) {
   rememberRestart({ kind: "update", from: props.system?.version, to: version, trial: trialNote.value });
   if (await watchBack()) {
     phase.value = "back";
-    watchStep("restart", "The device is back. Reloading the console...");
+    watchStep("restart", t("The device is back. Reloading the console..."));
     /* The reboot cleared the session, so the reload lands on the sign-in page
        of the new firmware. A beat first, so the message is readable. */
     setTimeout(() => location.reload(), 1500);
@@ -393,17 +394,17 @@ async function sendImage(image: Blob, label: string, version?: string) {
 async function installRelease() {
   const target = release.value;
   if (!target) return;
-  if (!confirm(`Install ${target.version} and restart the device?`)) return;
+  if (!confirm(t("Install {name} and restart the device?", { name: target.version }))) return;
   installError.value = null;
   phase.value = "downloading";
   firmwarePct.value = 0;
-  beginWatchHere(`Installing ${target.version}`, [
-    { key: "download", label: "Fetching the image from the release" },
-    { key: "send", label: "Sending the image to the device" },
-    { key: "write", label: "Writing and verifying it" },
-    { key: "restart", label: "Restarting onto the new image" },
+  beginWatchHere(t("Installing {name}", { name: target.version }), [
+    { key: "download", label: t("Fetching the image from the release") },
+    { key: "send", label: t("Sending the image to the device") },
+    { key: "write", label: t("Writing and verifying it") },
+    { key: "restart", label: t("Restarting onto the new image") },
   ]);
-  watchStep("download", "Fetching the image...", { pct: 0 });
+  watchStep("download", t("Fetching the image..."), { pct: 0 });
   let image: Blob;
   try {
     image = await downloadFirmware(target, (f) => {
@@ -422,7 +423,7 @@ async function onFirmwareChosen(e: Event) {
   const file = input.files?.[0];
   if (!file) return;
   input.value = "";
-  if (!confirm(`Install ${file.name} and restart the device?`)) return;
+  if (!confirm(t("Install {name} and restart the device?", { name: file.name }))) return;
   installError.value = null;
   await sendImage(file, file.name);
 }
@@ -488,16 +489,16 @@ function stopInstallPoll() {
  * one, which is exactly what `firmwareChanged` exists to complain about.
  */
 async function startInstall(version: string) {
-  if (!confirm(`Install ${version} and restart the device?`)) return;
+  if (!confirm(t("Install {name} and restart the device?", { name: version }))) return;
   installStarting.value = version;
   releasesError.value = null;
   install.value = null;
-  beginWatchHere(`Installing ${version}`, [
-    { key: "fetch", label: "The device is fetching the image" },
-    { key: "write", label: "Writing and verifying it" },
-    { key: "restart", label: "Restarting" },
+  beginWatchHere(t("Installing {name}", { name: version }), [
+    { key: "fetch", label: t("The device is fetching the image") },
+    { key: "write", label: t("Writing and verifying it") },
+    { key: "restart", label: t("Restarting") },
   ]);
-  watchStep("fetch", "Asking for the image...", { pct: null });
+  watchStep("fetch", t("Asking for the image..."), { pct: null });
   try {
     await requestDeviceInstall(version, trialSeconds.value);
   } catch (err) {
@@ -522,10 +523,10 @@ async function startInstall(version: string) {
       install.value = st;
       if (st.state === "running") {
         if (st.percent >= 0) {
-          watchStep("fetch", "Downloading the image to the device...", { pct: st.percent });
+          watchStep("fetch", t("Downloading the image to the device..."), { pct: st.percent });
           watchPct(st.percent);
         } else {
-          watchStep("fetch", st.message, { pct: null });
+          watchStep("fetch", t(st.message), { pct: null });
         }
         return;
       }
@@ -539,10 +540,10 @@ async function startInstall(version: string) {
       }
       /* Written down before the wait: the verdict is read on the far side of a
          reload that throws away everything this function knows. */
-      watchStep("write", "Written and verified.", { pct: null, expectedMs: EXPECTED_WRITE_MS });
+      watchStep("write", t("Written and verified."), { pct: null, expectedMs: EXPECTED_WRITE_MS });
       rememberRestart({ kind: "update", from: props.system?.version, to: version, trial: trialNote.value });
       if (await watchBack()) {
-        watchStep("restart", "The device is back. Reloading the console...");
+        watchStep("restart", t("The device is back. Reloading the console..."));
         setTimeout(() => location.reload(), 1500);
       }
     })();
@@ -558,8 +559,8 @@ onUnmounted(stopInstallPoll);
       type="button"
       class="uw-badge"
       :style="ringStyle"
-      :title="uploading ? statusText : `${system.version}${updateAvailable ? ' - update available' : ''}`"
-      :aria-label="`Firmware ${system.version}${updateAvailable ? ', update available' : ''}`"
+      :title="uploading ? statusText : updateAvailable ? t('{version} - update available', { version: system.version }) : system.version"
+      :aria-label="updateAvailable ? t('Firmware {version}, update available', { version: system.version }) : t('Firmware {version}', { version: system.version })"
       @click="open = !open"
     >
       <span class="uw-inner mono">
@@ -573,12 +574,12 @@ onUnmounted(stopInstallPoll);
       <div class="uw-backdrop" @click="open = false" />
       <div class="uw-popup">
         <div class="uw-head">
-          <h3>Firmware</h3>
+          <h3>{{ t("Firmware") }}</h3>
           <button
             type="button"
             class="btn btn-sm btn-icon btn-quiet"
-            aria-label="Close"
-            title="Close"
+            :aria-label="t('Close')"
+            :title="t('Close')"
             @click="open = false"
           >
             <Icon name="close" :size="15" />
@@ -587,34 +588,34 @@ onUnmounted(stopInstallPoll);
 
         <dl class="facts">
           <div class="fact">
-            <dt>Version</dt>
+            <dt>{{ t("Version") }}</dt>
             <dd class="mono">
               <a
                 v-if="/^v\.\d+\.\d+\.\d+$/.test(system.version)"
                 :href="`https://github.com/espkvm/espkvm/releases/tag/${system.version}`"
                 target="_blank"
                 rel="noopener"
-                title="What is in this version"
+                :title="t('What is in this version')"
                 >{{ system.version }}</a
               >
               <template v-else>{{ system.version }}</template>
             </dd>
           </div>
-          <div class="fact"><dt>Built</dt><dd class="mono">{{ system.built }}</dd></div>
+          <div class="fact"><dt>{{ t("Built") }}</dt><dd class="mono">{{ system.built }}</dd></div>
           <div v-if="!slots.length" class="fact">
-            <dt>Running from</dt>
+            <dt>{{ t("Running from") }}</dt>
             <dd class="mono">{{ system.partition }}</dd>
           </div>
         </dl>
 
         <div v-if="slots.length" class="uw-slots">
-          <div class="uw-slots-head">Slots</div>
+          <div class="uw-slots-head">{{ t("Slots") }}</div>
           <div v-for="slot in slots" :key="slot.label" class="uw-slot">
             <span class="mono uw-slot-name">{{ slot.label }}</span>
-            <span class="mono uw-slot-ver">{{ slot.version || "empty" }}</span>
+            <span class="mono uw-slot-ver">{{ slot.version || t("empty") }}</span>
             <span class="uw-slot-badges">
-              <span v-if="slot.running" class="uw-tag uw-tag-active">active</span>
-              <span v-else-if="slot.boot" class="uw-tag">boots next</span>
+              <span v-if="slot.running" class="uw-tag uw-tag-active">{{ t("active") }}</span>
+              <span v-else-if="slot.boot" class="uw-tag">{{ t("boots next") }}</span>
               <span :class="['uw-tag', badgeClass(slot)]">{{ stateLabel(slot) }}</span>
             </span>
             <button
@@ -622,21 +623,20 @@ onUnmounted(stopInstallPoll);
               type="button"
               class="btn btn-sm btn-quiet"
               :disabled="!canBoot(slot) || switching !== null"
-              :title="canBoot(slot) ? `Boot from ${slot.label} and restart` : 'No bootable image in this slot'"
+              :title="canBoot(slot) ? t('Boot from {slot} and restart', { slot: slot.label }) : t('No bootable image in this slot')"
               @click="switchSlot(slot)"
             >
-              {{ switching === slot.label ? "Switching..." : "Boot this" }}
+              {{ switching === slot.label ? t("Switching...") : t("Boot this") }}
             </button>
           </div>
           <p v-if="runningPending && !onTrial" class="setting-note setting-note-blocked">
-            The running image is not confirmed yet - a reset now would roll back to
-            {{ otherLabel }}.
+            {{ t("The running image is not confirmed yet - a reset now would roll back to {slot}.", { slot: otherLabel }) }}
           </p>
           <p v-if="switching" class="setting-note">
-            Switching to {{ switching }} - the device is restarting and the console will reload...
+            {{ t("Switching to {slot} - the device is restarting and the console will reload...", { slot: switching }) }}
           </p>
           <p v-if="switchLost" class="setting-note setting-note-blocked">
-            The device did not answer after the switch. Reload the page to see which slot it is on.
+            {{ t("The device did not answer after the switch. Reload the page to see which slot it is on.") }}
           </p>
         </div>
 
@@ -644,21 +644,19 @@ onUnmounted(stopInstallPoll);
              back one step; this is how to go further, and it is the device that
              fetches the image because the browser is not allowed to. -->
         <div v-if="system.updatable" class="uw-slots">
-          <div class="uw-slots-head">Published releases</div>
+          <div class="uw-slots-head">{{ t("Published releases") }}</div>
           <p v-if="!fetchAllowed" class="setting-note">
-            Installing an earlier release means the device downloading it itself, which is off
-            until you allow it in Settings &rarr; System. The browser cannot fetch these images:
-            the host they are served from refuses cross-origin reads.
+            {{ t("Installing an earlier release means the device downloading it itself, which is off until you allow it in Settings \u2192 System. The browser cannot fetch these images: the host they are served from refuses cross-origin reads.") }}
           </p>
           <template v-else-if="install && install.state === 'running'">
             <p class="setting-note">
-              Installing {{ install.version }} &mdash; {{ install.message
+              {{ t("Installing {name}", { name: install.version }) }} &mdash; {{ t(install.message)
               }}<span v-if="install.percent >= 0"> {{ install.percent }}%</span>
             </p>
           </template>
           <template v-else-if="install && install.state === 'failed'">
             <p class="setting-note setting-note-blocked">
-              {{ install.version }} was not installed: {{ install.message }}
+              {{ t("{version} was not installed: {reason}", { version: install.version, reason: t(install.message) }) }}
             </p>
           </template>
           <template v-else>
@@ -669,69 +667,63 @@ onUnmounted(stopInstallPoll);
               :disabled="loadingReleases"
               @click="loadReleases()"
             >
-              {{ loadingReleases ? "Reading..." : "Show published releases" }}
+              {{ loadingReleases ? t("Reading...") : t("Show published releases") }}
             </button>
             <div v-for="rel in otherReleases" :key="rel.version" class="uw-slot">
               <span class="mono uw-slot-name">{{ rel.version }}</span>
               <span class="mono uw-slot-ver">{{ (rel.published ?? "").slice(0, 10) }}</span>
               <span class="uw-slot-badges">
-                <a v-if="rel.notes" :href="rel.notes" target="_blank" rel="noopener">notes</a>
+                <a v-if="rel.notes" :href="rel.notes" target="_blank" rel="noopener">{{ t("notes") }}</a>
               </span>
               <button
                 type="button"
                 class="btn btn-sm btn-quiet"
                 :disabled="installStarting !== null || onTrial"
-                :title="`Have the device fetch ${rel.version} and restart into it`"
+                :title="t('Have the device fetch {version} and restart into it', { version: rel.version })"
                 @click="startInstall(rel.version)"
               >
-                {{ installStarting === rel.version ? "Starting..." : "Install" }}
+                {{ installStarting === rel.version ? t("Starting...") : t("Install") }}
               </button>
             </div>
           </template>
           <p v-if="releasesError" class="setting-note setting-note-blocked">
-            {{ releasesError }}
+            {{ t(releasesError) }}
           </p>
         </div>
 
         <p v-if="!system.updatable" class="section-blocked">
-          This firmware has a single app slot, so it cannot update itself.
+          {{ t("This firmware has a single app slot, so it cannot update itself.") }}
         </p>
         <template v-else>
           <!-- Idle controls: hidden while an install runs, so the block shows just
                the progress bar and one line - not three copies of the percentage. -->
           <p v-if="onTrial" class="setting-note setting-note-blocked">
-            The last update is still on trial. Keep it or roll it back before installing another.
+            {{ t("The last update is still on trial. Keep it or roll it back before installing another.") }}
           </p>
           <template v-if="!uploading && !onTrial">
           <p class="setting-note">
-            The update installs to
-            <span class="mono">{{ updateTarget ?? "the spare slot" }}</span> - the inactive one;
-            the running slot is left untouched until the new image verifies, so a bad update
-            falls back on its own.
+            {{ t("The update installs to {slot} - the inactive one; the running slot is left untouched until the new image verifies, so a bad update falls back on its own.", { slot: updateTarget ?? t("the spare slot") }) }}
           </p>
 
           <div v-if="updateEnabled">
-            <p v-if="checking" class="setting-note">Checking for a newer build...</p>
+            <p v-if="checking" class="setting-note">{{ t("Checking for a newer build...") }}</p>
             <p v-else-if="checkError" class="setting-note setting-note-blocked">
-              Could not read the update manifest: {{ checkError }}
+              {{ t("Could not read the update manifest: {reason}", { reason: t(checkError) }) }}
             </p>
             <template v-else-if="release">
               <p v-if="updateState === 'newer'" class="setting-note">
-                <strong>{{ release.version }}</strong> is published; this device runs
-                {{ system.version }}.
+                {{ t("{version} is published; this device runs {running}.", { version: release.version, running: system.version }) }}
                 <a v-if="release.notes" :href="release.notes" target="_blank" rel="noreferrer">
-                  What changed
+                  {{ t("What changed") }}
                 </a>
               </p>
               <p v-else-if="updateState === 'unknown'" class="setting-note">
-                <strong>{{ release.version }}</strong> is published. This device runs
-                {{ system.version }}, which is not a release, so which is newer is anyone's guess.
+                {{ t("{version} is published. This device runs {running}, which is not a release, so which is newer is anyone's guess.", { version: release.version, running: system.version }) }}
               </p>
               <p v-else-if="updateState === 'older'" class="setting-note">
-                This device runs {{ system.version }}, ahead of the published
-                {{ release.version }}.
+                {{ t("This device runs {running}, ahead of the published {version}.", { version: release.version, running: system.version }) }}
               </p>
-              <p v-else class="setting-note">This device runs the newest published build.</p>
+              <p v-else class="setting-note">{{ t("This device runs the newest published build.") }}</p>
               <button
                 v-if="updateAvailable"
                 type="button"
@@ -739,7 +731,7 @@ onUnmounted(stopInstallPoll);
                 :disabled="uploading"
                 @click="installRelease"
               >
-                Install {{ release.version }}
+                {{ t("Install {name}", { name: release.version }) }}
               </button>
             </template>
             <button
@@ -748,35 +740,33 @@ onUnmounted(stopInstallPoll);
               :disabled="checking || uploading"
               @click="checkForUpdate"
             >
-              Check again
+              {{ t("Check again") }}
             </button>
           </div>
 
           <p class="setting-note">
-            Or install a specific build by hand: download its <code>.bin</code> from the
+            {{ t("Or install a specific build by hand: download its .bin from the") }}
             <a
               href="https://github.com/espkvm/espkvm/releases"
               target="_blank"
               rel="noreferrer"
-              >releases page</a
+              >{{ t("releases page") }}</a
             >
-            and pick it below.
+            {{ t("and pick it below.") }}
           </p>
           <label class="setting-note uw-trial">
-            After an update
+            {{ t("After an update") }}
             <select v-model="trialMode">
-              <option value="auto">keep it once this console reaches it</option>
-              <option value="ask">let me check it, then keep it</option>
-              <option value="off">keep it as soon as it boots</option>
+              <option value="auto">{{ t("keep it once this console reaches it") }}</option>
+              <option value="ask">{{ t("let me check it, then keep it") }}</option>
+              <option value="off">{{ t("keep it as soon as it boots") }}</option>
             </select>
           </label>
           <p v-if="trialMode !== 'off'" class="setting-note">
-            If it is not kept within {{ TRIAL_SECONDS / 60 }} minutes, the device goes back to
-            {{ system.version }}. Use this when the device is far away: a broken VPN or Wi-Fi
-            undoes itself.
+            {{ t("If it is not kept within {minutes} minutes, the device goes back to {version}. Use this when the device is far away: a broken VPN or Wi-Fi undoes itself.", { minutes: TRIAL_SECONDS / 60, version: system.version }) }}
           </p>
           <label class="btn btn-sm">
-            Install firmware...
+            {{ t("Install firmware...") }}
             <input type="file" accept=".bin" class="sr-only" @change="onFirmwareChosen" />
           </label>
           </template>
@@ -805,38 +795,33 @@ onUnmounted(stopInstallPoll);
             </div>
             <p class="setting-note" aria-live="polite">
               <template v-if="phase === 'downloading'">
-                Downloading the image... {{ firmwarePct }}%
+                {{ t("Downloading the image... {pct}%", { pct: firmwarePct }) }}
               </template>
               <template v-else-if="phase === 'uploading'">
-                Sending the image to the device... {{ firmwarePct }}%
+                {{ t("Sending the image to the device... {pct}%", { pct: firmwarePct }) }}
               </template>
               <template v-else-if="phase === 'writing'">
-                The image is on the device, which is now writing and verifying it. This takes
-                the better part of a minute and there is no progress to show for it - keep this
-                page open.
+                {{ t("The image is on the device, which is now writing and verifying it. This takes the better part of a minute and there is no progress to show for it - keep this page open.") }}
               </template>
               <template v-else-if="phase === 'restarting'">
                 <template v-if="unconfirmed">
-                  The device dropped the connection on the last byte, which is what a restart
-                  looks like from here. Waiting for it to come back...
+                  {{ t("The device dropped the connection on the last byte, which is what a restart looks like from here. Waiting for it to come back...") }}
                 </template>
-                <template v-else>Written. Waiting for the device to restart...</template>
+                <template v-else>{{ t("Written. Waiting for the device to restart...") }}</template>
               </template>
               <template v-else-if="phase === 'back'">
-                The device is back. Reloading the console...
+                {{ t("The device is back. Reloading the console...") }}
               </template>
             </p>
           </template>
 
           <template v-else>
             <p v-if="phase === 'lost'" class="setting-note setting-note-blocked">
-              The device has not answered in a minute and a half. It may still be booting, or the
-              new image may have failed to start - in which case the bootloader has already put
-              the old one back. Reload the page to see which.
-              <button type="button" class="btn btn-sm btn-quiet" @click="reload">Reload</button>
+              {{ t("The device has not answered in a minute and a half. It may still be booting, or the new image may have failed to start - in which case the bootloader has already put the old one back. Reload the page to see which.") }}
+              <button type="button" class="btn btn-sm btn-quiet" @click="reload">{{ t("Reload") }}</button>
             </p>
             <p v-else-if="installError" class="setting-note setting-note-blocked">
-              The update did not go through: {{ installError }}
+              {{ t("The update did not go through: {reason}", { reason: t(installError) }) }}
             </p>
           </template>
         </template>

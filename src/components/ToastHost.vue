@@ -6,6 +6,7 @@
  */
 import { toasts, dismissToast } from "../state/toasts";
 import Icon from "./Icon.vue";
+import { t, tn } from "../i18n";
 
 /* The time of day, with the date too when it was not today. */
 function when(at: number): string {
@@ -18,18 +19,18 @@ function when(at: number): string {
 
 <template>
   <div class="toasts" role="status" aria-live="polite">
-    <div v-for="t in toasts" :key="t.id" :class="['toast', `toast-${t.kind}`]">
+    <div v-for="m in toasts" :key="m.id" :class="['toast', `toast-${m.kind}`]">
       <span class="toast-icon">
-        <Icon :name="t.kind === 'error' ? 'warning' : 'info'" :size="15" />
+        <Icon :name="m.kind === 'error' ? 'warning' : 'info'" :size="15" />
       </span>
       <span class="toast-text">
-        {{ t.text }}
+        {{ m.text }}
         <span class="toast-meta">
-          <time :datetime="new Date(t.at).toISOString()">{{ when(t.at) }}</time>
-          <template v-if="t.count > 1"> · {{ t.count }} times</template>
+          <time :datetime="new Date(m.at).toISOString()">{{ when(m.at) }}</time>
+          <template v-if="m.count > 1"> · {{ tn("{n} time", "{n} times", m.count) }}</template>
         </span>
       </span>
-      <button type="button" class="toast-close" aria-label="Dismiss" @click="dismissToast(t.id)">
+      <button type="button" class="toast-close" :aria-label="t('Dismiss')" @click="dismissToast(m.id)">
         <Icon name="close" :size="13" />
       </button>
     </div>

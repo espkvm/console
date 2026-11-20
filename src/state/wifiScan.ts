@@ -4,6 +4,8 @@
  * left out, strongest first.
  */
 
+import { tm } from "../i18n";
+
 export interface ScannedAp {
   ssid: string;
   rssi: number;
@@ -14,15 +16,15 @@ export interface NetworkRow {
   ssid: string;
   rssi: number;
   open: boolean;
-  /** "strong", "good", "weak" or "poor". */
+  /** "strong", "good", "weak" or "poor", in English: shown through t(). */
   signal: string;
 }
 
 export function signalWord(rssi: number): string {
-  if (rssi >= -55) return "strong";
-  if (rssi >= -67) return "good";
-  if (rssi >= -78) return "weak";
-  return "poor";
+  if (rssi >= -55) return tm("strong");
+  if (rssi >= -67) return tm("good");
+  if (rssi >= -78) return tm("weak");
+  return tm("poor");
 }
 
 export function networkRows(aps: ScannedAp[]): NetworkRow[] {

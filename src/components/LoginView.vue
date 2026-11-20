@@ -13,6 +13,7 @@ import { computed, ref } from "vue";
 import { changePassword, login, NeedCode, type SetupNetworkKind } from "../state/auth";
 import { peekRestart } from "../state/restart";
 import Icon from "./Icon.vue";
+import { t } from "../i18n";
 
 const props = defineProps<{
   user: string;
@@ -43,13 +44,13 @@ const restartLine = computed(() => {
   if (!restartNote) return null;
   switch (restartNote.kind) {
     case "update":
-      return "The device restarted after an update. Sign in to see which version came back.";
+      return t("The device restarted after an update. Sign in to see which version came back.");
     case "slot":
-      return "The device restarted onto the other slot. Sign in to see which version came back.";
+      return t("The device restarted onto the other slot. Sign in to see which version came back.");
     case "network":
-      return "The network was switched, which restarts the device. Sign in to carry on.";
+      return t("The network was switched, which restarts the device. Sign in to carry on.");
     default:
-      return "The device restarted, so the session ended. Sign in to carry on.";
+      return t("The device restarted, so the session ended. Sign in to carry on.");
   }
 });
 
@@ -70,14 +71,14 @@ const netProblem = computed(() => {
   if (!netChoices.value.length) return null;
   switch (netKind.value) {
     case "":
-      return "Choose how the device reaches a network.";
+      return t("Choose how the device reaches a network.");
     case "wifi":
-      if (!ssid.value.trim()) return "Type the WiFi network name.";
+      if (!ssid.value.trim()) return t("Type the WiFi network name.");
       if (wifiPass.value.length > 0 && wifiPass.value.length < 8)
-        return "A WiFi password has at least 8 characters.";
+        return t("A WiFi password has at least 8 characters.");
       return null;
     case "ap":
-      return apPass.value.length >= 8 ? null : "The hotspot password needs at least 8 characters.";
+      return apPass.value.length >= 8 ? null : t("The hotspot password needs at least 8 characters.");
     default:
       return null;
   }
@@ -94,11 +95,14 @@ function setupBody() {
 function afterRestart(kind: SetupNetworkKind | ""): string {
   switch (kind) {
     case "wifi":
-      return `The device restarts and joins "${ssid.value.trim()}". Connect this phone or computer to that network and open http://espkvm.local/ - or look for the device's address in your router.`;
+      return t(
+        "The device restarts and joins \"{ssid}\". Connect this phone or computer to that network and open http://espkvm.local/ - or look for the device's address in your router.",
+        { ssid: ssid.value.trim() },
+      );
     case "ap":
-      return "The device restarts. Join its hotspot again, now with the password you just chose, and open http://192.168.4.1/.";
+      return t("The device restarts. Join its hotspot again, now with the password you just chose, and open http://192.168.4.1/.");
     default:
-      return "The device restarts. Plug in the network cable, then open http://espkvm.local/ - or look for the device's address in your router.";
+      return t("The device restarts. Plug in the network cable, then open http://espkvm.local/ - or look for the device's address in your router.");
   }
 }
 
@@ -184,7 +188,7 @@ async function submitChange() {
 <template>
   <div class="login">
     <div v-if="doneNote" class="login-card" role="status">
-      <h1>Password set</h1>
+      <h1>{{ t("Password set") }}</h1>
       <p class="login-hint">{{ doneNote }}</p>
     </div>
     <form v-else class="login-card" @submit.prevent="mustChange ? submitChange() : submitLogin()">
@@ -274,10 +278,10 @@ async function submitChange() {
       </svg>
 
       <template v-if="!mustChange">
-        <h1>Sign in</h1>
+        <h1>{{ t("Sign in") }}</h1>
         <p v-if="restartLine" class="login-hint">{{ restartLine }}</p>
         <label class="field">
-          <span>Username</span>
+          <span>{{ t("Username") }}</span>
           <input
             id="espkvm-username"
             v-model="username"
@@ -288,7 +292,7 @@ async function submitChange() {
           />
         </label>
         <label class="field">
-          <span>Password</span>
+          <span>{{ t("Password") }}</span>
           <span class="field-with-eye">
             <input
               id="espkvm-password"
@@ -301,8 +305,8 @@ async function submitChange() {
             <button
               type="button"
               class="eye-btn"
-              :aria-label="showPassword ? 'Hide the password' : 'Show the password'"
-              :title="showPassword ? 'Hide the password' : 'Show the password'"
+              :aria-label="showPassword ? t('Hide the password') : t('Show the password')"
+              :title="showPassword ? t('Hide the password') : t('Show the password')"
               :aria-pressed="showPassword"
               @click="showPassword = !showPassword"
             >
@@ -311,7 +315,7 @@ async function submitChange() {
           </span>
         </label>
         <label v-if="needCode" class="field">
-          <span>Code from your authenticator app</span>
+          <span>{{ t("Code from your authenticator app") }}</span>
           <input
             id="espkvm-code"
             v-model="code"
@@ -325,12 +329,12 @@ async function submitChange() {
           />
         </label>
         <p v-if="needCode" class="muted login-foot">
-          Lost the phone? A recovery code works here too.
+          {{ t("Lost the phone? A recovery code works here too.") }}
         </p>
       </template>
 
       <template v-else>
-        <h1>Choose a password</h1>
+        <h1>{{ t("Choose a password") }}</h1>
         <!-- The browser needs to know which account the new password belongs
              to, or it saves it against nothing. -->
         <input
@@ -344,50 +348,48 @@ async function submitChange() {
           readonly
         />
         <p class="muted">
-          This device is still using the password it shipped with. Everything else waits until
-          that changes.
+          {{ t("This device is still using the password it shipped with. Everything else waits until that changes.") }}
         </p>
         <label class="field">
-          <span>New password</span>
+          <span>{{ t("New password") }}</span>
           <input v-model="nextPassword" type="password" autocomplete="new-password" autofocus />
         </label>
         <label class="field">
-          <span>Repeat it</span>
+          <span>{{ t("Repeat it") }}</span>
           <input v-model="confirmPassword" type="password" autocomplete="new-password" />
         </label>
-        <p v-if="tooShort" class="login-hint">At least 8 characters.</p>
-        <p v-else-if="mismatch" class="login-hint">The two do not match.</p>
+        <p v-if="tooShort" class="login-hint">{{ t("At least 8 characters.") }}</p>
+        <p v-else-if="mismatch" class="login-hint">{{ t("The two do not match.") }}</p>
 
         <fieldset v-if="netChoices.length" class="login-net">
-          <legend>After this, the device</legend>
+          <legend>{{ t("After this, the device") }}</legend>
           <p class="login-hint">
-            Setting the password closes this open hotspot. Choose how to reach the device after
-            that.
+            {{ t("Setting the password closes this open hotspot. Choose how to reach the device after that.") }}
           </p>
           <label v-if="netChoices.includes('ethernet')" class="login-radio">
             <input v-model="netKind" type="radio" name="setup-net" value="ethernet" />
-            <span>uses the network cable</span>
+            <span>{{ t("uses the network cable") }}</span>
           </label>
           <label v-if="netChoices.includes('wifi')" class="login-radio">
             <input v-model="netKind" type="radio" name="setup-net" value="wifi" />
-            <span>joins my WiFi</span>
+            <span>{{ t("joins my WiFi") }}</span>
           </label>
           <template v-if="netKind === 'wifi'">
             <label class="field">
-              <span>WiFi network name</span>
+              <span>{{ t("WiFi network name") }}</span>
               <input v-model="ssid" type="text" autocomplete="off" autocapitalize="off" maxlength="32" />
             </label>
             <label class="field">
-              <span>WiFi password (blank for an open network)</span>
+              <span>{{ t("WiFi password (blank for an open network)") }}</span>
               <input v-model="wifiPass" type="password" autocomplete="off" maxlength="63" />
             </label>
           </template>
           <label v-if="netChoices.includes('ap')" class="login-radio">
             <input v-model="netKind" type="radio" name="setup-net" value="ap" />
-            <span>keeps its own hotspot, with a password</span>
+            <span>{{ t("keeps its own hotspot, with a password") }}</span>
           </label>
           <label v-if="netKind === 'ap'" class="field">
-            <span>Hotspot password</span>
+            <span>{{ t("Hotspot password") }}</span>
             <input v-model="apPass" type="password" autocomplete="off" maxlength="63" />
           </label>
           <p v-if="netProblem && netKind" class="login-hint">{{ netProblem }}</p>
@@ -396,7 +398,7 @@ async function submitChange() {
 
       <p v-if="error" class="login-error">
         <Icon name="warning" :size="16" />
-        {{ error }}
+        {{ t(error) }}
       </p>
 
       <button
@@ -404,11 +406,11 @@ async function submitChange() {
         class="btn btn-primary"
         :disabled="busy || (mustChange && (tooShort || mismatch || !nextPassword || !!netProblem))"
       >
-        {{ busy ? "Working..." : mustChange ? "Set password" : "Sign in" }}
+        {{ busy ? t("Working...") : mustChange ? t("Set password") : t("Sign in") }}
       </button>
 
       <p v-if="mustChange" class="muted login-foot">
-        You will be asked to sign in again with the new password.
+        {{ t("You will be asked to sign in again with the new password.") }}
       </p>
     </form>
   </div>

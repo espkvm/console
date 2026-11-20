@@ -10,6 +10,7 @@ import { computed, onUnmounted, ref } from "vue";
 
 import Icon from "./Icon.vue";
 import { CONSOLE_HEADER } from "../state/device";
+import { t, tn } from "../i18n";
 
 const props = defineProps<{ viewOnly: boolean }>();
 
@@ -65,37 +66,39 @@ onUnmounted(() => clearInterval(timer));
 const others = computed(() => viewers.value.filter((v) => !v.you));
 const title = computed(() => {
   const n = others.value.length;
-  return n === 1 ? "One more viewer is connected" : `${n} more viewers are connected`;
+  return tn("One more viewer is connected", "{n} more viewers are connected", n);
 });
 
-/* "spev, laptop" over the tailnet, else the address. */
+/* "alex, laptop" over the tailnet, else the address. */
 function who(v: Viewer): string {
-  const t = v.tailnet;
-  if (!t) return v.ip;
-  const device = t.name.split(".")[0];
-  const person = t.userName || t.user.split("@")[0];
+  const net = v.tailnet;
+  if (!net) return v.ip;
+  const device = net.name.split(".")[0];
+  const person = net.userName || net.user.split("@")[0];
   return person ? `${person}, ${device}` : device;
 }
 
 function since(s: number): string {
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)} min`;
-  return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
+  if (s < 60) return t("just now");
+  if (s < 3600) return t("{m} min", { m: Math.floor(s / 60) });
+  return t("{h} h {m} min", { h: Math.floor(s / 3600), m: Math.floor((s % 3600) / 60) });
 }
 
 function describe(v: Viewer): string {
   if (v.kind === "vnc") {
-    return `VNC, ${v.encrypted ? "encrypted" : "not encrypted"}, ${since(v.seconds ?? 0)}`;
+    return v.encrypted
+      ? t("VNC, encrypted, {since}", { since: since(v.seconds ?? 0) })
+      : t("VNC, not encrypted, {since}", { since: since(v.seconds ?? 0) });
   }
-  const who = v.you ? "You" : v.viewOnly ? "Viewer" : "Owner";
-  return v.control ? `${who}, in control` : v.viewOnly ? `${who}, watching` : who;
+  const who = v.you ? t("You") : v.viewOnly ? t("Viewer") : t("Owner");
+  return v.control ? t("{who}, in control", { who }) : v.viewOnly ? t("{who}, watching", { who }) : who;
 }
 </script>
 
 <template>
   <span class="vws">
-    <span v-if="props.viewOnly" class="pill vws-badge" title="This sign-in can watch, not act">
-      View only
+    <span v-if="props.viewOnly" class="pill vws-badge" :title="t('This sign-in can watch, not act')">
+      {{ t("View only") }}
     </span>
     <button
       v-if="others.length"
@@ -115,13 +118,13 @@ function describe(v: Viewer): string {
       <div
         class="vws-pop"
         role="dialog"
-        aria-label="Viewers"
+        :aria-label="t('Viewers')"
         :style="{ top: `${at.top}px`, left: `${at.left}px` }"
       >
-        <h3>Viewers</h3>
+        <h3>{{ t("Viewers") }}</h3>
         <ul>
           <li v-for="(v, i) in viewers" :key="i">
-            <span :class="{ mono: !v.tailnet }" :title="v.tailnet ? `${v.ip} over Tailscale` : undefined">{{ who(v) }}</span>
+            <span :class="{ mono: !v.tailnet }" :title="v.tailnet ? t('{ip} over Tailscale', { ip: v.ip }) : undefined">{{ who(v) }}</span>
             <small>{{ describe(v) }}</small>
           </li>
         </ul>

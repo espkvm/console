@@ -29,6 +29,7 @@ import { MEDIA_KEYS } from "../input/mediaKeys";
 import { useFloating } from "../ui/floating";
 import { haptic } from "../ui/haptic";
 import Icon from "./Icon.vue";
+import { t } from "../i18n";
 
 const props = defineProps<{ control: Control; leds: number }>();
 const emit = defineEmits<{ close: [] }>();
@@ -360,11 +361,12 @@ const side = computed(() =>
       : { kind: "edit", keys: EDIT_KEYS },
 );
 
-const SIDE_NAMES: Record<string, string> = {
-  pad: "the number pad",
-  nav: "the arrows and editing keys",
-  edit: "the editing keys",
-};
+/* The button that shows the block on a narrow screen, as a whole sentence. */
+function showSide(kind: string): string {
+  if (kind === "pad") return t("Show the number pad");
+  if (kind === "nav") return t("Show the arrows and editing keys");
+  return t("Show the editing keys");
+}
 
 /* A narrow screen has no room for both, so it shows one at a time. A wide one
    puts the block beside the keys rather than under them, where it would push
@@ -549,7 +551,7 @@ function state(key: Key): Record<string, boolean> {
       ref="panel"
       :class="['vk', `vk-skin-${skin}`, { 'vk-floating': floating }]"
       :style="floating ? { left: pos.x + 'px', top: pos.y + 'px' } : undefined"
-      aria-label="On-screen keyboard"
+      :aria-label="t('On-screen keyboard')"
     >
       <div
         class="vk-head"
@@ -560,8 +562,8 @@ function state(key: Key): Record<string, boolean> {
         @pointercancel="dragEnd"
       >
         <span class="muted vk-hint">
-          <template v-if="heldNames">Holding {{ heldNames }}</template>
-          <template v-else>A modifier stays armed for one key, twice to lock it.</template>
+          <template v-if="heldNames">{{ t("Holding {keys}", { keys: heldNames }) }}</template>
+          <template v-else>{{ t("A modifier stays armed for one key, twice to lock it.") }}</template>
         </span>
         <span class="vk-head-actions">
           <button
@@ -570,8 +572,8 @@ function state(key: Key): Record<string, boolean> {
             class="btn btn-sm btn-icon btn-quiet"
             :class="{ 'btn-on': pane === 'side' }"
             :aria-pressed="pane === 'side'"
-            :aria-label="pane === 'keys' ? `Show ${SIDE_NAMES[side.kind]}` : 'Show the keys'"
-            :title="pane === 'keys' ? `Show ${SIDE_NAMES[side.kind]}` : 'Show the keys'"
+            :aria-label="pane === 'keys' ? showSide(side.kind) : t('Show the keys')"
+            :title="pane === 'keys' ? showSide(side.kind) : t('Show the keys')"
             @click="pane = pane === 'keys' ? 'side' : 'keys'"
           >
             <Icon :name="pane === 'keys' ? 'pointer' : 'keyboard'" :size="15" />
@@ -581,8 +583,8 @@ function state(key: Key): Record<string, boolean> {
             class="btn btn-sm btn-icon btn-quiet"
             :class="{ 'btn-on': combosOpen }"
             :aria-pressed="combosOpen"
-            aria-label="Ready-made combinations"
-            :title="combosOpen ? 'Hide Ctrl+Alt+Del and the rest' : 'Ctrl+Alt+Del and the rest'"
+            :aria-label="t('Ready-made combinations')"
+            :title="combosOpen ? t('Hide Ctrl+Alt+Del and the rest') : t('Ctrl+Alt+Del and the rest')"
             @click="combosOpen = !combosOpen"
           >
             <Icon name="combo" :size="15" />
@@ -590,8 +592,8 @@ function state(key: Key): Record<string, boolean> {
           <button
             type="button"
             class="btn btn-sm btn-icon btn-quiet"
-            aria-label="Change how the keys are coloured"
-            :title="skin === 'plain' ? 'Colour the keys that are not characters' : 'Plain keys'"
+            :aria-label="t('Change how the keys are coloured')"
+            :title="skin === 'plain' ? t('Colour the keys that are not characters') : t('Plain keys')"
             @click="skin = skin === 'plain' ? 'tinted' : 'plain'"
           >
             <Icon name="palette" :size="15" />
@@ -599,15 +601,15 @@ function state(key: Key): Record<string, boolean> {
           <button
             type="button"
             class="btn btn-sm btn-icon btn-quiet"
-            aria-label="Change the layout"
+            :aria-label="t('Change the layout')"
             :title="
               layout === 'full'
-                ? 'Only the keys a browser tends to swallow'
+                ? t('Only the keys a browser tends to swallow')
                 : layout === 'compact'
-                  ? 'Symbols and the number pad'
+                  ? t('Symbols and the number pad')
                   : layout === 'symbols'
-                    ? 'Function and media keys'
-                    : 'Every key'
+                    ? t('Function and media keys')
+                    : t('Every key')
             "
             @click="cycleLayout"
           >
@@ -627,8 +629,8 @@ function state(key: Key): Record<string, boolean> {
           <button
             type="button"
             class="btn btn-sm btn-icon btn-quiet"
-            :aria-label="floating ? 'Dock it under the picture' : 'Let it float over the page'"
-            :title="floating ? 'Dock it under the picture' : 'Let it float over the page, and drag it about'"
+            :aria-label="floating ? t('Dock it under the picture') : t('Let it float over the page')"
+            :title="floating ? t('Dock it under the picture') : t('Let it float over the page, and drag it about')"
             @click="floating = !floating"
           >
             <Icon :name="floating ? 'dock' : 'float'" :size="15" />
@@ -636,8 +638,8 @@ function state(key: Key): Record<string, boolean> {
           <button
             type="button"
             class="btn btn-sm btn-icon btn-quiet"
-            aria-label="Close the keyboard"
-            title="Close the keyboard"
+            :aria-label="t('Close the keyboard')"
+            :title="t('Close the keyboard')"
             @click="emit('close')"
           >
             <Icon name="close" :size="15" />
@@ -683,8 +685,8 @@ function state(key: Key): Record<string, boolean> {
             :key="m.usage"
             type="button"
             class="vk-key vk-k-fn"
-            :aria-label="m.label"
-            :title="'note' in m ? `${m.label}. ${m.note}` : m.label"
+            :aria-label="t(m.label)"
+            :title="'note' in m ? `${t(m.label)}. ${t(m.note)}` : t(m.label)"
             @pointerdown.prevent="mediaDown(m.usage)"
             @pointerup="mediaUp"
             @pointercancel="mediaUp"

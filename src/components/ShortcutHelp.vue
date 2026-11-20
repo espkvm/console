@@ -7,6 +7,7 @@
 import Keys from "./Keys.vue";
 import KeyText from "./KeyText.vue";
 import Icon from "./Icon.vue";
+import { t, tm } from "../i18n";
 
 const props = defineProps<{ keyLock: boolean; watchOnly?: boolean }>();
 
@@ -15,14 +16,14 @@ const lockable = !!(navigator as Navigator & { keyboard?: { lock?: unknown } }).
 const emit = defineEmits<{ close: [] }>();
 
 const CONSOLE: [string, string][] = [
-  ["F", "Full screen on or off"],
-  ["P", "The picture in a small window on top (Chrome, Edge)"],
-  ["I", "Input: key combinations, macros, paste"],
-  ["M", "Virtual media"],
-  ["A", "Automation"],
-  ["R", "Recordings and screenshots"],
-  ["Ctrl+K", "Commands: find any action by name. [[Ctrl+Shift+P]] works too."],
-  ["?", "This list"],
+  ["F", tm("Full screen on or off")],
+  ["P", tm("The picture in a small window on top (Chrome, Edge)")],
+  ["I", tm("Input: key combinations, macros, paste")],
+  ["M", tm("Virtual media")],
+  ["A", tm("Automation")],
+  ["R", tm("Recordings and screenshots")],
+  ["Ctrl+K", tm("Commands: find any action by name. [[Ctrl+Shift+P]] works too.")],
+  ["?", tm("This list")],
 ];
 /* A view-only sign-in has no Input, media or automation. */
 const WATCH_ONLY = new Set(["I", "M", "A"]);
@@ -33,32 +34,32 @@ const list = props.watchOnly ? CONSOLE.filter(([k]) => !WATCH_ONLY.has(k)) : CON
   <div class="sh-backdrop" @click.self="emit('close')">
     <section class="sh" role="dialog" aria-labelledby="sh-title">
       <header class="sh-head">
-        <h2 id="sh-title">Keyboard shortcuts</h2>
-        <button type="button" class="icon-btn" aria-label="Close" title="Close" @click="emit('close')">
+        <h2 id="sh-title">{{ t("Keyboard shortcuts") }}</h2>
+        <button type="button" class="icon-btn" :aria-label="t('Close')" :title="t('Close')" @click="emit('close')">
           <Icon name="close" :size="15" />
         </button>
       </header>
 
-      <h3 v-if="!watchOnly">While you do not have control</h3>
+      <h3 v-if="!watchOnly">{{ t("While you do not have control") }}</h3>
       <dl class="sh-list">
         <template v-for="[k, what] in list" :key="k">
           <dt><Keys :combo="k" /></dt>
-          <dd><KeyText :text="what" /></dd>
+          <dd><KeyText :text="t(what)" /></dd>
         </template>
       </dl>
 
       <template v-if="!watchOnly">
-      <h3>While you have control</h3>
+      <h3>{{ t("While you have control") }}</h3>
       <dl class="sh-list">
         <dt><Keys combo="Esc" /></dt>
-        <dd v-if="lockable && keyLock">Gives control back. In full screen it goes to the target, and holding it leaves full screen and gives control back.</dd>
-        <dd v-else>Gives control back. To send <Keys combo="Esc" /> to the target, use Input -> Esc.</dd>
+        <dd v-if="lockable && keyLock">{{ t("Gives control back. In full screen it goes to the target, and holding it leaves full screen and gives control back.") }}</dd>
+        <dd v-else><KeyText :text="t('Gives control back. To send [[Esc]] to the target, use Input -> Esc.')" /></dd>
         <dt><Keys combo="Ctrl+Alt+Del" /></dt>
-        <dd>Windows on your own computer takes it. Use Input -> Ctrl+Alt+Del.</dd>
+        <dd>{{ t("Windows on your own computer takes it. Use Input -> Ctrl+Alt+Del.") }}</dd>
         <dt><Keys combo="Alt+Tab" /> <Keys combo="Win" /></dt>
-        <dd v-if="!lockable">This browser keeps them. Chrome and Edge can pass them in full screen. Or use Input.</dd>
-        <dd v-else-if="keyLock">Go to the target in full screen, since the keyboard lock in the bottom bar is on.</dd>
-        <dd v-else>Stay with this computer. Turn on the keyboard lock in the bottom bar and go full screen, or use Input.</dd>
+        <dd v-if="!lockable">{{ t("This browser keeps them. Chrome and Edge can pass them in full screen. Or use Input.") }}</dd>
+        <dd v-else-if="keyLock">{{ t("Go to the target in full screen, since the keyboard lock in the bottom bar is on.") }}</dd>
+        <dd v-else>{{ t("Stay with this computer. Turn on the keyboard lock in the bottom bar and go full screen, or use Input.") }}</dd>
       </dl>
       </template>
     </section>

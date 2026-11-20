@@ -38,6 +38,7 @@ import {
 } from "../input/gamepad";
 import { useFloating } from "../ui/floating";
 import Icon from "./Icon.vue";
+import { t } from "../i18n";
 
 const props = defineProps<{ control: Control; kind: "switch" | "xinput" | "xbox" }>();
 const emit = defineEmits<{ close: []; look: ["window" | "overlay"] }>();
@@ -95,11 +96,11 @@ const shoulderLabel = (b: "l" | "r" | "zl" | "zr") => labels.value[b];
 const sysButtons = computed(() => {
   const l = labels.value;
   const out: { b: PadButton; label: string; title: string }[] = [
-    { b: "minus", label: l.minus, title: l.minus === "\u2212" ? "Minus" : l.minus },
+    { b: "minus", label: l.minus, title: l.minus === "\u2212" ? t("Minus") : l.minus },
   ];
-  if (l.capture) out.push({ b: "capture", label: l.capture, title: "Capture" });
-  out.push({ b: "home", label: l.home, title: l.home === "\u2302" ? "Home" : l.home });
-  out.push({ b: "plus", label: l.plus, title: l.plus === "+" ? "Plus" : l.plus });
+  if (l.capture) out.push({ b: "capture", label: l.capture, title: t("Capture") });
+  out.push({ b: "home", label: l.home, title: l.home === "\u2302" ? t("Home") : l.home });
+  out.push({ b: "plus", label: l.plus, title: l.plus === "+" ? t("Plus") : l.plus });
   return out;
 });
 
@@ -195,7 +196,12 @@ function poll() {
       name = gp.id;
       break;
     }
-    other = `${gp.id} (layout "${gp.mapping}", ${gp.buttons.length} buttons, ${gp.axes.length} axes)`;
+    other = t('{name} (layout "{mapping}", {buttons} buttons, {axes} axes)', {
+      name: gp.id,
+      mapping: gp.mapping,
+      buttons: gp.buttons.length,
+      axes: gp.axes.length,
+    });
   }
   pad.value = found;
   if (padName.value !== name) padName.value = name;
@@ -395,7 +401,7 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
       class="gp-menu"
       :style="{ left: pos.x + 'px', top: pos.y + 'px' }"
       tabindex="-1"
-      aria-label="Gamepad"
+      :aria-label="t('Gamepad')"
       @keydown="onKey($event, true)"
       @keyup="onKey($event, false)"
       @blur="onBlur"
@@ -407,19 +413,19 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
         @pointerup="dragEnd"
         @pointercancel="dragEnd"
       >
-        <h3>Gamepad</h3>
-        <span v-if="padName" class="pill pill-on" :title="padName">controller</span>
+        <h3>{{ t("Gamepad") }}</h3>
+        <span v-if="padName" class="pill pill-on" :title="padName">{{ t("controller") }}</span>
         <span
           v-else-if="padUnreadable"
           class="pill pill-off"
-          :title="`The browser shows ${padUnreadable}, in a layout this panel cannot read`"
+          :title="t('The browser shows {pad}, in a layout this panel cannot read', { pad: padUnreadable })"
         >
-          controller?
+          {{ t("controller?") }}
         </span>
         <button
           type="button"
           class="btn btn-sm btn-quiet gp-look"
-          :title="`Button names: ${STYLE_NAMES[style]}. Click for the next style.`"
+          :title="t('Button names: {style}. Click for the next style.', { style: STYLE_NAMES[style] })"
           @click="nextStyle"
         >
           {{ STYLE_NAMES[style] }}
@@ -427,16 +433,16 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
         <button
           type="button"
           class="btn btn-sm btn-quiet"
-          title="Draw the gamepad over the picture, like a phone emulator"
+          :title="t('Draw the gamepad over the picture, like a phone emulator')"
           @click="setLook('overlay')"
         >
-          Overlay
+          {{ t("Overlay") }}
         </button>
         <button
           type="button"
           class="btn btn-sm btn-icon btn-quiet"
-          aria-label="Close the gamepad"
-          title="Close"
+          :aria-label="t('Close the gamepad')"
+          :title="t('Close')"
           @click="emit('close')"
         >
           <Icon name="close" :size="15" />
@@ -473,16 +479,16 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
         <div class="gp-cross">
           <button
             v-for="d in [
-              { dir: 'up', area: 'u', label: '&#9650;' },
-              { dir: 'left', area: 'l', label: '&#9664;' },
-              { dir: 'right', area: 'r', label: '&#9654;' },
-              { dir: 'down', area: 'd', label: '&#9660;' },
+              { dir: 'up', area: 'u', label: '&#9650;', name: t('up') },
+              { dir: 'left', area: 'l', label: '&#9664;', name: t('left') },
+              { dir: 'right', area: 'r', label: '&#9654;', name: t('right') },
+              { dir: 'down', area: 'd', label: '&#9660;', name: t('down') },
             ]"
             :key="d.dir"
             type="button"
             :class="['gp-btn', 'gp-dir', { 'gp-held': dirHeld(d.dir) }]"
             :style="{ gridArea: d.area }"
-            :aria-label="d.dir"
+            :aria-label="d.name"
             @pointerdown="dirDown($event, d.dir)"
             @pointerup="dirUp(d.dir)"
             @pointercancel="dirUp(d.dir)"
@@ -527,7 +533,7 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
           v-for="s in (['l', 'r'] as const)"
           :key="s"
           class="gp-stick"
-          :aria-label="s === 'l' ? 'Left stick' : 'Right stick'"
+          :aria-label="s === 'l' ? t('Left stick') : t('Right stick')"
           @pointerdown="stickDown($event, s)"
           @pointermove="stickDrag($event, s)"
           @pointerup="stickUp(s)"
@@ -541,11 +547,11 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
       </div>
 
       <p class="gp-hint">
-        Keys here: arrows, <Keys combo="Enter" /> = confirm, <Keys combo="Esc" /> = back, the button
-        letters, <Keys combo="Q" />/<Keys combo="E" /> and <Keys combo="1" />/<Keys combo="3" /> for the
-        shoulders, <Keys combo="-" />/<Keys combo="=" />, <Keys combo="H" /> = home, WASD and IJKL for the sticks. A controller plugged into
-        this computer works too: press any button on it once, the browser only shows it after
-        that.
+        {{ t("Keys here: arrows,") }} <Keys combo="Enter" /> {{ t("= confirm,") }} <Keys combo="Esc" />
+        {{ t("= back, the button letters,") }} <Keys combo="Q" />/<Keys combo="E" /> {{ t("and") }}
+        <Keys combo="1" />/<Keys combo="3" /> {{ t("for the shoulders,") }} <Keys combo="-" />/<Keys combo="=" />,
+        <Keys combo="H" /> {{ t("= home, WASD and IJKL for the sticks.") }}
+        {{ t("A controller plugged into this computer works too: press any button on it once, the browser only shows it after that.") }}
       </p>
     </section>
   </Teleport>
@@ -557,17 +563,17 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
       ref="popup"
       class="gp-ov"
       tabindex="-1"
-      aria-label="Gamepad over the picture"
+      :aria-label="t('Gamepad over the picture')"
       @keydown="onKey($event, true)"
       @keyup="onKey($event, false)"
       @blur="onBlur"
       @contextmenu.prevent
     >
       <div class="ov-top">
-        <button type="button" class="ov-chip" title="Back to the window" @click="setLook('window')">
-          Window
+        <button type="button" class="ov-chip" :title="t('Back to the window')" @click="setLook('window')">
+          {{ t("Window") }}
         </button>
-        <button type="button" class="ov-chip" aria-label="Close the gamepad" title="Close" @click="emit('close')">
+        <button type="button" class="ov-chip" :aria-label="t('Close the gamepad')" :title="t('Close')" @click="emit('close')">
           <Icon name="close" :size="14" />
         </button>
       </div>
@@ -602,7 +608,7 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
       <div class="ov-cluster ov-left-cluster">
         <div
           class="ov-stick"
-          aria-label="Left stick"
+          :aria-label="t('Left stick')"
           @pointerdown="stickDown($event, 'l')"
           @pointermove="stickDrag($event, 'l')"
           @pointerup="stickUp('l')"
@@ -612,7 +618,7 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
         </div>
         <div
           class="ov-cross"
-          aria-label="Cross"
+          :aria-label="t('Cross')"
           @pointerdown="crossDown"
           @pointermove="crossDrag"
           @pointerup="crossUp"
@@ -642,7 +648,7 @@ const { pos, dragStart, dragMove, dragEnd } = useFloating({
         </div>
         <div
           class="ov-stick"
-          aria-label="Right stick"
+          :aria-label="t('Right stick')"
           @pointerdown="stickDown($event, 'r')"
           @pointermove="stickDrag($event, 'r')"
           @pointerup="stickUp('r')"

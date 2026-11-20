@@ -6,6 +6,7 @@
  * logged in comes from asking the device rather than from remembering.
  */
 import { CONSOLE_HEADER, noteSignedOut } from "./device";
+import { t } from "../i18n";
 
 export interface SessionState {
   /** The device requires a login at all. */
@@ -52,7 +53,7 @@ export class NeedCode extends Error {}
 export async function createViewToken(): Promise<string> {
   const body = await postJson("/api/v1/auth/token", {});
   const token = String(body.token ?? "");
-  if (!token) throw new Error("the device did not return a token");
+  if (!token) throw new Error(t("the device did not return a token"));
   return token;
 }
 
@@ -62,7 +63,7 @@ export async function revokeViewToken(): Promise<void> {
     headers: CONSOLE_HEADER,
   });
   if (res.status === 401) noteSignedOut();
-  if (!res.ok) throw new Error(`revoke failed (${res.status})`);
+  if (!res.ok) throw new Error(t("revoke failed ({status})", { status: res.status }));
 }
 
 async function postJson(url: string, body: unknown): Promise<Record<string, unknown>> {
@@ -75,7 +76,7 @@ async function postJson(url: string, body: unknown): Promise<Record<string, unkn
   if (!res.ok) {
     /* A 401 from login is a wrong password; from anything else, the session is gone. */
     if (res.status === 401 && url !== "/api/v1/auth/login") noteSignedOut();
-    const message = parsed.error ?? `request failed (${res.status})`;
+    const message = parsed.error ? t(parsed.error) : t("request failed ({status})", { status: res.status });
     throw parsed.needCode ? new NeedCode(message) : new Error(message);
   }
   return parsed as Record<string, unknown>;
@@ -83,7 +84,7 @@ async function postJson(url: string, body: unknown): Promise<Record<string, unkn
 
 export async function loadSession(): Promise<SessionState> {
   const res = await fetch("/api/v1/auth/session", { cache: "no-store" });
-  if (!res.ok) throw new Error(`the device did not answer (${res.status})`);
+  if (!res.ok) throw new Error(t("the device did not answer ({status})", { status: res.status }));
   return (await res.json()) as SessionState;
 }
 

@@ -16,6 +16,7 @@ import { loadValues, saveSettings, type Values } from "../state/device";
 import { createProfile, dismissAsk, presetIcon, profiles } from "../state/profiles";
 import { toast } from "../state/toasts";
 import { formatHidden, parseHidden } from "../ui/features";
+import { t, tm } from "../i18n";
 
 const props = defineProps<{ values: Values; step?: string }>();
 const emit = defineEmits<{ values: [Values]; done: [] }>();
@@ -27,12 +28,12 @@ const NOT_ON_A_COMPUTER = ["cec", "gamepad", "padmouse"];
 
 /* What each card changes, in a few words. */
 const NOTES: Record<string, string> = {
-  server: "The settings as they are, without the TV remote and gamepad buttons.",
-  mediapc: "The settings as they are, the TV remote and the gamepad at hand.",
-  steamdeck: "Relative mouse for its pointer. Keyboard, gamepad and remote stay.",
-  switch: "The device turns into a Switch controller. No keyboard or mouse buttons.",
-  androidtv: "Relative mouse. Keyboard, gamepad and the TV remote at hand.",
-  mitvstick: "Its USB is power only: the TV remote over HDMI-CEC is the control.",
+  server: tm("The settings as they are, without the TV remote and gamepad buttons."),
+  mediapc: tm("The settings as they are, the TV remote and the gamepad at hand."),
+  steamdeck: tm("Relative mouse for its pointer. Keyboard, gamepad and remote stay."),
+  switch: tm("The device turns into a Switch controller. No keyboard or mouse buttons."),
+  androidtv: tm("Relative mouse. Keyboard, gamepad and the TV remote at hand."),
+  mitvstick: tm("Its USB is power only: the TV remote over HDMI-CEC is the control."),
 };
 
 interface Card {
@@ -44,8 +45,8 @@ interface Card {
 }
 
 const cards = computed<Card[]>(() => [
-  { id: SERVER, name: "Server or work PC", glyph: "screen" },
-  { id: MEDIA_PC, name: "Media center or gaming PC", glyph: "film" },
+  { id: SERVER, name: tm("Server or work PC"), glyph: "screen" },
+  { id: MEDIA_PC, name: tm("Media center or gaming PC"), glyph: "film" },
   ...(profiles.value?.presets ?? []).map((p) => ({ id: p.id, name: p.name, os: presetIcon(p.id) })),
 ]);
 
@@ -78,7 +79,7 @@ async function finish(apply: boolean) {
     await dismissAsk({ welcome: true });
     if (apply && [...picked.value].some((id) => id !== MEDIA_PC)) {
       emit("values", await loadValues());
-      toast.info("Done. Settings - Profile shows them");
+      toast.info(t("Done. Settings - Profile shows them"));
     }
     emit("done");
   } catch (err) {
@@ -92,10 +93,9 @@ async function finish(apply: boolean) {
 <template>
   <section class="wp" role="dialog" aria-labelledby="wp-title">
     <small v-if="step" class="wp-step">{{ step }}</small>
-    <h2 id="wp-title">What will this device be plugged into?</h2>
+    <h2 id="wp-title">{{ t("What will this device be plugged into?") }}</h2>
     <p class="wp-sub">
-      Pick everything that fits. Each device gets a profile with settings that suit it, used
-      whenever that device is attached.
+      {{ t("Pick everything that fits. Each device gets a profile with settings that suit it, used whenever that device is attached.") }}
     </p>
     <div class="wp-cards">
       <button
@@ -111,15 +111,15 @@ async function finish(apply: boolean) {
         <span class="wp-tick" aria-hidden="true">{{ picked.has(c.id) ? "✓" : "" }}</span>
         <Icon v-if="c.glyph" :name="c.glyph" :size="28" />
         <OsIcon v-else :os="c.os ?? ''" />
-        <strong>{{ c.name }}</strong>
-        <small>{{ NOTES[c.id] ?? "" }}</small>
+        <strong>{{ t(c.name) }}</strong>
+        <small>{{ NOTES[c.id] ? t(NOTES[c.id]) : "" }}</small>
       </button>
     </div>
     <div class="wp-actions">
       <button type="button" class="btn btn-primary" :disabled="busy || !picked.size" @click="finish(true)">
-        {{ busy ? "Saving..." : "Done" }}
+        {{ busy ? t("Saving...") : t("Done") }}
       </button>
-      <button type="button" class="btn btn-quiet" :disabled="busy" @click="finish(false)">Skip</button>
+      <button type="button" class="btn btn-quiet" :disabled="busy" @click="finish(false)">{{ t("Skip") }}</button>
     </div>
   </section>
 </template>

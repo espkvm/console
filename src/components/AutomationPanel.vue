@@ -45,6 +45,7 @@ import {
 } from "../state/device";
 import { toast } from "../state/toasts";
 import RegionsSection from "./RegionsSection.vue";
+import { t } from "../i18n";
 
 const props = defineProps<{
   values: Values;
@@ -133,13 +134,22 @@ async function stop() {
   }
 }
 
-const STATE_WORDS: Record<string, string> = {
-  idle: "Nothing has run yet",
-  running: "Running",
-  done: "Finished",
-  failed: "Failed",
-  stopped: "Stopped",
-};
+function stateWords(state: string): string {
+  switch (state) {
+    case "idle":
+      return t("Nothing has run yet");
+    case "running":
+      return t("Running");
+    case "done":
+      return t("Finished");
+    case "failed":
+      return t("Failed");
+    case "stopped":
+      return t("Stopped");
+    default:
+      return state;
+  }
+}
 
 function elapsed(ms: number): string {
   const s = Math.round(ms / 1000);
@@ -184,7 +194,7 @@ function cancelEdit() {
 async function persist(list: Runbook[]) {
   const bytes = runbooksBytes(list);
   if (bytes > RUNBOOKS_MAX_BYTES) {
-    toast.error(`The runbooks take ${bytes} bytes; the device holds ${RUNBOOKS_MAX_BYTES}`);
+    toast.error(t("The runbooks take {bytes} bytes; the device holds {max}", { bytes, max: RUNBOOKS_MAX_BYTES }));
     return false;
   }
   saving.value = true;
@@ -202,20 +212,20 @@ async function persist(list: Runbook[]) {
 async function save() {
   const name = editName.value.trim();
   if (!name) {
-    toast.error("Give the runbook a name");
+    toast.error(t("Give the runbook a name"));
     return;
   }
   if (name.length > 47) {
-    toast.error("A name is at most 47 characters");
+    toast.error(t("A name is at most 47 characters"));
     return;
   }
   if (scriptError.value) {
-    toast.error(scriptError.value);
+    toast.error(t(scriptError.value));
     return;
   }
   const taken = runbooks.value.findIndex((r) => r.name === name);
   if (taken >= 0 && taken !== editIndex.value) {
-    toast.error(`There is already a runbook called "${name}"`);
+    toast.error(t('There is already a runbook called "{name}"', { name }));
     return;
   }
   const list = runbooks.value.slice();
@@ -229,7 +239,7 @@ async function save() {
 }
 
 async function remove(i: number) {
-  if (!confirm(`Delete the runbook "${runbooks.value[i].name}"?`)) return;
+  if (!confirm(t('Delete the runbook "{name}"?', { name: runbooks.value[i].name }))) return;
   const list = runbooks.value.slice();
   list.splice(i, 1);
   await persist(list);
@@ -292,7 +302,7 @@ function cancelSchedule() {
 async function persistSchedules(list: Schedule[]): Promise<boolean> {
   const bytes = schedulesBytes(list);
   if (bytes > SCHEDULES_MAX_BYTES) {
-    toast.error(`The schedules take ${bytes} bytes; the device holds ${SCHEDULES_MAX_BYTES}`);
+    toast.error(t("The schedules take {bytes} bytes; the device holds {max}", { bytes, max: SCHEDULES_MAX_BYTES }));
     return false;
   }
   scSaving.value = true;
@@ -310,20 +320,20 @@ async function persistSchedules(list: Schedule[]): Promise<boolean> {
 async function saveSchedule() {
   const name = scName.value.trim();
   if (!name) {
-    toast.error("Give the schedule a name");
+    toast.error(t("Give the schedule a name"));
     return;
   }
   if (cronMsg.value) {
-    toast.error(cronMsg.value);
+    toast.error(t(cronMsg.value));
     return;
   }
   if (scAction.value === "runbook" && !scArg.value) {
-    toast.error("Choose a runbook to run");
+    toast.error(t("Choose a runbook to run"));
     return;
   }
   const taken = schedules.value.findIndex((s) => s.name === name);
   if (taken >= 0 && taken !== scEdit.value) {
-    toast.error(`There is already a schedule called "${name}"`);
+    toast.error(t('There is already a schedule called "{name}"', { name }));
     return;
   }
   const entry: Schedule = {
@@ -340,7 +350,7 @@ async function saveSchedule() {
 }
 
 async function removeSchedule(i: number) {
-  if (!confirm(`Delete the schedule "${schedules.value[i].name}"?`)) return;
+  if (!confirm(t('Delete the schedule "{name}"?', { name: schedules.value[i].name }))) return;
   const list = schedules.value.slice();
   list.splice(i, 1);
   await persistSchedules(list);
@@ -355,14 +365,15 @@ async function toggleSchedule(i: number) {
 async function runNow(s: Schedule) {
   try {
     await runSchedule(s.name);
-    toast.info(`Fired "${s.name}"`);
+    toast.info(t('Fired "{name}"', { name: s.name }));
   } catch (err) {
     toast.error(err instanceof Error ? err.message : String(err));
   }
 }
 
 function actionLabel(a: string): string {
-  return SCHEDULE_ACTIONS.find((x) => x.value === a)?.label ?? a;
+  const label = SCHEDULE_ACTIONS.find((x) => x.value === a)?.label;
+  return label ? t(label) : a;
 }
 
 /* ---- notifications ------------------------------------------------------ */
@@ -403,25 +414,24 @@ async function sendTest() {
   <div class="automation">
     <div v-if="status && status.state !== 'idle'" class="runbook-status" :class="`runbook-${status.state}`">
       <div class="runbook-status-head">
-        <strong>{{ STATE_WORDS[status.state] }}</strong>
+        <strong>{{ stateWords(status.state) }}</strong>
         <span class="mono">{{ status.name }}</span>
-        <span v-if="status.steps" class="setting-note">step {{ status.step }} of {{ status.steps }}</span>
+        <span v-if="status.steps" class="setting-note">{{ t("step {step} of {steps}", { step: status.step, steps: status.steps }) }}</span>
         <span class="setting-note">{{ elapsed(status.elapsedMs) }}</span>
         <button v-if="running" type="button" class="btn btn-sm" :disabled="stopping" @click="stop">
-          {{ stopping ? "Stopping..." : "Stop" }}
+          {{ stopping ? t("Stopping...") : t("Stop") }}
         </button>
       </div>
       <div v-if="status.line" class="mono runbook-line">{{ status.line }}</div>
       <div v-if="status.state === 'failed' || status.state === 'stopped'" class="setting-note setting-note-blocked">
-        {{ status.message }}
+        {{ t(status.message) }}
       </div>
     </div>
 
-    <h3>Runbooks</h3>
+    <h3>{{ t("Runbooks") }}</h3>
     <FoldNote>
-      <template #lead>A runbook is a macro that can wait for a phrase on the screen.</template>
-      It sends keys and holds until the phrase shows up. The device runs it, so this tab can close.
-      Waits only see a text screen - a BIOS, a boot menu, a console - never a picture.
+      <template #lead>{{ t("A runbook is a macro that can wait for a phrase on the screen.") }}</template>
+      {{ t("It sends keys and holds until the phrase shows up. The device runs it, so this tab can close. Waits only see a text screen - a BIOS, a boot menu, a console - never a picture.") }}
     </FoldNote>
     <ul v-if="runbooks.length" class="image-list">
       <li v-for="(r, i) in runbooks" :key="i" class="image-row">
@@ -431,20 +441,20 @@ async function sendTest() {
             type="button"
             class="btn btn-sm"
             :disabled="running || starting || !attached"
-            :title="attached ? '' : 'No USB target to send keys to'"
+            :title="attached ? '' : t('No USB target to send keys to')"
             @click="run(r)"
           >
-            Run
+            {{ t("Run") }}
           </button>
-          <button type="button" class="btn btn-sm btn-quiet" @click="edit(i)">Edit</button>
-          <button type="button" class="btn btn-sm btn-quiet" @click="remove(i)">Delete</button>
+          <button type="button" class="btn btn-sm btn-quiet" @click="edit(i)">{{ t("Edit") }}</button>
+          <button type="button" class="btn btn-sm btn-quiet" @click="remove(i)">{{ t("Delete") }}</button>
         </span>
       </li>
     </ul>
-    <p v-else class="setting-note">No runbooks yet.</p>
+    <p v-else class="setting-note">{{ t("No runbooks yet.") }}</p>
 
     <div v-if="editIndex !== null" class="macro-editor">
-      <input v-model="editName" type="text" placeholder="Runbook name" />
+      <input v-model="editName" type="text" :placeholder="t('Runbook name')" />
       <textarea
         v-model="editScript"
         rows="10"
@@ -453,30 +463,32 @@ async function sendTest() {
         placeholder="timeout 120&#10;wait Press F2&#10;key f2&#10;wait Boot"
       ></textarea>
       <p class="setting-note">
-        One command per line. <code>key ctrl+alt+f2</code> presses a chord,
-        <code>type root</code> types text (US layout), <code>delay 500</code> pauses in
-        milliseconds. <code>wait Press F2</code> holds until a row of the screen contains the
-        phrase, <code>gone Loading</code> until none does, <code>wait area Name</code> until a
-        screen area fires (<code>gone area Name</code> until it is off), and <code>timeout 120</code> sets how
-        many seconds the waits below it may take (60 if unsaid). A wait that runs out stops the
-        runbook there. <code>record</code> starts recording the screen to the microSD card and
-        goes on (<code>record 300</code> for five minutes), <code>timelapse 10</code> records one frame every
-        10 seconds (<code>timelapse 10 28800</code> for eight hours), <code>record stop</code> ends
-        either, and <code>screenshot</code> saves one picture. Over HDMI-CEC, <code>hdmi standby</code>
-        puts the source to sleep, <code>hdmi wake</code> wakes it and <code>hdmi key up</code>
-        presses a remote key (up, down, left, right, select, back, home, play, pause...). Lines
-        starting with # are ignored. Every key name is listed in
+        {{ t("One command per line.") }} <code>key ctrl+alt+f2</code> {{ t("presses a chord,") }}
+        <code>type root</code> {{ t("types text (US layout),") }} <code>delay 500</code>
+        {{ t("pauses in milliseconds.") }} <code>wait Press F2</code>
+        {{ t("holds until a row of the screen contains the phrase,") }} <code>gone Loading</code>
+        {{ t("until none does,") }} <code>wait area Name</code> {{ t("until a screen area fires") }}
+        (<code>gone area Name</code> {{ t("until it is off), and") }} <code>timeout 120</code>
+        {{ t("sets how many seconds the waits below it may take (60 if unsaid). A wait that runs out stops the runbook there.") }}
+        <code>record</code> {{ t("starts recording the screen to the microSD card and goes on") }}
+        (<code>record 300</code> {{ t("for five minutes),") }} <code>timelapse 10</code>
+        {{ t("records one frame every 10 seconds") }} (<code>timelapse 10 28800</code>
+        {{ t("for eight hours),") }} <code>record stop</code> {{ t("ends either, and") }}
+        <code>screenshot</code> {{ t("saves one picture. Over HDMI-CEC,") }} <code>hdmi standby</code>
+        {{ t("puts the source to sleep,") }} <code>hdmi wake</code> {{ t("wakes it and") }}
+        <code>hdmi key up</code>
+        {{ t("presses a remote key (up, down, left, right, select, back, home, play, pause...). Lines starting with # are ignored. Every key name is listed in") }}
         <a href="https://espkvm.io/scripts/" target="_blank" rel="noopener">espkvm.io/scripts</a>.
       </p>
-      <p v-if="scriptError" class="setting-note setting-note-blocked">{{ scriptError }}</p>
+      <p v-if="scriptError" class="setting-note setting-note-blocked">{{ t(scriptError) }}</p>
       <div class="macro-actions">
         <button type="button" class="btn btn-sm" :disabled="saving || !!scriptError" @click="save">
-          {{ saving ? "Saving..." : "Save" }}
+          {{ saving ? t("Saving...") : t("Save") }}
         </button>
-        <button type="button" class="btn btn-sm btn-quiet" @click="cancelEdit">Cancel</button>
+        <button type="button" class="btn btn-sm btn-quiet" @click="cancelEdit">{{ t("Cancel") }}</button>
       </div>
     </div>
-    <button v-else type="button" class="btn btn-sm" @click="newRunbook">New runbook...</button>
+    <button v-else type="button" class="btn btn-sm" @click="newRunbook">{{ t("New runbook...") }}</button>
 
     <hr class="panel-rule" />
 
@@ -484,31 +496,27 @@ async function sendTest() {
 
     <hr class="panel-rule" />
 
-    <h3>Schedules</h3>
+    <h3>{{ t("Schedules") }}</h3>
     <FoldNote>
-      <template #lead>Fire an action on a timetable, with nothing left open.</template>
-      Wake-on-LAN in the morning, a runbook overnight, a reset on a schedule. They need the clock,
-      which the device sets over the network. The time server and the time zone are in Settings,
-      System.
+      <template #lead>{{ t("Fire an action on a timetable, with nothing left open.") }}</template>
+      {{ t("Wake-on-LAN in the morning, a runbook overnight, a reset on a schedule. They need the clock, which the device sets over the network. The time server and the time zone are in Settings, System.") }}
     </FoldNote>
 
     <label class="switch">
       <input v-model="schedEnabled" type="checkbox" />
-      <span>Run schedules</span>
+      <span>{{ t("Run schedules") }}</span>
     </label>
 
     <p v-if="schedEnabled && schedStatus" class="setting-note">
       <template v-if="schedStatus.clockValid">
-        Device clock: <span class="mono">{{ schedStatus.now }}</span>
+        {{ t("Device clock:") }} <span class="mono">{{ schedStatus.now }}</span>
         <span v-if="schedStatus.tz"> ({{ schedStatus.tz }})</span>.
         <template v-if="schedStatus.lastName">
-          Last fired <span class="mono">{{ schedStatus.lastName }}</span> at
-          {{ schedStatus.lastAt }}.
+          {{ t("Last fired {name} at {time}.", { name: schedStatus.lastName, time: schedStatus.lastAt }) }}
         </template>
       </template>
       <span v-else class="setting-note-blocked">
-        The clock is not set yet. Nothing fires until it is - check the time server under Settings,
-        System.
+        {{ t("The clock is not set yet. Nothing fires until it is - check the time server under Settings, System.") }}
       </span>
     </p>
 
@@ -521,78 +529,76 @@ async function sendTest() {
           </span>
         </span>
         <span class="macro-actions">
-          <button type="button" class="btn btn-sm" @click="runNow(s)">Run now</button>
+          <button type="button" class="btn btn-sm" @click="runNow(s)">{{ t("Run now") }}</button>
           <button
             type="button"
             class="btn btn-sm btn-quiet"
             :class="{ 'btn-on': s.enabled }"
-            :title="s.enabled ? 'On - click to pause' : 'Paused - click to enable'"
+            :title="s.enabled ? t('On - click to pause') : t('Paused - click to enable')"
             @click="toggleSchedule(i)"
           >
-            {{ s.enabled ? "On" : "Off" }}
+            {{ s.enabled ? t("On") : t("Off") }}
           </button>
-          <button type="button" class="btn btn-sm btn-quiet" @click="editSchedule(i)">Edit</button>
-          <button type="button" class="btn btn-sm btn-quiet" @click="removeSchedule(i)">Delete</button>
+          <button type="button" class="btn btn-sm btn-quiet" @click="editSchedule(i)">{{ t("Edit") }}</button>
+          <button type="button" class="btn btn-sm btn-quiet" @click="removeSchedule(i)">{{ t("Delete") }}</button>
         </span>
       </li>
     </ul>
-    <p v-else class="setting-note">No schedules yet.</p>
+    <p v-else class="setting-note">{{ t("No schedules yet.") }}</p>
 
     <div v-if="scEdit !== null" class="macro-editor">
-      <input v-model="scName" type="text" placeholder="Schedule name" />
+      <input v-model="scName" type="text" :placeholder="t('Schedule name')" />
       <input v-model="scCron" type="text" class="mono" spellcheck="false" placeholder="0 7 * * 1-5" />
       <p class="setting-note">
-        Five fields: minute hour day month weekday. <code>0 7 * * 1-5</code> is 07:00 on weekdays,
-        <code>*/15 * * * *</code> every fifteen minutes. <a href="https://espkvm.io/scripts/" target="_blank" rel="noopener">espkvm.io/scripts</a>.
+        {{ t("Five fields: minute hour day month weekday.") }} <code>0 7 * * 1-5</code> {{ t("is 07:00 on weekdays,") }}
+        <code>*/15 * * * *</code> {{ t("every fifteen minutes.") }} <a href="https://espkvm.io/scripts/" target="_blank" rel="noopener">espkvm.io/scripts</a>.
       </p>
-      <p v-if="cronMsg" class="setting-note setting-note-blocked">{{ cronMsg }}</p>
+      <p v-if="cronMsg" class="setting-note setting-note-blocked">{{ t(cronMsg) }}</p>
       <select v-model="scAction">
-        <option v-for="a in SCHEDULE_ACTIONS" :key="a.value" :value="a.value">{{ a.label }}</option>
+        <option v-for="a in SCHEDULE_ACTIONS" :key="a.value" :value="a.value">{{ t(a.label) }}</option>
       </select>
       <select v-if="scAction === 'runbook'" v-model="scArg">
-        <option value="" disabled>Choose a runbook...</option>
+        <option value="" disabled>{{ t("Choose a runbook...") }}</option>
         <option v-for="n in runbookNames" :key="n" :value="n">{{ n }}</option>
       </select>
       <select v-if="scAction === 'machine'" v-model="scArg">
-        <option value="">The next machine</option>
+        <option value="">{{ t("The next machine") }}</option>
         <option v-for="(n, i) in switchMachines" :key="i" :value="String(i + 1)">{{ n }}</option>
       </select>
       <label class="switch">
         <input v-model="scEnabled" type="checkbox" />
-        <span>Enabled</span>
+        <span>{{ t("Enabled") }}</span>
       </label>
       <div class="macro-actions">
         <button type="button" class="btn btn-sm" :disabled="scSaving || !!cronMsg" @click="saveSchedule">
-          {{ scSaving ? "Saving..." : "Save" }}
+          {{ scSaving ? t("Saving...") : t("Save") }}
         </button>
-        <button type="button" class="btn btn-sm btn-quiet" @click="cancelSchedule">Cancel</button>
+        <button type="button" class="btn btn-sm btn-quiet" @click="cancelSchedule">{{ t("Cancel") }}</button>
       </div>
     </div>
-    <button v-else type="button" class="btn btn-sm" @click="newSchedule">New schedule...</button>
+    <button v-else type="button" class="btn btn-sm" @click="newSchedule">{{ t("New schedule...") }}</button>
 
     <hr class="panel-rule" />
 
-    <h3>Notifications</h3>
+    <h3>{{ t("Notifications") }}</h3>
     <FoldNote>
-      <template #lead>A message to Telegram or a webhook when something shows on the screen.</template>
-      A watched phrase, a blank screen, or a screen area that asks for it. Telegram gets a
-      screenshot too. Set the bot token, chat id or URL under Settings &rarr;
-      Notifications.
+      <template #lead>{{ t("A message to Telegram or a webhook when something shows on the screen.") }}</template>
+      {{ t("A watched phrase, a blank screen, or a screen area that asks for it. Telegram gets a screenshot too. Set the bot token, chat id or URL under Settings \u2192 Notifications.") }}
       <a href="https://github.com/espkvm/espkvm/blob/main/docs/NOTIFICATIONS.md" target="_blank"
-        rel="noopener">How they work</a>.
+        rel="noopener">{{ t("How they work") }}</a>.
     </FoldNote>
     <label class="switch">
       <input v-model="notifyEnabled" type="checkbox" />
-      <span>Send notifications</span>
+      <span>{{ t("Send notifications") }}</span>
     </label>
     <p v-if="notifyStatus" class="setting-note">
-      Last send:
+      {{ t("Last send:") }}
       <span :class="{ 'setting-note-blocked': notifyStatus.lastResult !== 'ok' && notifyStatus.lastAt }">
-        {{ notifyStatus.lastResult }}</span
+        {{ t(notifyStatus.lastResult) }}</span
       ><template v-if="notifyStatus.lastAt"> ({{ notifyStatus.lastAt }})</template>.
     </p>
     <button type="button" class="btn btn-sm" :disabled="testing || !notifyEnabled" @click="sendTest">
-      {{ testing ? "Sending..." : "Send a test" }}
+      {{ testing ? t("Sending...") : t("Send a test") }}
     </button>
   </div>
 </template>

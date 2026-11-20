@@ -2,6 +2,7 @@
 import UiFeatureList from "./UiFeatureList.vue";
 import { hapticTry } from "../ui/haptic";
 import Icon from "./Icon.vue";
+import { t, tn } from "../i18n";
 /*
  * The settings panel renders itself from the schema the device serves, so a
  * setting added to the firmware table appears here with its title, range and
@@ -60,6 +61,7 @@ import { TIME_ZONES, browserZone, zoneName, zoneOptions } from "../state/timezon
 import { toast } from "../state/toasts";
 import TwoFactor from "./TwoFactor.vue";
 import PushBrowsers from "./PushBrowsers.vue";
+import LanguagePicker from "./LanguagePicker.vue";
 import TailscaleStatus from "./TailscaleStatus.vue";
 import ViewerAccount from "./ViewerAccount.vue";
 import ScreenLayout from "./ScreenLayout.vue";
@@ -114,7 +116,7 @@ async function runFindScreen() {
   if (!props.findScreen) return;
   findingScreen.value = true;
   try {
-    screenResult.value = await props.findScreen((t) => (screenResult.value = t));
+    screenResult.value = await props.findScreen((text) => (screenResult.value = text));
   } finally {
     findingScreen.value = false;
   }
@@ -156,22 +158,22 @@ async function makeViewToken() {
     tokenShown.value = await createViewToken();
     tokenExists.value = true;
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     tokenBusy.value = false;
   }
 }
 
 async function dropViewToken() {
-  if (!confirm("Revoke the viewing token? Anything using it stops working.")) return;
+  if (!confirm(t("Revoke the viewing token? Anything using it stops working."))) return;
   tokenBusy.value = true;
   try {
     await revokeViewToken();
     tokenExists.value = false;
     tokenShown.value = "";
-    toast.info("Viewing token revoked");
+    toast.info(t("Viewing token revoked"));
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     tokenBusy.value = false;
   }
@@ -234,8 +236,12 @@ const searchHits = computed(() => {
   if (!q) return [];
   return props.schema.filter((entry) => {
     if (entry.section === "storage_hidden") return false;
+    /* English and the active language both match, so a translated console
+       can still be searched with the words of the English one. */
+    const group = entry.group ?? "";
+    const help = entry.help ?? "";
     const haystack =
-      `${entry.title} ${entry.group ?? ""} ${entry.help ?? ""} ${entry.key}`.toLowerCase();
+      `${entry.title} ${t(entry.title)} ${group} ${group ? t(group) : ""} ${help} ${help ? t(help) : ""} ${entry.key}`.toLowerCase();
     return haystack.includes(q);
   });
 });
@@ -263,7 +269,7 @@ async function backToDefault(setting: Setting) {
     await updateProfile(p.id, { unset: [setting.key] });
     emit("values", await loadValues());
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     busy.value = false;
   }
@@ -487,8 +493,8 @@ function onSearchKey(e: KeyboardEvent) {
 }
 /* "/" or Ctrl+F while Settings is open goes to the search box. */
 function onWindowKey(e: KeyboardEvent) {
-  const t = e.target as HTMLElement | null;
-  const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+  const el = e.target as HTMLElement | null;
+  const typing = el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
   const ctrlF = (e.ctrlKey || e.metaKey) && e.code === "KeyF";
   if (ctrlF || (e.key === "/" && !typing)) {
     e.preventDefault();
@@ -521,12 +527,17 @@ const tsKeyNote = computed(() => {
   const ts = props.ts;
   if (!ts) return "";
   if (ts.keyExpired) {
-    return "The tailnet key has run out. The device is off the tailnet until you sign in again or save a fresh auth key.";
+    return t("The tailnet key has run out. The device is off the tailnet until you sign in again or save a fresh auth key.");
   }
   if (!ts.keyExpiry) return "";
   const when = new Date(ts.keyExpiry * 1000);
   const days = Math.ceil((when.getTime() - Date.now()) / 86400000);
-  return `The tailnet key runs out on ${when.toLocaleString()} - in ${days} day${days === 1 ? "" : "s"}.`;
+  return tn(
+    "The tailnet key runs out on {when} - in {n} day.",
+    "The tailnet key runs out on {when} - in {n} days.",
+    days,
+    { when: when.toLocaleString() },
+  );
 });
 
 const displayRows = computed(() => {
@@ -635,9 +646,9 @@ const oledI2cNote = computed<{ sda: number; scl: number } | null>(() => {
 async function copyText(text: string) {
   try {
     await navigator.clipboard.writeText(text);
-    toast.info("Copied to clipboard");
+    toast.info(t("Copied to clipboard"));
   } catch {
-    toast.error("Could not copy - select and copy it manually");
+    toast.error(t("Could not copy - select and copy it manually"));
   }
 }
 
@@ -710,7 +721,7 @@ async function write(key: string, value: number | string | boolean) {
       await loadProfiles();
     }
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     busy.value = false;
   }
@@ -789,7 +800,7 @@ const notifyReady = ref<Record<string, boolean> | null>(null);
 /* One channel's test, from its column in the table. */
 async function testChannel(key: string): Promise<string> {
   await testNotify(key);
-  return "on its way";
+  return t("on its way");
 }
 async function loadNotifyReady() {
   try {
@@ -827,15 +838,15 @@ async function scanWifi(key: string) {
       if (st.status === "scanning") continue;
       if (st.status === "error") {
         wifiNets.value = null;
-        wifiScanError.value = st.error || "The scan failed.";
+        wifiScanError.value = st.error ? t(st.error) : t("The scan failed.");
       } else {
         wifiNets.value = networkRows(st.aps ?? []);
       }
       return;
     }
-    wifiScanError.value = "The scan took too long. Try again.";
+    wifiScanError.value = t("The scan took too long. Try again.");
   } catch (err) {
-    wifiScanError.value = err instanceof Error ? err.message : String(err);
+    wifiScanError.value = t(err instanceof Error ? err.message : String(err));
   } finally {
     wifiScanning.value = false;
   }
@@ -858,7 +869,7 @@ async function findChats() {
       if (st.state !== "running") break;
     }
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     tgFinding.value = false;
   }
@@ -876,7 +887,7 @@ async function signOut() {
     await logout();
     location.reload();
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
     signingOut.value = false;
   }
 }
@@ -913,22 +924,22 @@ async function submitPassword() {
      * operator back to the sign-in form rather than pretend otherwise. */
     emit("passwordChanged");
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     changingPassword.value = false;
   }
 }
 
 async function doRestart() {
-  if (!confirm("Restart the device? It drops off the network for a few seconds. The target is not affected.")) {
+  if (!confirm(t("Restart the device? It drops off the network for a few seconds. The target is not affected."))) {
     return;
   }
   try {
-    if (await runRestart("Restarting the device", restartDevice, { kind: "manual" })) {
+    if (await runRestart(t("Restarting the device"), restartDevice, { kind: "manual" })) {
       location.reload();
     }
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   }
 }
 
@@ -966,7 +977,7 @@ async function doExport() {
   a.download = fileName(pinInfo.value?.board);
   a.click();
   URL.revokeObjectURL(url);
-  toast.info("Settings saved to a file");
+  toast.info(t("Settings saved to a file"));
 }
 
 /* Read, plan, show what it would do, and only then write. The confirm is the
@@ -984,16 +995,16 @@ async function onSettingsFile(e: Event) {
     });
     if (!list) plan.profiles = [];
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
     return;
   }
   importReport.value = [];
   if (!Object.keys(plan.apply).length && !plan.profiles.length) {
     importReport.value = describePlan(plan, false);
-    toast.info("Nothing in that file to change");
+    toast.info(t("Nothing in that file to change"));
     return;
   }
-  if (!confirm(`Apply this file?\n\n${describePlan(plan, false).join("\n\n")}`)) return;
+  if (!confirm(`${t("Apply this file?")}\n\n${describePlan(plan, false).join("\n\n")}`)) return;
   busy.value = true;
   /* The file's values are Default's: written with Default active, or a
      profile's own keys would take them. */
@@ -1018,10 +1029,10 @@ async function onSettingsFile(e: Event) {
     }
     emit("values", await loadValues());
     importReport.value = describePlan(plan, true);
-    toast.info("Settings loaded from the file");
+    toast.info(t("Settings loaded from the file"));
   } catch (err) {
     importReport.value = [];
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     /* A write that failed half way must not leave the device on Default. */
     if (switched) await selectProfile(was).catch(() => undefined);
@@ -1030,13 +1041,13 @@ async function onSettingsFile(e: Event) {
 }
 
 async function doReset() {
-  if (!confirm("Restore every setting to its default?")) return;
+  if (!confirm(t("Restore every setting to its default?"))) return;
   busy.value = true;
   try {
     emit("values", await resetSettings());
-    toast.info("Settings restored to defaults");
+    toast.info(t("Settings restored to defaults"));
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     busy.value = false;
   }
@@ -1065,8 +1076,8 @@ const acme = computed(() => tls.value?.acme ?? null);
 
 /* One line for the folded certificate card. */
 const certStatus = computed(() => {
-  const parts = [tls.value?.custom ? "Your own certificate" : "Self-signed, from the device's own CA"];
-  if (acme.value?.cert) parts.push("Let's Encrypt over Tailscale");
+  const parts = [tls.value?.custom ? t("Your own certificate") : t("Self-signed, from the device's own CA")];
+  if (acme.value?.cert) parts.push(t("Let's Encrypt over Tailscale"));
   return parts.join(" + ");
 });
 let acmeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1088,12 +1099,34 @@ async function doRunAcme() {
     if (tls.value?.acme) tls.value.acme.busy = true;
     acmeTimer = setTimeout(refreshTls, 1000);
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   }
 }
 
-function acmeDate(t: number): string {
-  return t ? new Date(t * 1000).toLocaleDateString() : "";
+/* A translated sentence cut at one {placeholder}, so markup (a link, a
+   monospace name) can sit in its place: [before, after]. */
+function splitAt(text: string, key: string): [string, string] {
+  const i = text.indexOf(`{${key}}`);
+  return i < 0 ? [text, ""] : [text.slice(0, i), text.slice(i + key.length + 2)];
+}
+
+/* "Use it as ?token=... on /stream", the three names in monospace. */
+const TOKEN_CODE: Record<string, string> = {
+  query: "?token=...",
+  path: "/stream",
+  header: "Authorization: Bearer",
+};
+function tokenUse(): { text: string; code?: string }[] {
+  return t("Use it as {query} on {path}, or as an {header} header.")
+    .split(/(\{\w+\})/)
+    .map((s) => {
+      const code = TOKEN_CODE[s.slice(1, -1)];
+      return s.startsWith("{") && code ? { text: "", code } : { text: s };
+    });
+}
+
+function acmeDate(ts: number): string {
+  return ts ? new Date(ts * 1000).toLocaleDateString() : "";
 }
 
 async function loadCertFile(e: Event) {
@@ -1108,9 +1141,9 @@ async function doInstallCert() {
     await installCert(certText.value);
     certText.value = "";
     if (tls.value) tls.value = { ...tls.value, custom: true };
-    toast.info("Certificate installed - the device is restarting to apply it");
+    toast.info(t("Certificate installed - the device is restarting to apply it"));
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     tlsBusy.value = false;
   }
@@ -1119,10 +1152,12 @@ async function doInstallCert() {
 async function doRevertCert() {
   if (
     !confirm(
+      t(
       "Remove your certificate and go back to the self-signed one? The device restarts, and a browser " +
         "that does not trust the device's own CA will then refuse it; this console then offers to open " +
         "the page without its saved copy, which shows the browser's warning. To renew a certificate, " +
         "use \"Replace\" instead: no revert needed.",
+      ),
     )
   ) {
     return;
@@ -1131,9 +1166,9 @@ async function doRevertCert() {
   try {
     await revertCert();
     if (tls.value) tls.value = { ...tls.value, custom: false };
-    toast.info("Reverting to the self-signed certificate - the device is restarting");
+    toast.info(t("Reverting to the self-signed certificate - the device is restarting"));
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     tlsBusy.value = false;
   }
@@ -1155,20 +1190,20 @@ async function doRevertCert() {
           autocomplete="off"
           data-1p-ignore
           data-lpignore="true"
-          placeholder="Find a setting"
-          aria-label="Find a setting"
-          title="Find a setting ( / )"
+          :placeholder="t('Find a setting')"
+          :aria-label="t('Find a setting')"
+          :title="t('Find a setting ( / )')"
           @keydown="onSearchKey"
         />
         <button type="button" class="btn-link nav-search-back" @click="closeSearch">
-          Cancel
+          {{ t("Cancel") }}
         </button>
       </div>
       <button
         type="button"
         class="icon-btn nav-search-btn"
-        aria-label="Find a setting"
-        title="Find a setting"
+        :aria-label="t('Find a setting')"
+        :title="t('Find a setting')"
         @click="openSearch"
       >
         <Icon name="search" :size="16" />
@@ -1179,10 +1214,10 @@ async function doRevertCert() {
           role="tab"
           :aria-selected="!query.trim() && currentSection === 'changed'"
           :class="['tab', 'tab-changed', { 'tab-active': !query.trim() && currentSection === 'changed' }]"
-          title="Every setting that differs from the factory value"
+          :title="t('Every setting that differs from the factory value')"
           @click="pickSection('changed')"
         >
-          Changed <span class="tab-count">{{ changedRows.length }}</span>
+          {{ t("Changed") }} <span class="tab-count">{{ changedRows.length }}</span>
         </button>
         <button
           v-for="s in sections"
@@ -1193,7 +1228,7 @@ async function doRevertCert() {
           :class="['tab', { 'tab-active': !query.trim() && s.id === currentSection }]"
           @click="pickSection(s.id)"
         >
-          {{ s.title }}
+          {{ t(s.title) }}
         </button>
       </div>
     </nav>
@@ -1206,35 +1241,36 @@ async function doRevertCert() {
       <div class="settings-main">
         <div v-if="restartPending.length" class="restart-pending" role="status">
           <span
-            >Applies after a restart:
-            <b>{{ restartPending.join(", ") }}</b></span
+            >{{ t("Applies after a restart:") }}
+            <b>{{ restartPending.map((x) => t(x)).join(", ") }}</b></span
           >
           <button type="button" class="btn btn-sm" @click="doRestart">
-            Restart now
+            {{ t("Restart now") }}
           </button>
         </div>
         <ProfileBar v-if="sectionHasProfile" @values="(v) => emit('values', v)" />
 
         <p v-if="query.trim()" class="setting-note">
-          {{ searchHits.length }} of {{ schema.length }} settings match.
+          {{ t("{n} of {total} settings match.", { n: searchHits.length, total: schema.length }) }}
         </p>
         <p v-else-if="currentSection === 'changed'" class="setting-note">
           {{
             changedRows.length
-              ? "Every setting that differs from the factory value. The arrow puts one back."
-              : "Every setting is at its factory value."
+              ? t("Every setting that differs from the factory value. The arrow puts one back.")
+              : t("Every setting is at its factory value.")
           }}
         </p>
-        <p v-else-if="sectionBlurb" class="setting-note">{{ sectionBlurb }}</p>
+        <p v-else-if="sectionBlurb" class="setting-note">{{ t(sectionBlurb) }}</p>
 
         <p v-if="sectionBlocked && !query.trim()" class="section-blocked">
-          {{ sectionBlocked }}
+          {{ t(sectionBlocked) }}
         </p>
 
         <div class="settings-list">
+          <LanguagePicker v-if="currentSection === 'ui' && !query.trim()" />
           <div v-if="currentSection === 'vpn'" class="setting">
             <div class="setting-head">
-              <label class="setting-title" for="vpn-mode">VPN backend</label>
+              <label class="setting-title" for="vpn-mode">{{ t("VPN backend") }}</label>
             </div>
             <div class="setting-control">
               <select
@@ -1248,35 +1284,35 @@ async function doRevertCert() {
                 "
                 @wheel="guardWheel"
               >
-                <option value="off">Off</option>
+                <option value="off">{{ t("Off") }}</option>
                 <option value="wg">WireGuard</option>
                 <option value="ts">Tailscale</option>
               </select>
             </div>
             <p class="setting-note">
-              Only one VPN runs at a time; choosing one shows just its settings.
+              {{ t("Only one VPN runs at a time; choosing one shows just its settings.") }}
             </p>
           </div>
 
           <template v-for="block in grouped" :key="block.name || 'first'">
             <h3 v-if="block.name" class="settings-group" :data-group="block.name">
-              {{ block.name }}
+              {{ t(block.name) }}
               <a
                 v-if="GROUP_DOCS[block.name]"
                 style="margin-left: 0.5em; font-size: 0.75em; font-weight: normal"
                 :href="GROUP_DOCS[block.name]"
                 target="_blank"
                 rel="noopener"
-                >how to wire it</a
+                >{{ t("how to wire it") }}</a
               >
             </h3>
             <p
               v-if="block.blocked && !openedBlocked.has(block.name)"
               class="setting-note group-blocked"
             >
-              {{ block.blocked }}
+              {{ t(block.blocked) }}
               <button type="button" class="btn-link" @click="openBlocked(block.name)">
-                Show its settings
+                {{ t("Show its settings") }}
               </button>
             </p>
             <MaskTable
@@ -1304,18 +1340,18 @@ async function doRevertCert() {
               <div class="setting-text">
               <div class="setting-head">
                 <label class="setting-title" :for="`set-${s.key}`">{{
-                  s.title
+                  t(s.title)
                 }}</label>
                 <span
                   v-if="s.reboot"
                   class="setting-flag"
-                  title="Applies after a restart"
-                  >restart</span
+                  :title="t('Applies after a restart')"
+                  >{{ t("restart") }}</span
                 >
                 <span
                   v-if="ownValue(profiles, s.key)"
                   class="badge badge-profile"
-                  :title="`The profile ${profileName} has its own value`"
+                  :title="t('The profile {name} has its own value', { name: profileName })"
                   >{{ profileName }}</span
                 >
                 <span class="setting-head-actions">
@@ -1323,9 +1359,9 @@ async function doRevertCert() {
                     v-if="s.help && helpHasMore(s.help)"
                     type="button"
                     class="icon-btn"
-                    :aria-label="`What ${s.title} does`"
+                    :aria-label="t('What {title} does', { title: t(s.title) })"
                     :aria-expanded="helpOpen.has(s.key)"
-                    title="What this does"
+                    :title="t('What this does')"
                     @click="toggleHelp(s.key)"
                   >
                     <Icon name="info" :size="14" />
@@ -1334,8 +1370,8 @@ async function doRevertCert() {
                     v-if="ownValue(profiles, s.key)"
                     type="button"
                     class="icon-btn"
-                    :aria-label="`${s.title} as in Default`"
-                    title="As in Default"
+                    :aria-label="t('{title} as in Default', { title: t(s.title) })"
+                    :title="t('As in Default')"
                     :disabled="busy"
                     @click="backToDefault(s)"
                   >
@@ -1345,8 +1381,8 @@ async function doRevertCert() {
                     v-else-if="isChanged(s) && !blockedFor(s)"
                     type="button"
                     class="icon-btn"
-                    :aria-label="`Put ${s.title} back to the factory value`"
-                    title="Back to the factory value"
+                    :aria-label="t('Put {title} back to the factory value', { title: t(s.title) })"
+                    :title="t('Back to the factory value')"
                     :disabled="busy"
                     @click="resetSetting(s)"
                   >
@@ -1355,10 +1391,10 @@ async function doRevertCert() {
                 </span>
               </div>
               <p v-if="blockedFor(s)" class="setting-note setting-note-blocked">
-                {{ blockedFor(s) }}
+                {{ t(blockedFor(s) ?? "") }}
               </p>
               <p v-else-if="s.help" class="setting-note setting-hint">
-                {{ helpOpen.has(s.key) ? s.help : helpHead(s.help) }}
+                {{ helpOpen.has(s.key) ? t(s.help) : helpHead(t(s.help)) }}
               </p>
               </div>
 
@@ -1371,7 +1407,7 @@ async function doRevertCert() {
                     :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
                     @change="toggle(s.key, $event)"
                   />
-                  <span class="muted">{{ values[s.key] ? "On" : "Off" }}</span>
+                  <span class="muted">{{ values[s.key] ? t("On") : t("Off") }}</span>
                 </label>
 
                 <select
@@ -1392,7 +1428,7 @@ async function doRevertCert() {
                     :key="c"
                     :value="String(i)"
                   >
-                    {{ choiceLabel(s, i) }}
+                    {{ t(choiceLabel(s, i)) }}
                   </option>
                 </select>
 
@@ -1410,7 +1446,7 @@ async function doRevertCert() {
                   "
                   @wheel="guardWheel"
                 >
-                  <option value="-1">None</option>
+                  <option value="-1">{{ t("None") }}</option>
                   <option
                     v-for="p in freePinsFor(s.key)"
                     :key="p"
@@ -1433,7 +1469,7 @@ async function doRevertCert() {
                     @change="commitNumber(s.key, $event.target as HTMLInputElement)"
                     @wheel="guardWheel"
                   />
-                  <span class="num-unit">{{ s.unit }}</span>
+                  <span class="num-unit">{{ s.unit ? t(s.unit) : "" }}</span>
                 </span>
 
                 <!-- Read-only until focused: browsers do not autofill a read-only
@@ -1451,7 +1487,7 @@ async function doRevertCert() {
                   readonly
                   @focus="($event.target as HTMLInputElement).readOnly = false"
                   :maxlength="s.maxLength"
-                  placeholder="Blank keeps the saved one"
+                  :placeholder="t('Blank keeps the saved one')"
                   :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
                   @change="writeSecret(s.key, $event.target as HTMLInputElement)"
                 />
@@ -1477,14 +1513,13 @@ async function doRevertCert() {
                   @wheel="guardWheel"
                 >
                   <option v-if="browserTz.exact" :value="browserTz.name">
-                    This browser: {{ tzLabel(browserTz.name) }}
+                    {{ t("This browser: {zone}", { zone: tzLabel(browserTz.name) }) }}
                   </option>
                   <option
                     v-if="!tzChoice(String(values[s.key] ?? ''))"
                     :value="''"
                   >
-                    {{ String(values[s.key] ?? "") || "Not set" }} (set another
-                    way)
+                    {{ t("{value} (set another way)", { value: String(values[s.key] ?? "") || t("Not set") }) }}
                   </option>
                   <option v-for="z in tzOptions" :key="z.name" :value="z.name">
                     {{ z.label }}
@@ -1518,10 +1553,10 @@ async function doRevertCert() {
                   type="button"
                   class="btn btn-sm"
                   :disabled="findingScreen"
-                  title="Moves the target's pointer across its whole desktop and fills these four in from where it shows up here. Needs the pointer visible and a still screen."
+                  :title="t('Moves the target\'s pointer across its whole desktop and fills these four in from where it shows up here. Needs the pointer visible and a still screen.')"
                   @click="runFindScreen"
                 >
-                  {{ findingScreen ? "Wait..." : "Find this screen" }}
+                  {{ findingScreen ? t("Wait...") : t("Find this screen") }}
                 </button>
                 {{ screenResult }}
               </p>
@@ -1542,7 +1577,7 @@ async function doRevertCert() {
 
               <p v-if="s.key === 'ui_haptic_level'" class="setting-note">
                 <button type="button" class="btn btn-sm" @click="hapticResult = hapticTry(s.choices?.[Number(values[s.key] ?? 0)])">
-                  Try it
+                  {{ t("Try it") }}
                 </button>
                 {{ hapticResult }}
               </p>
@@ -1554,14 +1589,14 @@ async function doRevertCert() {
                   :disabled="busy || wifiScanning"
                   @click="scanWifi(s.key)"
                 >
-                  {{ wifiScanning && wifiScanFor === s.key ? "Scanning..." : "Find networks" }}
+                  {{ wifiScanning && wifiScanFor === s.key ? t("Scanning...") : t("Find networks") }}
                 </button>
                 <template v-if="wifiScanFor === s.key && !wifiScanning">
                   <p v-if="wifiScanError" class="setting-note setting-note-blocked">
                     {{ wifiScanError }}
                   </p>
                   <p v-else-if="wifiNets && !wifiNets.length" class="setting-note">
-                    No networks in sight.
+                    {{ t("No networks in sight.") }}
                   </p>
                   <ul v-else-if="wifiNets" class="tg-chats">
                     <li v-for="n in wifiNets" :key="n.ssid">
@@ -1573,7 +1608,7 @@ async function doRevertCert() {
                       >
                         {{ n.ssid }}
                       </button>
-                      <span class="muted">{{ n.signal }} &middot; {{ n.rssi }} dBm{{ n.open ? " · open" : "" }}</span>
+                      <span class="muted">{{ t(n.signal) }} &middot; {{ n.rssi }} dBm{{ n.open ? " · " + t("open") : "" }}</span>
                     </li>
                   </ul>
                 </template>
@@ -1586,13 +1621,13 @@ async function doRevertCert() {
                   :disabled="busy || upTest?.state === 'running'"
                   @click="checkUpload"
                 >
-                  {{ upTest?.state === "running" ? "Checking..." : "Check the folder" }}
+                  {{ upTest?.state === "running" ? t("Checking...") : t("Check the folder") }}
                 </button>
                 <p
                   v-if="upTest && upTest.state !== 'running' && upTest.message"
                   :class="['setting-note', { 'setting-note-blocked': upTest.state === 'error' }]"
                 >
-                  {{ upTest.message }}
+                  {{ t(upTest.message) }}
                 </p>
               </div>
 
@@ -1606,19 +1641,17 @@ async function doRevertCert() {
                   :disabled="busy || tgFinding"
                   @click="findChats"
                 >
-                  {{ tgFinding ? "Asking Telegram..." : "Find chats" }}
+                  {{ tgFinding ? t("Asking Telegram...") : t("Find chats") }}
                 </button>
                 <p
                   v-if="tgFind?.state === 'error'"
                   class="setting-note setting-note-blocked"
                 >
-                  {{ tgFind.error }}
+                  {{ t(tgFind.error ?? "") }}
                 </p>
                 <template v-else-if="tgFind?.state === 'ok'">
                   <p v-if="!tgFind.chats.length" class="setting-note">
-                    No chats yet. Send any message to
-                    <b>@{{ tgFind.bot }}</b
-                    >, or add it to a group, then press Find chats again.
+                    {{ splitAt(t("No chats yet. Send any message to {bot}, or add it to a group, then press Find chats again."), "bot")[0] }}<b>@{{ tgFind.bot }}</b>{{ splitAt(t("No chats yet. Send any message to {bot}, or add it to a group, then press Find chats again."), "bot")[1] }}
                   </p>
                   <ul v-else class="tg-chats">
                     <li v-for="c in tgFind.chats" :key="c.id">
@@ -1643,11 +1676,8 @@ async function doRevertCert() {
           </template>
 
           <p v-if="oledI2cNote" class="setting-note">
-            This I²C OLED shares the capture chip's I²C bus — wire it to
-            <b>SDA {{ oledI2cNote.sda }}</b> ·
-            <b>SCL {{ oledI2cNote.scl }}</b> (plus 3V3 and GND). Those are the
-            board's capture pins, so there's nothing to set here; the panel is
-            auto-detected at 0x3C/0x3D.
+            {{ t("This I\u00b2C OLED shares the capture chip's I\u00b2C bus \u2014 wire it to SDA {sda} \u00b7 SCL {scl} (plus 3V3 and GND).", { sda: oledI2cNote.sda, scl: oledI2cNote.scl }) }}
+            {{ t("Those are the board's capture pins, so there's nothing to set here; the panel is auto-detected at 0x3C/0x3D.") }}
           </p>
 
           <div v-if="currentSection === 'pins'" class="pinmap">
@@ -1657,32 +1687,28 @@ async function doRevertCert() {
                 :class="['pin-view-btn', { on: pinView === 'header' }]"
                 @click="pinView = 'header'"
               >
-                Header
+                {{ t("Header") }}
               </button>
               <button
                 type="button"
                 :class="['pin-view-btn', { on: pinView === 'gpio' }]"
                 @click="pinView = 'gpio'"
               >
-                All GPIO
+                {{ t("All GPIO") }}
               </button>
             </div>
 
             <template v-if="hasHeaders && pinView === 'header'">
               <p class="setting-note">
-                The expansion header of the {{ pinInfo?.board }}, laid out as it
-                is on the board - so a pin here is a place to put a wire.
-                <b>Reserved</b> pins are the board's fixed peripherals;
-                <b>assigned</b> are set by the pin pickers on the other tabs;
-                <b>free</b> pins are what those pickers offer.
+                {{ t("The expansion header of the {board}, laid out as it is on the board - so a pin here is a place to put a wire.", { board: pinInfo?.board ?? "" }) }}
+                {{ t("Reserved pins are the board's fixed peripherals; assigned are set by the pin pickers on the other tabs; free pins are what those pickers offer.") }}
               </p>
               <p
                 v-if="pinInfo?.headerVerified === false"
                 class="setting-note pin-caveat"
               >
-                This pinout comes from the vendor's diagram and has not been
-                checked against a board in hand. Confirm against the silkscreen
-                before you wire anything.
+                {{ t("This pinout comes from the vendor's diagram and has not been checked against a board in hand.") }}
+                {{ t("Confirm against the silkscreen before you wire anything.") }}
               </p>
               <div v-for="h in headerRows" :key="h.name" class="pin-header">
                 <h4 v-if="h.name" class="pin-header-name">{{ h.name }}</h4>
@@ -1694,11 +1720,11 @@ async function doRevertCert() {
                   >
                     <span
                       :class="['pin-side', 'pin-left', `pin-${row.left.kind}`]"
-                      :title="row.left.note"
+                      :title="row.left.note ? t(row.left.note) : undefined"
                     >
                       <span class="pin-name">{{ row.left.label }}</span>
                       <span v-if="row.left.kind !== 'free'" class="pin-use">{{
-                        row.left.use
+                        t(row.left.use)
                       }}</span>
                     </span>
                     <span v-if="h.numbered" class="pin-n">{{ row.left.n }}</span>
@@ -1708,11 +1734,11 @@ async function doRevertCert() {
                     <span
                       v-if="row.right"
                       :class="['pin-side', 'pin-right', `pin-${row.right.kind}`]"
-                      :title="row.right.note"
+                      :title="row.right.note ? t(row.right.note) : undefined"
                     >
                       <span class="pin-name">{{ row.right.label }}</span>
                       <span v-if="row.right.kind !== 'free'" class="pin-use">{{
-                        row.right.use
+                        t(row.right.use)
                       }}</span>
                     </span>
                   </li>
@@ -1722,14 +1748,12 @@ async function doRevertCert() {
 
             <template v-else>
               <p class="setting-note">
-                Every usable GPIO and what holds it. <b>Reserved</b> pins are the
-                board's fixed peripherals; <b>assigned</b> are set by the pin
-                pickers on the other tabs; <b>free</b>
-                pins are what those pickers offer. Change a pin on its own tab.
+                {{ t("Every usable GPIO and what holds it.") }}
+                {{ t("Reserved pins are the board's fixed peripherals; assigned are set by the pin pickers on the other tabs; free pins are what those pickers offer.") }}
+                {{ t("Change a pin on its own tab.") }}
               </p>
               <p v-if="!hasHeaders && pinInfo?.board" class="setting-note">
-                No pinout is known for the {{ pinInfo.board }}, so there is no
-                header to draw.
+                {{ t("No pinout is known for the {board}, so there is no header to draw.", { board: pinInfo.board }) }}
               </p>
               <ul class="pin-comb">
                 <li
@@ -1738,12 +1762,12 @@ async function doRevertCert() {
                   :class="['pin-cell', `pin-${p.kind}`]"
                 >
                   <span class="pin-num">{{ p.pin }}</span>
-                  <span class="pin-use">{{ p.use }}</span>
+                  <span class="pin-use">{{ p.kind === "free" ? t("free") : t(p.use) }}</span>
                 </li>
               </ul>
             </template>
             <p v-if="pinMap.length === 0" class="setting-note">
-              Reading the pin map...
+              {{ t("Reading the pin map...") }}
             </p>
           </div>
 
@@ -1757,7 +1781,7 @@ async function doRevertCert() {
             class="setting"
           >
             <div class="setting-head">
-              <label class="setting-title">Key</label>
+              <label class="setting-title">{{ t("Key") }}</label>
             </div>
             <p class="setting-note">{{ tsKeyNote }}</p>
           </div>
@@ -1767,7 +1791,7 @@ async function doRevertCert() {
             class="setting"
           >
             <div class="setting-head">
-              <label class="setting-title">Device public key</label>
+              <label class="setting-title">{{ t("Device public key") }}</label>
             </div>
             <div class="setting-control pubkey-row">
               <input
@@ -1781,27 +1805,26 @@ async function doRevertCert() {
                 class="btn btn-sm"
                 @click="copyText(wgPublicKey!)"
               >
-                Copy
+                {{ t("Copy") }}
               </button>
             </div>
             <p class="setting-note">
-              Add this to your WireGuard hub as this device's peer public key.
+              {{ t("Add this to your WireGuard hub as this device's peer public key.") }}
             </p>
           </div>
         </div>
 
         <div v-if="currentSection === 'system' && !query.trim()" class="firmware">
-          <h3>What this device can do</h3>
-          <p class="setting-note">Every feature on one page, with a button to its settings.</p>
-          <button type="button" class="btn btn-sm" @click="emit('tour')">Show</button>
+          <h3>{{ t("What this device can do") }}</h3>
+          <p class="setting-note">{{ t("Every feature on one page, with a button to its settings.") }}</p>
+          <button type="button" class="btn btn-sm" @click="emit('tour')">{{ t("Show") }}</button>
         </div>
 
         <div v-if="currentSection === 'security' && signedIn" class="firmware">
-          <h3>Session</h3>
+          <h3>{{ t("Session") }}</h3>
           <p class="setting-note">
-            Signed in as <strong>{{ sessionUser }}</strong
-            >. Signing out ends this session only; other open consoles keep
-            theirs.
+            {{ splitAt(t("Signed in as {user}."), "user")[0] }}<strong>{{ sessionUser }}</strong>{{ splitAt(t("Signed in as {user}."), "user")[1] }}
+            {{ t("Signing out ends this session only; other open consoles keep theirs.") }}
           </p>
           <button
             type="button"
@@ -1809,20 +1832,19 @@ async function doRevertCert() {
             :disabled="signingOut"
             @click="signOut"
           >
-            {{ signingOut ? "Signing out..." : "Sign out" }}
+            {{ signingOut ? t("Signing out...") : t("Sign out") }}
           </button>
         </div>
 
         <details v-if="currentSection === 'security'" class="firmware fold">
-        <summary><h3>Password</h3><span class="fold-status">Change the console password</span></summary>
+        <summary><h3>{{ t("Password") }}</h3><span class="fold-status">{{ t("Change the console password") }}</span></summary>
         <form class="fold-body" @submit.prevent="submitPassword">
           <p class="setting-note">
-            Not listed above with the other settings: those can be read back, and
-            a password that can be read back is not one. Changing it signs out
-            every open console.
+            {{ t("Not listed above with the other settings: those can be read back, and a password that can be read back is not one.") }}
+            {{ t("Changing it signs out every open console.") }}
           </p>
           <label class="field">
-            <span>Current password</span>
+            <span>{{ t("Current password") }}</span>
             <input
               v-model="currentPassword"
               type="password"
@@ -1830,7 +1852,7 @@ async function doRevertCert() {
             />
           </label>
           <label class="field">
-            <span>New password</span>
+            <span>{{ t("New password") }}</span>
             <input
               v-model="newPassword"
               type="password"
@@ -1838,7 +1860,7 @@ async function doRevertCert() {
             />
           </label>
           <label class="field">
-            <span>Repeat it</span>
+            <span>{{ t("Repeat it") }}</span>
             <input
               v-model="repeatPassword"
               type="password"
@@ -1846,10 +1868,10 @@ async function doRevertCert() {
             />
           </label>
           <p v-if="passwordTooShort" class="setting-note">
-            At least 8 characters.
+            {{ t("At least 8 characters.") }}
           </p>
           <p v-else-if="passwordMismatch" class="setting-note">
-            The two do not match.
+            {{ t("The two do not match.") }}
           </p>
           <button
             type="submit"
@@ -1861,7 +1883,7 @@ async function doRevertCert() {
               !newPassword
             "
           >
-            {{ changingPassword ? "Changing..." : "Change password" }}
+            {{ changingPassword ? t("Changing...") : t("Change password") }}
           </button>
         </form>
         </details>
@@ -1869,26 +1891,25 @@ async function doRevertCert() {
         <TwoFactor v-if="currentSection === 'security'" />
 
         <details v-if="currentSection === 'security'" class="firmware fold">
-          <summary><h3>Viewing token</h3><span class="fold-status">{{ tokenExists ? "One exists" : "None" }}</span></summary>
+          <summary><h3>{{ t("Viewing token") }}</h3><span class="fold-status">{{ tokenExists ? t("One exists") : t("None") }}</span></summary>
           <div class="fold-body">
           <p class="setting-note">
-            One long string that opens the picture and nothing else - the MJPEG
-            stream, a single frame, and the capture's figures. It is for a
-            dashboard that can only be handed a URL, such as a camera card in Home
-            Assistant. It cannot press a key, touch the power, or change a
-            setting, and the device keeps only a hash of it, so it is shown once.
+            {{ t("One long string that opens the picture and nothing else - the MJPEG stream, a single frame, and the capture's figures.") }}
+            {{ t("It is for a dashboard that can only be handed a URL, such as a camera card in Home Assistant.") }}
+            {{ t("It cannot press a key, touch the power, or change a setting, and the device keeps only a hash of it, so it is shown once.") }}
           </p>
           <p v-if="tokenShown" class="setting-note mono token-shown">
             {{ tokenShown }}
           </p>
           <p v-if="tokenShown" class="setting-note">
-            Copy it now. Use it as <span class="mono">?token=...</span> on
-            <span class="mono">/stream</span>, or as an
-            <span class="mono">Authorization: Bearer</span> header.
+            {{ t("Copy it now.") }}
+            <template v-for="(p, i) in tokenUse()" :key="i"
+              ><span v-if="p.code" class="mono">{{ p.code }}</span
+              ><template v-else>{{ p.text }}</template></template
+            >
           </p>
           <p v-else-if="tokenExists" class="setting-note">
-            A token exists. Making a new one replaces it; whatever used the old
-            one stops working.
+            {{ t("A token exists. Making a new one replaces it; whatever used the old one stops working.") }}
           </p>
           <div class="token-buttons">
             <button
@@ -1897,7 +1918,7 @@ async function doRevertCert() {
               :disabled="tokenBusy"
               @click="makeViewToken"
             >
-              {{ tokenExists ? "Replace the token" : "Create a token" }}
+              {{ tokenExists ? t("Replace the token") : t("Create a token") }}
             </button>
             <button
               v-if="tokenExists"
@@ -1906,7 +1927,7 @@ async function doRevertCert() {
               :disabled="tokenBusy"
               @click="dropViewToken"
             >
-              Revoke
+              {{ t("Revoke") }}
             </button>
           </div>
           </div>
@@ -1915,7 +1936,7 @@ async function doRevertCert() {
         <ViewerAccount v-if="currentSection === 'security' && signedIn" />
 
         <details v-if="currentSection === 'security'" class="firmware fold">
-          <summary><h3>Device certificate</h3><span class="fold-status">{{ certStatus }}</span></summary>
+          <summary><h3>{{ t("Device certificate") }}</h3><span class="fold-status">{{ certStatus }}</span></summary>
           <div class="fold-body">
 
           <!-- Let's Encrypt for the tailnet name. Served only to whoever asks
@@ -1923,34 +1944,39 @@ async function doRevertCert() {
           <div v-if="acme" class="acme">
             <p class="setting-note">
               <template v-if="acme.cert">
-                Over Tailscale the device serves a Let's Encrypt certificate:
-                <a :href="`https://${acme.cert}/`" class="mono">{{ acme.cert }}</a>
-                opens with nothing to import, until {{ acmeDate(acme.expires) }}.
-                It renews itself.
-                <template v-if="acme.staging"> (a test certificate - browsers do not trust it)</template>
+                {{ splitAt(t("Over Tailscale the device serves a Let's Encrypt certificate: {name} opens with nothing to import, until {date}.", { date: acmeDate(acme.expires) }), "name")[0]
+                }}<a :href="`https://${acme.cert}/`" class="mono">{{ acme.cert }}</a>{{
+                  splitAt(t("Over Tailscale the device serves a Let's Encrypt certificate: {name} opens with nothing to import, until {date}.", { date: acmeDate(acme.expires) }), "name")[1]
+                }}
+                {{ t("It renews itself.") }}
+                <template v-if="acme.staging"> {{ t("(a test certificate - browsers do not trust it)") }}</template>
               </template>
               <template v-else-if="!acme.enabled">
-                Over Tailscale the device can get a certificate every browser
-                trusts, from Let's Encrypt, for its tailnet name<template v-if="acme.name">
-                  <span class="mono">{{ acme.name }}</span></template>. Turn on
-                "Trusted certificate (Let's Encrypt)" under VPN, Tailscale.
+                <template v-if="acme.name">{{
+                  splitAt(t("Over Tailscale the device can get a certificate every browser trusts, from Let's Encrypt, for its tailnet name {name}."), "name")[0]
+                }}<span class="mono">{{ acme.name }}</span>{{
+                  splitAt(t("Over Tailscale the device can get a certificate every browser trusts, from Let's Encrypt, for its tailnet name {name}."), "name")[1]
+                }}</template>
+                <template v-else>{{ t("Over Tailscale the device can get a certificate every browser trusts, from Let's Encrypt, for its tailnet name.") }}</template>
+                {{ t('Turn on "Trusted certificate (Let\'s Encrypt)" under VPN, Tailscale.') }}
               </template>
               <template v-else-if="!acme.tailscale">
-                Waiting for Tailscale to connect to get the Let's Encrypt certificate.
+                {{ t("Waiting for Tailscale to connect to get the Let's Encrypt certificate.") }}
               </template>
               <template v-else-if="!acme.domain">
-                HTTPS certificates are off for this tailnet. Turn them on in the
-                Tailscale admin console, DNS page (MagicDNS has to be on too).
+                {{ t("HTTPS certificates are off for this tailnet.") }}
+                {{ t("Turn them on in the Tailscale admin console, DNS page (MagicDNS has to be on too).") }}
               </template>
               <template v-else>
-                No Let's Encrypt certificate yet for
-                <span class="mono">{{ acme.domain }}</span>.
+                {{ splitAt(t("No Let's Encrypt certificate yet for {domain}."), "domain")[0]
+                }}<span class="mono">{{ acme.domain }}</span>{{
+                  splitAt(t("No Let's Encrypt certificate yet for {domain}."), "domain")[1] }}
               </template>
             </p>
-            <p v-if="acme.busy" class="setting-note">{{ acme.step }}...</p>
+            <p v-if="acme.busy" class="setting-note">{{ t(acme.step) }}...</p>
             <p v-else-if="acme.error" class="setting-note acme-error">
-              {{ acme.error }}<template v-if="acme.nextTry">
-                Next try {{ new Date(acme.nextTry * 1000).toLocaleString() }}.</template>
+              {{ t(acme.error) }}<template v-if="acme.nextTry">
+                {{ t("Next try {when}.", { when: new Date(acme.nextTry * 1000).toLocaleString() }) }}</template>
             </p>
             <button
               v-if="acme.enabled && acme.tailscale && acme.domain"
@@ -1959,22 +1985,21 @@ async function doRevertCert() {
               :disabled="acme.busy"
               @click="doRunAcme"
             >
-              {{ acme.busy ? "Working..." : acme.cert ? "Renew now" : "Get the certificate now" }}
+              {{ acme.busy ? t("Working...") : acme.cert ? t("Renew now") : t("Get the certificate now") }}
             </button>
           </div>
 
           <template v-if="tls?.custom">
             <p class="setting-note">
-              The device is serving your own certificate. Whatever issued it is
-              trusted elsewhere, so there is no CA to import here.
+              {{ t("The device is serving your own certificate.") }}
+              {{ t("Whatever issued it is trusted elsewhere, so there is no CA to import here.") }}
             </p>
             <!-- Renewing is the common case - certificates are heading for
                  47-day lives - so it is a replace in place, not a revert first. -->
             <p class="setting-note" style="margin-top: 12px">
-              To renew it, paste the new certificate (chain, leaf first) and its
-              private key, or pick a combined PEM file. It replaces the old one
-              and the device restarts. A script can do the same with
-              <code>PUT /api/v1/tls/cert</code>.
+              {{ t("To renew it, paste the new certificate (chain, leaf first) and its private key, or pick a combined PEM file.") }}
+              {{ t("It replaces the old one and the device restarts.") }}
+              {{ splitAt(t("A script can do the same with {call}."), "call")[0] }}<code>PUT /api/v1/tls/cert</code>{{ splitAt(t("A script can do the same with {call}."), "call")[1] }}
             </p>
             <textarea
               v-model="certText"
@@ -1993,7 +2018,7 @@ async function doRevertCert() {
                 :disabled="tlsBusy || !certText.trim()"
                 @click="doInstallCert"
               >
-                {{ tlsBusy ? "Replacing..." : "Replace certificate" }}
+                {{ tlsBusy ? t("Replacing...") : t("Replace certificate") }}
               </button>
             </div>
             <button
@@ -2004,30 +2029,26 @@ async function doRevertCert() {
               @click="doRevertCert"
             >
               {{
-                tlsBusy ? "Reverting..." : "Revert to the self-signed certificate"
+                tlsBusy ? t("Reverting...") : t("Revert to the self-signed certificate")
               }}
             </button>
           </template>
 
           <template v-else>
             <p class="setting-note">
-              The device is its own certificate authority, so a browser warns
-              until you trust it - and refuses the WebSocket and the H.264 decoder
-              until you do. Download the CA and add it to your operating system or
-              browser's trusted authorities (not "your certificates"), then reach
-              the device by its name. That clears the warning and enables H.264.
+              {{ t("The device is its own certificate authority, so a browser warns until you trust it - and refuses the WebSocket and the H.264 decoder until you do.") }}
+              {{ t('Download the CA and add it to your operating system or browser\'s trusted authorities (not "your certificates"), then reach the device by its name.') }}
+              {{ t("That clears the warning and enables H.264.") }}
             </p>
             <a class="btn btn-sm" href="/cert.pem" download="espkvm-ca.pem"
-              >Download CA certificate</a
+              >{{ t("Download CA certificate") }}</a
             >
 
             <template v-if="tls">
               <p class="setting-note" style="margin-top: 16px">
-                Or install your own certificate - from an internal CA, or a real
-                one for a name that resolves to the device - so the browser trusts
-                it without importing anything. Paste the certificate (chain, leaf
-                first) followed by its private key, or pick a combined PEM file.
-                The device restarts to apply it.
+                {{ t("Or install your own certificate - from an internal CA, or a real one for a name that resolves to the device - so the browser trusts it without importing anything.") }}
+                {{ t("Paste the certificate (chain, leaf first) followed by its private key, or pick a combined PEM file.") }}
+                {{ t("The device restarts to apply it.") }}
               </p>
               <textarea
                 v-model="certText"
@@ -2050,7 +2071,7 @@ async function doRevertCert() {
                   :disabled="tlsBusy || !certText.trim()"
                   @click="doInstallCert"
                 >
-                  {{ tlsBusy ? "Installing..." : "Install certificate" }}
+                  {{ tlsBusy ? t("Installing...") : t("Install certificate") }}
                 </button>
               </div>
             </template>
@@ -2071,7 +2092,7 @@ async function doRevertCert() {
           :disabled="busy"
           @click="doExport"
         >
-          Save settings to a file
+          {{ t("Save settings to a file") }}
         </button>
         <button
           type="button"
@@ -2079,7 +2100,7 @@ async function doRevertCert() {
           :disabled="busy"
           @click="fileInput?.click()"
         >
-          Load from a file
+          {{ t("Load from a file") }}
         </button>
         <input
           ref="fileInput"
@@ -2089,7 +2110,7 @@ async function doRevertCert() {
           @change="onSettingsFile"
         />
         <button type="button" class="btn btn-sm" @click="doRestart">
-          Restart device
+          {{ t("Restart device") }}
         </button>
         <button
           type="button"
@@ -2097,7 +2118,7 @@ async function doRevertCert() {
           :disabled="busy"
           @click="doReset"
         >
-          Restore defaults
+          {{ t("Restore defaults") }}
         </button>
       </div>
     </div>

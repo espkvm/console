@@ -48,6 +48,9 @@ function buildCodeMap(): Record<string, number> {
     ["BracketRight", 0x30], ["Backslash", 0x31], ["Semicolon", 0x33],
     ["Quote", 0x34], ["Backquote", 0x35], ["Comma", 0x36], ["Period", 0x37],
     ["Slash", 0x38], ["CapsLock", 0x39],
+    /* Keys US boards lack: the one left of Z on ISO boards (< > on German,
+       French, Spanish...), and the extra keys of Brazilian and Japanese ones. */
+    ["IntlBackslash", 0x64], ["IntlRo", 0x87], ["IntlYen", 0x89],
     ["F1", 0x3a], ["F2", 0x3b], ["F3", 0x3c], ["F4", 0x3d], ["F5", 0x3e],
     ["F6", 0x3f], ["F7", 0x40], ["F8", 0x41], ["F9", 0x42], ["F10", 0x43],
     ["F11", 0x44], ["F12", 0x45],

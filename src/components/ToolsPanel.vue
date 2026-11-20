@@ -22,6 +22,7 @@ import {
 import { toast } from "../state/toasts";
 import { useFloating } from "../ui/floating";
 import Icon from "./Icon.vue";
+import { t } from "../i18n";
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -55,7 +56,7 @@ async function readMachine() {
   try {
     machine.value = await getToolsMachine();
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   }
 }
 
@@ -88,7 +89,11 @@ const uptime = computed(() => {
   const d = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
-  return d > 0 ? `up ${d} d ${h} h` : h > 0 ? `up ${h} h ${m} min` : `up ${m} min`;
+  return d > 0
+    ? t("up {d} d {h} h", { d, h })
+    : h > 0
+      ? t("up {h} h {m} min", { h, m })
+      : t("up {m} min", { m });
 });
 
 const summary = computed(() => {
@@ -99,18 +104,18 @@ const summary = computed(() => {
 
 /* What to do about a refusal, in words for the person at the console. */
 function why(err: unknown, op: "read" | "write" | "power"): string {
-  if (!(err instanceof ToolsError)) return err instanceof Error ? err.message : String(err);
+  if (!(err instanceof ToolsError)) return t(err instanceof Error ? err.message : String(err));
   switch (err.code) {
     case "not_allowed":
       return op === "power"
-        ? "Power is off on the machine. Install ESP-KVM Tools there with --allow-power."
-        : "Reading the clipboard is off on the machine. Install ESP-KVM Tools there with --allow-clipboard-read.";
+        ? t("Power is off on the machine. Install ESP-KVM Tools there with --allow-power.")
+        : t("Reading the clipboard is off on the machine. Install ESP-KVM Tools there with --allow-clipboard-read.");
     case "locked":
-      return "The machine's screen is locked, so its clipboard is not read.";
+      return t("The machine's screen is locked, so its clipboard is not read.");
     case "no_desktop":
-      return "ESP-KVM Tools runs as a system service, which has no clipboard. Install it with --desktop.";
+      return t("ESP-KVM Tools runs as a system service, which has no clipboard. Install it with --desktop.");
     default:
-      return err.message;
+      return t(err.message);
   }
 }
 
@@ -119,7 +124,7 @@ async function getClip() {
   clipNote.value = "";
   try {
     text.value = await getToolsClipboard();
-    if (!text.value) clipNote.value = "The clipboard is empty.";
+    if (!text.value) clipNote.value = t("The clipboard is empty.");
   } catch (err) {
     clipNote.value = why(err, "read");
   } finally {
@@ -132,7 +137,7 @@ async function sendClip() {
   clipNote.value = "";
   try {
     await setToolsClipboard(text.value);
-    toast.info("On the machine's clipboard");
+    toast.info(t("On the machine's clipboard"));
   } catch (err) {
     clipNote.value = why(err, "write");
   } finally {
@@ -141,16 +146,19 @@ async function sendClip() {
 }
 
 async function power(action: "shutdown" | "reboot") {
-  const name = machine.value?.hostname || "the machine";
-  if (!confirm(action === "reboot" ? `Restart ${name}?` : `Shut ${name} down?`)) return;
+  const name = machine.value?.hostname || t("the machine");
+  if (!confirm(action === "reboot" ? t("Restart {name}?", { name }) : t("Shut {name} down?", { name }))) return;
   powerNote.value = "";
   try {
     await toolsPower(action);
-    toast.info(action === "reboot" ? `${name} is restarting` : `${name} is shutting down`);
+    toast.info(action === "reboot" ? t("{name} is restarting", { name }) : t("{name} is shutting down", { name }));
   } catch (err) {
     powerNote.value = why(err, "power");
   }
 }
+
+/* "Install {link} there.", with the link put in at {link}. */
+const installParts = computed(() => t("Install {link} there.").split(/(\{link\})/));
 
 const tooLong = computed(() => new TextEncoder().encode(text.value).length > MAX_TEXT);
 </script>
@@ -173,25 +181,28 @@ const tooLong = computed(() => new TextEncoder().encode(text.value).length > MAX
       >
         <h3>ESP-KVM Tools</h3>
         <span v-if="status" :class="['pill', status.connected ? 'pill-on' : 'pill-off']">
-          {{ status.connected ? `${OS_NAMES[status.os ?? ""] ?? status.os} ${status.version}` : "waiting" }}
+          {{ status.connected ? `${OS_NAMES[status.os ?? ""] ?? status.os} ${status.version}` : t("waiting") }}
         </span>
         <button
           type="button"
           class="btn btn-sm btn-icon btn-quiet ag-close"
-          aria-label="Close the ESP-KVM Tools window"
-          title="Close"
+          :aria-label="t('Close the ESP-KVM Tools window')"
+          :title="t('Close')"
           @click="emit('close')"
         >
           <Icon name="close" :size="15" />
         </button>
       </div>
 
-      <p v-if="!status" class="ag-note">Asking the device...</p>
+      <p v-if="!status" class="ag-note">{{ t("Asking the device...") }}</p>
       <template v-else-if="!status.connected">
         <p class="ag-note">
-          ESP-KVM Tools is not on the machine yet. Install
-          <a href="https://github.com/espkvm/tools" target="_blank" rel="noopener">ESP-KVM Tools</a>
-          there. It finds this USB port by itself.
+          {{ t("ESP-KVM Tools is not on the machine yet.") }}
+          <template v-for="(part, i) in installParts" :key="i">
+            <a v-if="part === '{link}'" href="https://github.com/espkvm/tools" target="_blank" rel="noopener">ESP-KVM Tools</a>
+            <template v-else>{{ part }}</template>
+          </template>
+          {{ t("It finds this USB port by itself.") }}
         </p>
       </template>
       <template v-else>
@@ -205,41 +216,41 @@ const tooLong = computed(() => new TextEncoder().encode(text.value).length > MAX
           </ul>
         </div>
 
-        <h4>Clipboard</h4>
+        <h4>{{ t("Clipboard") }}</h4>
         <textarea
           v-model="text"
           class="ag-text"
           rows="4"
           spellcheck="false"
-          placeholder="Text to put on the machine's clipboard, or get from it"
-          aria-label="Clipboard text"
+          :placeholder="t('Text to put on the machine\'s clipboard, or get from it')"
+          :aria-label="t('Clipboard text')"
         />
         <div class="ag-row">
-          <button type="button" class="btn btn-sm" :disabled="busy" title="Read the machine's clipboard" @click="getClip">
-            Get
+          <button type="button" class="btn btn-sm" :disabled="busy" :title="t('Read the machine\'s clipboard')" @click="getClip">
+            {{ t("Get") }}
           </button>
           <button
             type="button"
             class="btn btn-sm"
             :disabled="busy || tooLong"
-            title="Put this text on the machine's clipboard"
+            :title="t('Put this text on the machine\'s clipboard')"
             @click="sendClip"
           >
-            Send
+            {{ t("Send") }}
           </button>
         </div>
-        <p v-if="tooLong" class="ag-note ag-warn">Over 64 KB, too long to send.</p>
+        <p v-if="tooLong" class="ag-note ag-warn">{{ t("Over 64 KB, too long to send.") }}</p>
         <p v-else-if="clipNote" class="ag-note ag-warn">{{ clipNote }}</p>
 
-        <h4>Power</h4>
+        <h4>{{ t("Power") }}</h4>
         <div class="ag-row">
-          <button type="button" class="btn btn-sm" @click="power('reboot')">Restart</button>
+          <button type="button" class="btn btn-sm" @click="power('reboot')">{{ t("Restart") }}</button>
           <button type="button" class="btn btn-sm" @click="power('shutdown')">
-            <Icon name="power" :size="14" /> Shut down
+            <Icon name="power" :size="14" /> {{ t("Shut down") }}
           </button>
         </div>
         <p v-if="powerNote" class="ag-note ag-warn">{{ powerNote }}</p>
-        <p v-else class="ag-note">A clean shutdown through the OS, if allowed on the machine.</p>
+        <p v-else class="ag-note">{{ t("A clean shutdown through the OS, if allowed on the machine.") }}</p>
       </template>
     </section>
   </Teleport>

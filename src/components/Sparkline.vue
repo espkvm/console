@@ -7,6 +7,7 @@
 import { computed, ref } from "vue";
 
 import { HISTORY_MS, type VideoSample } from "../state/videoHistory";
+import { t } from "../i18n";
 
 const props = defineProps<{
   samples: VideoSample[];
@@ -55,9 +56,9 @@ const maxText = computed(() =>
 
 function onMove(e: PointerEvent) {
   const r = (e.currentTarget as SVGElement).getBoundingClientRect();
-  const t = now.value - (1 - (e.clientX - r.left) / r.width) * HISTORY_MS;
+  const at = now.value - (1 - (e.clientX - r.left) / r.width) * HISTORY_MS;
   let best: VideoSample | null = null;
-  for (const s of props.samples) if (!best || Math.abs(s.t - t) < Math.abs(best.t - t)) best = s;
+  for (const s of props.samples) if (!best || Math.abs(s.t - at) < Math.abs(best.t - at)) best = s;
   hover.value = best;
 }
 </script>
@@ -69,7 +70,7 @@ function onMove(e: PointerEvent) {
       <span class="spark-now mono">
         <template v-if="shown">
           {{ format(value(shown)) }}
-          <small v-if="hover">{{ Math.round((now - hover.t) / 1000) }} s ago</small>
+          <small v-if="hover">{{ t("{s} s ago", { s: Math.round((now - hover.t) / 1000) }) }}</small>
         </template>
       </span>
     </figcaption>
@@ -77,7 +78,7 @@ function onMove(e: PointerEvent) {
       class="spark-plot"
       :viewBox="`0 0 ${W} ${H}`"
       role="img"
-      :aria-label="`${label} over the last minute, up to ${maxText}`"
+      :aria-label="t('{label} over the last minute, up to {max}', { label, max: maxText })"
       @pointermove="onMove"
       @pointerdown="onMove"
       @pointerleave="hover = null"
@@ -93,8 +94,8 @@ function onMove(e: PointerEvent) {
       </template>
     </svg>
     <div class="spark-foot mono">
-      <span>1 min</span>
-      <span v-if="maxText">max {{ maxText }}</span>
+      <span>{{ t("1 min") }}</span>
+      <span v-if="maxText">{{ t("max {value}", { value: maxText }) }}</span>
     </div>
   </figure>
 </template>

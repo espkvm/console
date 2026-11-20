@@ -8,6 +8,7 @@
  * Adding a feature: add an entry with `since` set to the release it ships in.
  */
 import type { Capability, Values } from "../state/device";
+import { tm, tn } from "../i18n";
 
 export type TourPanel = "input" | "media" | "automation" | "captures";
 
@@ -54,59 +55,60 @@ const DOCS = "https://github.com/espkvm/espkvm/blob/main/docs/";
 function capOn(c: TourContext, ...ids: string[]): string | undefined {
   const known = ids.map((id) => c.caps[id]).filter(Boolean);
   if (!known.length) return undefined;
-  return known.some((cap) => cap.available && cap.enabled) ? "On" : "Off";
+  return known.some((cap) => cap.available && cap.enabled) ? tm("On") : tm("Off");
 }
 
 function settingOn(c: TourContext, key: string): string | undefined {
   const v = c.values[key];
   if (v === undefined) return undefined;
-  return v === true || v === 1 || v === "1" ? "On" : "Off";
+  return v === true || v === 1 || v === "1" ? tm("On") : tm("Off");
 }
 
 export const TOUR_FEATURES: TourFeature[] = [
   {
     icon: "video",
-    title: "Picture",
-    line: "MJPEG or H.264. The codec, quality and frame rate can be changed.",
-    actions: [{ label: "Video", section: "video", group: "Picture" }],
+    title: tm("Picture"),
+    line: tm("MJPEG or H.264. The codec, quality and frame rate can be changed."),
+    actions: [{ label: tm("Video"), section: "video", group: "Picture" }],
     docs: DOCS + "HOW-IT-WORKS.md#video",
   },
   {
     icon: "keyboard",
-    title: "Keyboard and mouse",
-    line: "Paste text in the target's layout, media keys, an on-screen keyboard, a trackpad on a phone.",
+    title: tm("Keyboard and mouse"),
+    line: tm("Paste text in the target's layout, one of 21, picked next to the paste box. Media keys, an on-screen keyboard, a trackpad on a phone."),
+    since: "0.90.0",
     actions: [
-      { label: "Open", panel: "input" },
-      { label: "Input", section: "input" },
+      { label: tm("Open"), panel: "input" },
+      { label: tm("Input"), section: "input" },
     ],
     docs: DOCS + "HOW-IT-WORKS.md#input",
     ui: ["keyboard", "touch", "keylock"],
   },
   {
     icon: "search",
-    title: "Command palette",
-    line: "[[Ctrl+K]] or [[Ctrl+Shift+P]]: type a few letters of what you want - a panel, a key combination, a macro, a setting - and press Enter.",
-    actions: [{ label: "Open", palette: true }],
+    title: tm("Command palette"),
+    line: tm("[[Ctrl+K]] or [[Ctrl+Shift+P]]: type a few letters of what you want - a panel, a key combination, a macro, a setting - and press Enter."),
+    actions: [{ label: tm("Open"), palette: true }],
     since: "0.79.0",
   },
   {
     icon: "record",
-    title: "Tab icon",
-    line: "The tab's icon shows what the device is doing, so you see it from another tab: grey when the device is unreachable, a ring during an update, a red dot while recording, a power sign when the target is off, a dash with no picture.",
+    title: tm("Tab icon"),
+    line: tm("The tab's icon shows what the device is doing, so you see it from another tab: grey when the device is unreachable, a ring during an update, a red dot while recording, a power sign when the target is off, a dash with no picture."),
     actions: [],
     since: "0.79.0",
   },
   {
     icon: "play",
-    title: "Bar buttons",
-    line: "Pin a key like F2 or Del, a macro or a runbook to the bar under the picture.",
+    title: tm("Bar buttons"),
+    line: tm("Pin a key like F2 or Del, a macro or a runbook to the bar under the picture."),
     caps: ["hid"],
-    actions: [{ label: "Open", panel: "input" }],
+    actions: [{ label: tm("Open"), panel: "input" }],
     since: "0.79.0",
     state: (c) => {
       try {
         const n = JSON.parse(String(c.values.quick_json ?? "[]")).length;
-        return n ? `${n} pinned` : undefined;
+        return n ? tn("{n} pinned", "{n} pinned", n) : undefined;
       } catch {
         return undefined;
       }
@@ -114,43 +116,43 @@ export const TOUR_FEATURES: TourFeature[] = [
   },
   {
     icon: "disc",
-    title: "Virtual media",
-    line: "Boot the target from an image on the microSD card, in the device's flash, on a web server or on this computer. Drop a file on the picture to put it on the card. On a device with a screen and buttons, pick the image right there.",
+    title: tm("Virtual media"),
+    line: tm("Boot the target from an image on the microSD card, in the device's flash, on a web server or on this computer. Drop a file on the picture to put it on the card. On a device with a screen and buttons, pick the image right there."),
     caps: ["msc"],
     since: "0.89.0",
-    actions: [{ label: "Open", panel: "media" }],
+    actions: [{ label: tm("Open"), panel: "media" }],
     docs: DOCS + "HOW-IT-WORKS.md#virtual-media",
     state: (c) => capOn(c, "msc"),
   },
   {
     icon: "film",
-    title: "Recording",
-    line: "Recordings, screenshots, a dashcam that keeps the last minutes, timelapse. On a microSD card.",
+    title: tm("Recording"),
+    line: tm("Recordings, screenshots, a dashcam that keeps the last minutes, timelapse. On a microSD card."),
     actions: [
-      { label: "Recordings", panel: "captures" },
-      { label: "Video", section: "video", group: "Recording" },
+      { label: tm("Recordings"), panel: "captures" },
+      { label: tm("Video"), section: "video", group: "Recording" },
     ],
     docs: DOCS + "HOW-IT-WORKS.md#recording-and-screenshots",
     ui: ["screenshot", "clip", "record"],
   },
   {
     icon: "upload",
-    title: "Upload",
-    line: "Send recordings and screenshots to a WebDAV folder, such as Nextcloud or a NAS, with one button or on their own as soon as they are saved.",
+    title: tm("Upload"),
+    line: tm("Send recordings and screenshots to a WebDAV folder, such as Nextcloud or a NAS, with one button or on their own as soon as they are saved."),
     actions: [
-      { label: "Recordings", panel: "captures" },
-      { label: "Set the folder", section: "video", group: "Upload" },
-      { label: "What goes on its own", section: "video", group: "Upload automatically" },
+      { label: tm("Recordings"), panel: "captures" },
+      { label: tm("Set the folder"), section: "video", group: "Upload" },
+      { label: tm("What goes on its own"), section: "video", group: "Upload automatically" },
     ],
     since: "0.81.0",
-    state: (c) => (c.values.up_dav_url ? "On" : "Off"),
+    state: (c) => (c.values.up_dav_url ? tm("On") : tm("Off")),
   },
   {
     icon: "volume",
-    title: "Sound",
-    line: "The target's sound, live and in recordings: from HDMI, or through a USB speaker the device offers the target.",
+    title: tm("Sound"),
+    line: tm("The target's sound, live and in recordings: from HDMI, or through a USB speaker the device offers the target."),
     caps: ["audio"],
-    actions: [{ label: "Audio", section: "audio" }],
+    actions: [{ label: tm("Audio"), section: "audio" }],
     since: "0.83.0",
     docs: DOCS + "HOW-IT-WORKS.md#sound",
     ui: ["sound"],
@@ -158,77 +160,77 @@ export const TOUR_FEATURES: TourFeature[] = [
   },
   {
     icon: "play",
-    title: "Automation",
-    line: "Macros, runbooks and a scheduler. Screen areas react when a part of the screen changes.",
+    title: tm("Automation"),
+    line: tm("Macros, runbooks and a scheduler. Screen areas react when a part of the screen changes."),
     caps: ["runbooks"],
-    actions: [{ label: "Open", panel: "automation" }],
+    actions: [{ label: tm("Open"), panel: "automation" }],
     docs: DOCS + "SCRIPTS.md",
   },
   {
     icon: "copy",
-    title: "Screen as text",
-    line: "Read a text screen, like a BIOS or a console, as characters and copy it.",
-    actions: [{ label: "Select text", select: true }],
+    title: tm("Screen as text"),
+    line: tm("Read a text screen, like a BIOS or a console, as characters and copy it."),
+    actions: [{ label: tm("Select text"), select: true }],
     docs: DOCS + "HOW-IT-WORKS.md#reading-the-screen",
     ui: ["select", "copy"],
   },
   {
     icon: "power",
-    title: "Power",
-    line: "Power and reset buttons over ATX wiring, the power and disk lights, Wake-on-LAN, power on over USB.",
+    title: tm("Power"),
+    line: tm("Power and reset buttons over ATX wiring, the power and disk lights, Wake-on-LAN, power on over USB."),
     caps: ["atx", "wol"],
-    actions: [{ label: "Power", section: "power", group: "ATX wiring" }],
+    actions: [{ label: tm("Power"), section: "power", group: "ATX wiring" }],
     docs: DOCS + "wiring.md",
     state: (c) => capOn(c, "atx"),
   },
   {
     icon: "power",
-    title: "KVM switch",
-    line: "Several machines behind one device: pick one by name in the Power menu. One wire to the switch's button, or a TESmart switch over the network.",
+    title: tm("KVM switch"),
+    line: tm("Several machines behind one device: pick one by name in the Power menu. One wire to the switch's button, or a TESmart switch over the network."),
     since: "0.87.0",
-    actions: [{ label: "Set up", section: "power", group: "KVM switch" }],
+    actions: [{ label: tm("Set up"), section: "power", group: "KVM switch" }],
     docs: DOCS + "wiring.md#a-kvm-switch",
-    state: (c) => (c.values.kvmsw_mode === undefined ? undefined : Number(c.values.kvmsw_mode) ? "On" : "Off"),
+    state: (c) => (c.values.kvmsw_mode === undefined ? undefined : Number(c.values.kvmsw_mode) ? tm("On") : tm("Off")),
   },
   {
     icon: "remote",
-    title: "TV remote",
-    line: "HDMI-CEC: turn a TV or a media box on and off, use its remote.",
+    title: tm("TV remote"),
+    line: tm("HDMI-CEC: turn a TV or a media box on and off, use its remote."),
     caps: ["cec"],
-    actions: [{ label: "HDMI-CEC", section: "power", group: "HDMI-CEC" }],
+    actions: [{ label: tm("HDMI-CEC"), section: "power", group: "HDMI-CEC" }],
     docs: DOCS + "HOW-IT-WORKS.md#what-works-in-detail",
     ui: ["cec"],
     state: (c) => capOn(c, "cec"),
   },
   {
     icon: "gamepad",
-    title: "Gamepad",
-    line: "The device can be a controller for a Nintendo Switch.",
+    title: tm("Gamepad"),
+    line: tm("The device can be a controller for a Nintendo Switch."),
     caps: ["hid"],
-    actions: [{ label: "Input", section: "input", group: "Target" }],
+    actions: [{ label: tm("Input"), section: "input", group: "Target" }],
     docs: DOCS + "HOW-IT-WORKS.md#input",
     ui: ["gamepad", "padmouse"],
     state: (c) => {
       const v = c.values.usb_pad;
       if (v === undefined) return undefined;
-      return v && v !== "0" && v !== "off" ? "On" : "Off";
+      return v && v !== "0" && v !== "off" ? tm("On") : tm("Off");
     },
   },
   {
     icon: "usb",
-    title: "Profiles",
-    line: "Settings for each target. The device picks one from what is attached.",
-    actions: [{ label: "Settings", section: "video" }],
+    title: tm("Profiles"),
+    line: tm("Settings for each target. The device picks one from what is attached."),
+    actions: [{ label: tm("Settings"), section: "video" }],
     docs: DOCS + "HOW-IT-WORKS.md#device-profiles",
-    state: (c) => (c.profileCount ? `${c.profileCount} of your own` : undefined),
+    state: (c) => (c.profileCount ? tn("{n} of your own", "{n} of your own", c.profileCount) : undefined),
   },
   {
     icon: "terminal",
-    title: "Serial console and ESP-KVM Tools",
-    line: "The target's serial console, its log over the network, and ESP-KVM Tools for the clipboard and a clean shutdown.",
+    title: tm("Serial console and ESP-KVM Tools"),
+    line: tm("The target's serial console, its log over the network, and ESP-KVM Tools for the clipboard and a clean shutdown."),
     actions: [
-      { label: "Serial", section: "power", group: "Serial console" },
-      { label: "Netconsole", section: "network", group: "Netconsole" },
+      { label: tm("Serial"), section: "power", group: "Serial console" },
+      { label: tm("Netconsole"), section: "network", group: "Netconsole" },
     ],
     docs: DOCS + "wiring.md#serial-console",
     ui: ["serial", "tools", "netlog"],
@@ -236,95 +238,103 @@ export const TOUR_FEATURES: TourFeature[] = [
   },
   {
     icon: "vpn",
-    title: "Remote access",
-    line: "Tailscale or WireGuard, to reach the device from outside without opening ports. Tailscale needs only a sign-in.",
+    title: tm("Remote access"),
+    line: tm("Tailscale or WireGuard, to reach the device from outside without opening ports. Tailscale needs only a sign-in."),
     caps: ["tailscale", "wireguard"],
     since: "0.77.0",
-    actions: [{ label: "VPN", section: "vpn" }],
+    actions: [{ label: tm("VPN"), section: "vpn" }],
     docs: DOCS + "SETUP.md#reaching-it-from-outside-tailscale-or-wireguard",
     state: (c) => {
       if (c.values.ts_enable === undefined && c.values.wg_enable === undefined) return undefined;
-      return settingOn(c, "ts_enable") === "On" || settingOn(c, "wg_enable") === "On" ? "On" : "Off";
+      return settingOn(c, "ts_enable") === "On" || settingOn(c, "wg_enable") === "On" ? tm("On") : tm("Off");
     },
   },
   {
     icon: "wifi",
-    title: "Wi-Fi",
-    line: "Up to three networks to join, the strongest one in sight first. Find networks lists what the device can see.",
+    title: tm("Wi-Fi"),
+    line: tm("Up to three networks to join, the strongest one in sight first. Find networks lists what the device can see."),
     caps: ["wifi"],
     since: "0.82.0",
-    actions: [{ label: "Wi-Fi", section: "network", group: "WiFi" }],
+    actions: [{ label: tm("Wi-Fi"), section: "network", group: "WiFi" }],
   },
   {
     icon: "ethernet",
-    title: "Safety net",
-    line: "A network change that cuts the device off goes back by itself in 10 minutes. With no network for long, the device restarts.",
+    title: tm("Safety net"),
+    line: tm("A network change that cuts the device off goes back by itself in 10 minutes. With no network for long, the device restarts."),
     since: "0.84.0",
-    actions: [{ label: "Safety net", section: "network", group: "Safety net" }],
+    actions: [{ label: tm("Safety net"), section: "network", group: "Safety net" }],
     docs: DOCS + "SETUP.md#changing-the-network-of-a-device-far-away",
     state: (c) => settingOn(c, "net_trial"),
   },
   {
     icon: "screen",
-    title: "VNC",
-    line: "The picture, keyboard and mouse in TigerVNC or Remmina, encrypted with VeNCrypt. Written by Jan Heil.",
+    title: tm("VNC"),
+    line: tm("The picture, keyboard and mouse in TigerVNC or Remmina, encrypted with VeNCrypt. Written by Jan Heil."),
     since: "0.85.0",
-    actions: [{ label: "VNC server", section: "video", group: "VNC server" }],
+    actions: [{ label: tm("VNC server"), section: "video", group: "VNC server" }],
     docs: DOCS + "API.md#vnc",
     state: (c) => settingOn(c, "vnc_enable"),
   },
   {
     icon: "mqtt",
-    title: "Home Assistant",
-    line: "The device and the target's state over MQTT, found by Home Assistant by itself.",
-    actions: [{ label: "MQTT", section: "mqtt" }],
+    title: tm("Home Assistant"),
+    line: tm("The device and the target's state over MQTT, found by Home Assistant by itself."),
+    actions: [{ label: tm("MQTT"), section: "mqtt" }],
     docs: DOCS + "HOW-IT-WORKS.md#what-works-in-detail",
     state: (c) => settingOn(c, "mqtt_enable"),
   },
   {
     icon: "info",
-    title: "Notifications",
-    line: "A message to Telegram, ntfy, a webhook or this browser when a phrase shows up on the screen, the screen goes blank or a new release is out.",
+    title: tm("Notifications"),
+    line: tm("A message to Telegram, ntfy, a webhook or this browser when a phrase shows up on the screen, the screen goes blank or a new release is out."),
     caps: ["notify"],
     since: "0.82.0",
     actions: [
-      { label: "Notifications", section: "notify" },
-      { label: "What goes where", section: "notify", group: "What goes where" },
+      { label: tm("Notifications"), section: "notify" },
+      { label: tm("What goes where"), section: "notify", group: "What goes where" },
     ],
     docs: DOCS + "NOTIFICATIONS.md",
     state: (c) => settingOn(c, "notify_enable"),
   },
   {
     icon: "eye",
-    title: "Security",
-    line: "A password, two-factor sign-in, a view-only sign-in for others, your own HTTPS certificate.",
-    actions: [{ label: "Security", section: "security" }],
+    title: tm("Security"),
+    line: tm("A password, two-factor sign-in, a view-only sign-in for others, your own HTTPS certificate."),
+    actions: [{ label: tm("Security"), section: "security" }],
     docs: DOCS + "HOW-IT-WORKS.md#security",
-    state: (c) => (c.passwordSet ? "Password set" : "No password"),
+    state: (c) => (c.passwordSet ? tm("Password set") : tm("No password")),
   },
   {
     icon: "eye-off",
-    title: "Seen by the target",
-    line: "The name the target sees for the USB devices and the monitor: ESP-KVM, a plain one, or your own.",
+    title: tm("Seen by the target"),
+    line: tm("The name the target sees for the USB devices and the monitor: ESP-KVM, a plain one, or your own."),
     since: "0.84.0",
-    actions: [{ label: "System", section: "system", group: "Seen by the target" }],
+    actions: [{ label: tm("System"), section: "system", group: "Seen by the target" }],
   },
   {
     icon: "screen",
-    title: "Status display",
-    line: "A small screen on the device that shows its state. You pick its pages, and it can go dark after a while.",
+    title: tm("Status display"),
+    line: tm("A small screen on the device that shows its state. You pick its pages, and it can go dark after a while."),
     caps: ["display"],
-    actions: [{ label: "Display", section: "display" }],
+    actions: [{ label: tm("Display"), section: "display" }],
     since: "0.83.0",
     docs: DOCS + "BOARDS.md#status-display-optional",
     state: (c) => capOn(c, "display"),
   },
   {
+    icon: "palette",
+    title: tm("Language"),
+    line: tm("The console in another language, for this browser. Downloaded when chosen, or loaded from a file on a device with no internet."),
+    since: "0.90.0",
+    actions: [{ label: tm("UI"), section: "ui" }],
+    docs: DOCS + "TRANSLATING.md",
+  },
+  {
     icon: "download",
-    title: "Updates",
-    line: "Updates over the network. A trial update goes back by itself unless you keep it.",
+    title: tm("Updates"),
+    line: tm("Updates over the network. A trial update goes back by itself unless you keep it."),
     caps: ["ota"],
-    actions: [{ label: "System", section: "system", group: "Updates" }],
+    actions: [{ label: tm("System"), section: "system", group: "Updates" }],
     docs: DOCS + "HOW-IT-WORKS.md#updates",
   },
 ];

@@ -11,6 +11,7 @@
  * device accepts.
  */
 import { duckyToNative, looksLikeDucky, parseCombo } from "./macroScript";
+import { t } from "./i18n";
 
 export interface Runbook {
   name: string;
@@ -61,9 +62,9 @@ export function parseRunbookScript(script: string): RunbookStep[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line || line.startsWith("#")) continue;
-    const at = (what: string) => new Error(`line ${i + 1}: ${what}`);
-    if (steps.length >= RUNBOOK_MAX_STEPS) throw at(`more than ${RUNBOOK_MAX_STEPS} steps`);
-    if (line.length > LINE_MAX) throw at("that line is too long");
+    const at = (what: string) => new Error(t("line {line}: {problem}", { line: i + 1, problem: what }));
+    if (steps.length >= RUNBOOK_MAX_STEPS) throw at(t("more than {n} steps", { n: RUNBOOK_MAX_STEPS }));
+    if (line.length > LINE_MAX) throw at(t("that line is too long"));
     const sp = line.search(/\s/);
     const cmd = (sp < 0 ? line : line.slice(0, sp)).toLowerCase();
     const arg = sp < 0 ? "" : line.slice(sp + 1).trim();
@@ -75,17 +76,17 @@ export function parseRunbookScript(script: string): RunbookStep[] {
         throw at(e instanceof Error ? e.message : String(e));
       }
     } else if (cmd === "type") {
-      if (!arg) throw at("nothing to type");
+      if (!arg) throw at(t("nothing to type"));
       const bad = typeable(arg);
-      if (bad !== null) throw at(`cannot type "${bad}" - US layout, ASCII only`);
+      if (bad !== null) throw at(t('cannot type "{char}" - US layout, ASCII only', { char: bad }));
       steps.push({ kind: "type", text: arg });
     } else if (cmd === "delay") {
       const ms = number(arg, 1, 60000);
-      if (ms === null) throw at("delay wants 1..60000 milliseconds");
+      if (ms === null) throw at(t("delay wants 1..60000 milliseconds"));
       steps.push({ kind: "delay", ms });
     } else if (cmd === "timeout") {
       const seconds = number(arg, 1, 3600);
-      if (seconds === null) throw at("timeout wants 1..3600 seconds");
+      if (seconds === null) throw at(t("timeout wants 1..3600 seconds"));
       steps.push({ kind: "timeout", seconds });
     } else if (cmd === "record") {
       if (!arg) {
@@ -94,7 +95,7 @@ export function parseRunbookScript(script: string): RunbookStep[] {
         steps.push({ kind: "record-stop" });
       } else {
         const seconds = number(arg, 1, 86400);
-        if (seconds === null) throw at('record wants nothing, "stop" or 1..86400 seconds');
+        if (seconds === null) throw at(t('record wants nothing, "stop" or 1..86400 seconds'));
         steps.push({ kind: "record", seconds });
       }
     } else if (cmd === "timelapse") {
@@ -102,30 +103,30 @@ export function parseRunbookScript(script: string): RunbookStep[] {
       const every = number(space < 0 ? arg : arg.slice(0, space), 1, 3600);
       const seconds = space < 0 ? 0 : number(arg.slice(space + 1), 1, 604800);
       if (every === null || seconds === null) {
-        throw at("timelapse wants 1..3600 seconds between frames, then how long it runs");
+        throw at(t("timelapse wants 1..3600 seconds between frames, then how long it runs"));
       }
       steps.push({ kind: "timelapse", every, seconds });
     } else if (cmd === "hdmi") {
       const a = arg.toLowerCase();
       if (a !== "standby" && a !== "wake" && !/^key \S/.test(a)) {
-        throw at("hdmi wants standby, wake or key <name>");
+        throw at(t("hdmi wants standby, wake or key <name>"));
       }
       steps.push({ kind: "hdmi", arg: a });
     } else if (cmd === "screenshot") {
-      if (arg) throw at("screenshot takes nothing after it");
+      if (arg) throw at(t("screenshot takes nothing after it"));
       steps.push({ kind: "screenshot" });
     } else if (cmd === "wait" || cmd === "gone") {
-      if (!arg) throw at("which phrase?");
-      if (arg.length > PHRASE_MAX) throw at(`a phrase is at most ${PHRASE_MAX} characters`);
+      if (!arg) throw at(t("which phrase?"));
+      if (arg.length > PHRASE_MAX) throw at(t("a phrase is at most {n} characters", { n: PHRASE_MAX }));
       if (typeable(arg) !== null) {
-        throw at("a phrase is ASCII only - that is all the screen reader knows");
+        throw at(t("a phrase is ASCII only - that is all the screen reader knows"));
       }
       steps.push({ kind: cmd, phrase: arg });
     } else {
-      throw at(`unknown command "${cmd}"`);
+      throw at(t('unknown command "{command}"', { command: cmd }));
     }
   }
-  if (steps.length === 0) throw new Error("line 1: the runbook has no steps");
+  if (steps.length === 0) throw new Error(t("line {line}: {problem}", { line: 1, problem: t("the runbook has no steps") }));
   return steps;
 }
 

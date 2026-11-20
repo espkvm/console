@@ -24,6 +24,7 @@ import {
 import { toast } from "../state/toasts";
 import { useFloating } from "../ui/floating";
 import Icon from "./Icon.vue";
+import { t } from "../i18n";
 
 const props = defineProps<{ caps: Record<string, Capability> }>();
 const emit = defineEmits<{ close: []; enable: [] }>();
@@ -45,7 +46,7 @@ const target = computed<CecDevice | null>(() => {
 });
 
 function label(d: CecDevice): string {
-  return d.name || `${d.type || "device"} at ${d.la}`;
+  return d.name || t("{type} at {la}", { type: d.type || t("device"), la: d.la });
 }
 
 async function refresh() {
@@ -85,29 +86,34 @@ async function key(name: string) {
   try {
     await cecKey(name, target.value?.la);
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   }
 }
 
 async function power(action: "standby" | "wake") {
   try {
     await cecPower(action, target.value?.la);
-    toast.info(action === "wake" ? "Asked the source to wake" : "Asked the source to sleep");
+    toast.info(action === "wake" ? t("Asked the source to wake") : t("Asked the source to sleep"));
     window.setTimeout(() => void refresh(), 1500);
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   }
 }
 
 async function rescan() {
   try {
     await cecScan();
-    toast.info("Looking for HDMI-CEC devices");
+    toast.info(t("Looking for HDMI-CEC devices"));
     window.setTimeout(() => void refresh(), 2500);
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   }
 }
+
+/* The keyboard hint, one sentence with the key caps put in at {enter} and {esc}. */
+const hintParts = computed(() =>
+  t("Arrows, {enter}, {esc} and digits work here too.").split(/(\{enter\}|\{esc\})/),
+);
 
 const KEYS: Record<string, string> = {
   ArrowUp: "up",
@@ -140,7 +146,7 @@ function onKeydown(e: KeyboardEvent) {
       class="rc-menu"
       :style="{ left: pos.x + 'px', top: pos.y + 'px' }"
       tabindex="-1"
-      aria-label="Remote control (HDMI-CEC)"
+      :aria-label="t('Remote control (HDMI-CEC)')"
       @keydown="onKeydown"
     >
     <div
@@ -150,15 +156,15 @@ function onKeydown(e: KeyboardEvent) {
       @pointerup="dragEnd"
       @pointercancel="dragEnd"
     >
-      <h3>Remote</h3>
+      <h3>{{ t("Remote") }}</h3>
       <span v-if="target" :class="['pill', target.power === 'on' ? 'pill-on' : 'pill-off']">
-        {{ target.power }}
+        {{ t(target.power) }}
       </span>
       <button
         type="button"
         class="btn btn-sm btn-icon btn-quiet rc-close"
-        aria-label="Close the remote"
-        title="Close"
+        :aria-label="t('Close the remote')"
+        :title="t('Close')"
         @click="emit('close')"
       >
         <Icon name="close" :size="15" />
@@ -167,23 +173,25 @@ function onKeydown(e: KeyboardEvent) {
 
     <template v-if="cecOff">
       <p class="rc-note">
-        HDMI-CEC is off. With it on, this remote sees what is connected over HDMI and can wake it,
-        put it to sleep and send it keys.
+        {{
+          t(
+            "HDMI-CEC is off. With it on, this remote sees what is connected over HDMI and can wake it, put it to sleep and send it keys.",
+          )
+        }}
       </p>
-      <button type="button" class="rc-wide" @click="emit('enable')">Turn on HDMI-CEC</button>
+      <button type="button" class="rc-wide" @click="emit('enable')">{{ t("Turn on HDMI-CEC") }}</button>
     </template>
     <template v-else-if="!status || !status.running">
-      <p class="rc-note">{{ status ? "HDMI-CEC is not running." : "Reading the CEC line..." }}</p>
+      <p class="rc-note">{{ status ? t("HDMI-CEC is not running.") : t("Reading the CEC line...") }}</p>
     </template>
     <template v-else-if="!target">
       <p class="rc-note">
-        Nothing on the HDMI-CEC line. TV boxes, consoles and a Raspberry Pi answer here; most
-        PCs do not speak CEC.
+        {{ t("Nothing on the HDMI-CEC line. TV boxes, consoles and a Raspberry Pi answer here; most PCs do not speak CEC.") }}
       </p>
-      <button type="button" class="rc-wide" @click="rescan">Look again</button>
+      <button type="button" class="rc-wide" @click="rescan">{{ t("Look again") }}</button>
     </template>
     <template v-else>
-      <select v-if="devices.length > 1" v-model="chosen" class="rc-select" aria-label="Device">
+      <select v-if="devices.length > 1" v-model="chosen" class="rc-select" :aria-label="t('Device')">
         <option v-for="d in devices" :key="d.la" :value="d.la">{{ label(d) }}</option>
       </select>
       <p class="rc-who">
@@ -194,47 +202,47 @@ function onKeydown(e: KeyboardEvent) {
       </p>
 
       <div class="rc-row">
-        <button type="button" class="rc-btn" title="Wake" @click="power('wake')">
-          <Icon name="power" :size="16" /> Wake
+        <button type="button" class="rc-btn" :title="t('Wake')" @click="power('wake')">
+          <Icon name="power" :size="16" /> {{ t("Wake") }}
         </button>
-        <button type="button" class="rc-btn" title="Sleep" @click="power('standby')">Sleep</button>
+        <button type="button" class="rc-btn" :title="t('Sleep')" @click="power('standby')">{{ t("Sleep") }}</button>
       </div>
 
       <div class="rc-pad">
-        <button type="button" class="rc-btn rc-sm" title="Home" @click="key('home')">Home</button>
-        <button type="button" class="rc-btn rc-arrow" title="Up" @click="key('up')">&#9650;</button>
-        <button type="button" class="rc-btn rc-sm" title="Menu" @click="key('menu')">Menu</button>
-        <button type="button" class="rc-btn rc-arrow" title="Left" @click="key('left')">&#9664;</button>
-        <button type="button" class="rc-btn rc-ok" title="OK" @click="key('select')">OK</button>
-        <button type="button" class="rc-btn rc-arrow" title="Right" @click="key('right')">&#9654;</button>
-        <button type="button" class="rc-btn rc-sm" title="Back" @click="key('back')">Back</button>
-        <button type="button" class="rc-btn rc-arrow" title="Down" @click="key('down')">&#9660;</button>
-        <button type="button" class="rc-btn rc-sm" title="Info" @click="key('info')">Info</button>
+        <button type="button" class="rc-btn rc-sm" :title="t('Home')" @click="key('home')">{{ t("Home") }}</button>
+        <button type="button" class="rc-btn rc-arrow" :title="t('Up')" @click="key('up')">&#9650;</button>
+        <button type="button" class="rc-btn rc-sm" :title="t('Menu')" @click="key('menu')">{{ t("Menu") }}</button>
+        <button type="button" class="rc-btn rc-arrow" :title="t('Left')" @click="key('left')">&#9664;</button>
+        <button type="button" class="rc-btn rc-ok" :title="t('OK')" @click="key('select')">{{ t("OK") }}</button>
+        <button type="button" class="rc-btn rc-arrow" :title="t('Right')" @click="key('right')">&#9654;</button>
+        <button type="button" class="rc-btn rc-sm" :title="t('Back')" @click="key('back')">{{ t("Back") }}</button>
+        <button type="button" class="rc-btn rc-arrow" :title="t('Down')" @click="key('down')">&#9660;</button>
+        <button type="button" class="rc-btn rc-sm" :title="t('Info')" @click="key('info')">{{ t("Info") }}</button>
       </div>
 
       <div class="rc-row">
-        <button type="button" class="rc-btn" title="Rewind" @click="key('rewind')">&#9194;</button>
-        <button type="button" class="rc-btn" title="Play" @click="key('play')">&#9654;</button>
-        <button type="button" class="rc-btn" title="Pause" @click="key('pause')">&#10074;&#10074;</button>
-        <button type="button" class="rc-btn" title="Stop" @click="key('stop')">&#9632;</button>
-        <button type="button" class="rc-btn" title="Fast forward" @click="key('fast_forward')">&#9193;</button>
+        <button type="button" class="rc-btn" :title="t('Rewind')" @click="key('rewind')">&#9194;</button>
+        <button type="button" class="rc-btn" :title="t('Play')" @click="key('play')">&#9654;</button>
+        <button type="button" class="rc-btn" :title="t('Pause')" @click="key('pause')">&#10074;&#10074;</button>
+        <button type="button" class="rc-btn" :title="t('Stop')" @click="key('stop')">&#9632;</button>
+        <button type="button" class="rc-btn" :title="t('Fast forward')" @click="key('fast_forward')">&#9193;</button>
       </div>
 
       <div class="rc-row">
-        <button type="button" class="rc-btn" title="Volume down" @click="key('volume_down')">Vol &minus;</button>
-        <button type="button" class="rc-btn" title="Mute" @click="key('mute')">Mute</button>
-        <button type="button" class="rc-btn" title="Volume up" @click="key('volume_up')">Vol +</button>
+        <button type="button" class="rc-btn" :title="t('Volume down')" @click="key('volume_down')">{{ t("Vol") }} &minus;</button>
+        <button type="button" class="rc-btn" :title="t('Mute')" @click="key('mute')">{{ t("Mute") }}</button>
+        <button type="button" class="rc-btn" :title="t('Volume up')" @click="key('volume_up')">{{ t("Vol") }} +</button>
       </div>
 
       <div class="rc-row rc-colors">
-        <button type="button" class="rc-btn rc-red" title="Red" @click="key('red')" />
-        <button type="button" class="rc-btn rc-green" title="Green" @click="key('green')" />
-        <button type="button" class="rc-btn rc-yellow" title="Yellow" @click="key('yellow')" />
-        <button type="button" class="rc-btn rc-blue" title="Blue" @click="key('blue')" />
+        <button type="button" class="rc-btn rc-red" :title="t('Red')" @click="key('red')" />
+        <button type="button" class="rc-btn rc-green" :title="t('Green')" @click="key('green')" />
+        <button type="button" class="rc-btn rc-yellow" :title="t('Yellow')" @click="key('yellow')" />
+        <button type="button" class="rc-btn rc-blue" :title="t('Blue')" @click="key('blue')" />
       </div>
 
       <button type="button" class="rc-link" @click="showNumbers = !showNumbers">
-        {{ showNumbers ? "Hide numbers" : "Numbers" }}
+        {{ showNumbers ? t("Hide numbers") : t("Numbers") }}
       </button>
       <div v-if="showNumbers" class="rc-nums">
         <button v-for="n in [1, 2, 3, 4, 5, 6, 7, 8, 9, 0]" :key="n" type="button" class="rc-btn" @click="key(String(n))">
@@ -242,7 +250,13 @@ function onKeydown(e: KeyboardEvent) {
         </button>
       </div>
 
-      <p class="rc-hint">Arrows, <Keys combo="Enter" />, <Keys combo="Esc" /> and digits work here too.</p>
+      <p class="rc-hint">
+        <template v-for="(part, i) in hintParts" :key="i">
+          <Keys v-if="part === '{enter}'" combo="Enter" />
+          <Keys v-else-if="part === '{esc}'" combo="Esc" />
+          <template v-else>{{ part }}</template>
+        </template>
+      </p>
     </template>
     </section>
   </Teleport>

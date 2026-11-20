@@ -7,6 +7,7 @@
 import { computed } from "vue";
 
 import { UI_FEATURES, formatHidden, parseHidden } from "../ui/features";
+import { t } from "../i18n";
 
 const props = defineProps<{ value: string; disabled?: boolean }>();
 const emit = defineEmits<{ change: [csv: string] }>();
@@ -29,7 +30,7 @@ function toggle(id: string, shown: boolean) {
 <template>
   <div class="ui-features">
     <fieldset v-for="[group, items] in groups" :key="group">
-      <legend>{{ group }}</legend>
+      <legend>{{ t(group) }}</legend>
       <label v-for="f in items" :key="f.id" class="ui-feature">
         <input
           type="checkbox"
@@ -37,7 +38,7 @@ function toggle(id: string, shown: boolean) {
           :disabled="disabled"
           @change="toggle(f.id, ($event.target as HTMLInputElement).checked)"
         />
-        <span>{{ f.label }}</span>
+        <span>{{ t(f.label) }}</span>
       </label>
     </fieldset>
   </div>

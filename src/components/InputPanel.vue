@@ -24,17 +24,20 @@ import {
   type QuickItem,
   type QuickKind,
 } from "../state/quick";
-import { charToHid, untypeableChars, DEFAULT_LAYOUT } from "../layouts";
+import { untypeableChars, DEFAULT_LAYOUT, LAYOUTS } from "../layouts";
+import { layoutHintWanted, markLayoutHint, operatorLayout } from "../input/layoutGuess";
 import {
   runMacroScript,
+  typeChar,
   parseMacroScript,
   loadMacros,
   serializeMacros,
   type Macro as UserMacro,
 } from "../macroScript";
 import type { Control } from "../input/control";
-import { enumName, saveSettings, type Setting, type Values } from "../state/device";
+import { enumIndex, enumName, saveSettings, type Setting, type Values } from "../state/device";
 import { toast } from "../state/toasts";
+import { t } from "../i18n";
 
 const props = defineProps<{
   control: Control;
@@ -51,6 +54,46 @@ const emit = defineEmits<{ (e: "values", v: Values): void; (e: "dropped-taken"):
 
 const layout = computed(() => enumName(props.schema, props.values, "kbd_layout") ?? DEFAULT_LAYOUT);
 const typeDelay = computed(() => Math.max(1, Number(props.values.type_delay) || 8));
+
+/* The layout picker beside paste: the same setting as Settings, Input, here
+   because switching it is part of pasting into a machine with another layout. */
+const layoutIds = computed(
+  () => props.schema.find((x) => x.key === "kbd_layout")?.choices?.filter((id) => LAYOUTS[id]) ?? [],
+);
+const savingLayout = ref(false);
+async function setLayout(id: string) {
+  const index = enumIndex(props.schema, "kbd_layout", id);
+  if (index === null || id === layout.value) return;
+  savingLayout.value = true;
+  try {
+    emit("values", await saveSettings({ kbd_layout: index }));
+  } catch (err) {
+    toast.error(t(err instanceof Error ? err.message : String(err)));
+  } finally {
+    savingLayout.value = false;
+  }
+}
+/* Which table paste uses for this layout and OS, when that makes a difference. */
+const osNote = computed(() => {
+  if (!LAYOUTS[layout.value]?.os) return "";
+  const os = effectiveOs.value;
+  if (os === "windows") return t("as on Windows");
+  if (os === "linux") return t("as on Linux");
+  return t("what Windows and Linux share");
+});
+/* The operator's own keyboard, when it differs and was not turned down. */
+const declined = ref(0);
+const suggested = computed(() => {
+  void declined.value;
+  const mine = operatorLayout.value;
+  return mine && mine !== layout.value && layoutIds.value.includes(mine) && layoutHintWanted(mine, "no")
+    ? mine
+    : null;
+});
+function declineSuggestion() {
+  if (suggested.value) markLayoutHint(suggested.value, "no");
+  declined.value++;
+}
 const pasting = ref(false);
 const macroBusy = ref(false);
 
@@ -63,8 +106,6 @@ const effectiveOs = computed(() => {
 
 const macros = computed(() => macrosForOs(effectiveOs.value));
 const labelFor = (m: Macro) => macroLabel(m, effectiveOs.value);
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function sendMacro(m: Macro) {
   if (macroBusy.value) return;
@@ -84,14 +125,14 @@ function releaseAll() {
 
 async function paste() {
   if (!navigator.clipboard?.readText) {
-    toast.error("Clipboard access needs HTTPS. Type the text in the box below instead.");
+    toast.error(t("Clipboard access needs HTTPS. Type the text in the box below instead."));
     return;
   }
   let text: string;
   try {
     text = await navigator.clipboard.readText();
   } catch {
-    toast.error("Clipboard read was denied. Type the text in the box below instead.");
+    toast.error(t("Clipboard read was denied. Type the text in the box below instead."));
     return;
   }
   await typeText(text);
@@ -136,9 +177,14 @@ async function typeText(text: string): Promise<boolean> {
 
   /* Silently dropping characters would leave the operator believing the paste
      succeeded. Name the ones this layout cannot produce. */
-  const missing = untypeableChars(layout.value, text) as string[];
+  const missing = untypeableChars(layout.value, text, effectiveOs.value);
   if (missing.length) {
-    toast.error(`Layout ${layout.value} cannot type: ${missing.slice(0, 12).join(" ")}`);
+    toast.error(
+      t("{layout} cannot type: {chars}", {
+        layout: LAYOUTS[layout.value]?.label ?? layout.value,
+        chars: missing.slice(0, 12).join(" "),
+      }),
+    );
   }
 
   const chars = [...text];
@@ -150,18 +196,13 @@ async function typeText(text: string): Promise<boolean> {
     for (const ch of chars) {
       if (stopTyping) break;
       typed.value++;
-      const row = charToHid(layout.value, ch) as { mod: number; hid: number } | null;
-      if (!row) continue;
-      props.control.keyboard(row.mod, [row.hid]);
-      await sleep(typeDelay.value + 12);
-      props.control.keyboard(0, []);
-      await sleep(typeDelay.value);
+      await typeChar(props.control, ch, layout.value, effectiveOs.value, typeDelay.value);
     }
   } finally {
     props.control.keyboard(0, []);
     pasting.value = false;
   }
-  if (stopTyping) toast.info(`Stopped after ${typed.value} of ${typeTotal.value} characters`);
+  if (stopTyping) toast.info(t("Stopped after {n} of {total} characters", { n: typed.value, total: typeTotal.value }));
   return !stopTyping;
 }
 
@@ -209,7 +250,7 @@ async function persistMacros(list: UserMacro[]) {
   try {
     emit("values", await saveSettings({ macros_json: serializeMacros(list) }));
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     savingMacro.value = false;
   }
@@ -218,7 +259,7 @@ async function persistMacros(list: UserMacro[]) {
 async function saveMacro() {
   const name = editName.value.trim();
   if (!name) {
-    toast.error("Give the macro a name");
+    toast.error(t("Give the macro a name"));
     return;
   }
   if (scriptError.value) {
@@ -237,7 +278,7 @@ async function saveMacro() {
 }
 
 async function deleteMacro(i: number) {
-  if (!confirm(`Delete the macro "${userMacros.value[i].name}"?`)) return;
+  if (!confirm(t('Delete the macro "{name}"?', { name: userMacros.value[i].name }))) return;
   const list = userMacros.value.slice();
   list.splice(i, 1);
   await persistMacros(list);
@@ -247,7 +288,7 @@ async function runMacro(m: UserMacro) {
   if (runningMacro.value) return;
   runningMacro.value = m.name;
   try {
-    await runMacroScript(m.script, props.control, layout.value, typeDelay.value);
+    await runMacroScript(m.script, props.control, layout.value, typeDelay.value, effectiveOs.value);
   } catch (err) {
     toast.error(err instanceof Error ? err.message : String(err));
   } finally {
@@ -259,12 +300,12 @@ async function runMacro(m: UserMacro) {
 
 const quick = computed<QuickItem[]>(() => parseQuick(props.values.quick_json));
 const runbookNames = computed(() => loadRunbooks(props.values.runbooks_json).map((r) => r.name));
-const KIND_NAMES: Record<QuickKind, string> = {
-  key: "key",
-  combo: "combination",
-  macro: "macro",
-  runbook: "runbook",
-};
+const kindNames = computed<Record<QuickKind, string>>(() => ({
+  key: t("key"),
+  combo: t("combination"),
+  macro: t("macro"),
+  runbook: t("runbook"),
+}));
 const addKind = ref<QuickKind>("key");
 const addValue = ref("");
 const savingQuick = ref(false);
@@ -283,7 +324,7 @@ const addError = computed(() => {
   const v = addValue.value.trim();
   if (!v) return null;
   if (addKind.value === "key") return keyProblem(v);
-  if (quick.value.some((q) => sameQuick(q, { t: addKind.value, v }))) return "Already on the bar";
+  if (quick.value.some((q) => sameQuick(q, { t: addKind.value, v }))) return t("Already on the bar");
   return null;
 });
 const canAdd = computed(
@@ -295,7 +336,7 @@ async function persistQuick(list: QuickItem[]) {
   try {
     emit("values", await saveSettings({ quick_json: serializeQuick(list) }));
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     savingQuick.value = false;
   }
@@ -323,17 +364,17 @@ function moveQuick(i: number, by: number) {
 <template>
   <div class="input-panel">
     <p v-if="!attached" class="section-blocked">
-      No target on USB. Keystrokes will go nowhere until the cable is connected.
+      {{ t("No target on USB. Keystrokes will go nowhere until the cable is connected.") }}
     </p>
 
-    <h3>Key combinations</h3>
+    <h3>{{ t("Key combinations") }}</h3>
     <div class="macro-bar">
       <button
         v-for="m in macros"
         :key="m.id"
         type="button"
         :class="['btn', 'btn-sm', { 'btn-danger': m.destructive }]"
-        :title="m.hint"
+        :title="m.hint ? t(m.hint) : undefined"
         :disabled="macroBusy"
         @click="sendMacro(m)"
       >
@@ -341,21 +382,23 @@ function moveQuick(i: number, by: number) {
       </button>
     </div>
 
-    <h3>Bar buttons</h3>
-    <p class="setting-note">Pinned to the bar under the picture, in every browser. Up to {{ QUICK_MAX }}.</p>
+    <h3>{{ t("Bar buttons") }}</h3>
+    <p class="setting-note">
+      {{ t("Pinned to the bar under the picture, in every browser. Up to {n}.", { n: QUICK_MAX }) }}
+    </p>
     <ul v-if="quick.length" class="image-list">
       <li v-for="(q, i) in quick" :key="q.t + q.v" class="image-row">
         <span class="image-name">
           <span class="mono">{{ quickLabel(q, effectiveOs) }}</span>
-          <span class="quick-kind">{{ KIND_NAMES[q.t] }}</span>
+          <span class="quick-kind">{{ kindNames[q.t] }}</span>
         </span>
         <span class="macro-actions">
           <button
             type="button"
             class="btn btn-sm btn-quiet"
             :disabled="i === 0 || savingQuick"
-            title="Move left"
-            aria-label="Move left"
+            :title="t('Move left')"
+            :aria-label="t('Move left')"
             @click="moveQuick(i, -1)"
           >
             &larr;
@@ -364,24 +407,24 @@ function moveQuick(i: number, by: number) {
             type="button"
             class="btn btn-sm btn-quiet"
             :disabled="i === quick.length - 1 || savingQuick"
-            title="Move right"
-            aria-label="Move right"
+            :title="t('Move right')"
+            :aria-label="t('Move right')"
             @click="moveQuick(i, 1)"
           >
             &rarr;
           </button>
           <button type="button" class="btn btn-sm btn-quiet" :disabled="savingQuick" @click="removeQuick(i)">
-            Remove
+            {{ t("Remove") }}
           </button>
         </span>
       </li>
     </ul>
     <div v-if="quick.length < QUICK_MAX" class="quick-add">
-      <select v-model="addKind" aria-label="What to pin" @change="onKindChange">
-        <option value="key">Key</option>
-        <option value="combo">Combination</option>
-        <option v-if="userMacros.length" value="macro">Macro</option>
-        <option v-if="runbookNames.length" value="runbook">Runbook</option>
+      <select v-model="addKind" :aria-label="t('What to pin')" @change="onKindChange">
+        <option value="key">{{ t("Key") }}</option>
+        <option value="combo">{{ t("Combination") }}</option>
+        <option v-if="userMacros.length" value="macro">{{ t("Macro") }}</option>
+        <option v-if="runbookNames.length" value="runbook">{{ t("Runbook") }}</option>
       </select>
       <input
         v-if="addKind === 'key'"
@@ -389,36 +432,39 @@ function moveQuick(i: number, by: number) {
         type="text"
         class="mono quick-value"
         placeholder="f2, delete, ctrl+alt+f2"
-        aria-label="Key"
+        :aria-label="t('Key')"
         @keydown.enter="addQuick"
       />
-      <select v-else v-model="addValue" class="quick-value" aria-label="Which one">
+      <select v-else v-model="addValue" class="quick-value" :aria-label="t('Which one')">
         <option v-for="c in addChoices" :key="c.v" :value="c.v">{{ c.label }}</option>
       </select>
-      <button type="button" class="btn btn-sm" :disabled="!canAdd" @click="addQuick">Add</button>
+      <button type="button" class="btn btn-sm" :disabled="!canAdd" @click="addQuick">{{ t("Add") }}</button>
     </div>
     <p v-if="addError" class="setting-note setting-note-blocked">{{ addError }}</p>
 
-    <h3>Macros</h3>
+    <h3>{{ t("Macros") }}</h3>
     <ul v-if="userMacros.length" class="image-list">
       <li v-for="(m, i) in userMacros" :key="i" class="image-row">
         <span class="image-name mono">{{ m.name }}</span>
         <span class="macro-actions">
           <button type="button" class="btn btn-sm" :disabled="!!runningMacro" @click="runMacro(m)">
-            {{ runningMacro === m.name ? "Running..." : "Run" }}
+            {{ runningMacro === m.name ? t("Running...") : t("Run") }}
           </button>
-          <button type="button" class="btn btn-sm btn-quiet" @click="editMacro(i)">Edit</button>
-          <button type="button" class="btn btn-sm btn-quiet" @click="deleteMacro(i)">Delete</button>
+          <button type="button" class="btn btn-sm btn-quiet" @click="editMacro(i)">{{ t("Edit") }}</button>
+          <button type="button" class="btn btn-sm btn-quiet" @click="deleteMacro(i)">{{ t("Delete") }}</button>
         </span>
       </li>
     </ul>
     <p v-else class="setting-note">
-      A macro is a short script - key chords, typed text and delays - that you replay with one
-      click. Handy for a fixed sequence like stepping through a BIOS.
+      {{
+        t(
+          "A macro is a short script - key chords, typed text and delays - that you replay with one click. Handy for a fixed sequence like stepping through a BIOS.",
+        )
+      }}
     </p>
 
     <div v-if="editIndex !== null" class="macro-editor">
-      <input v-model="editName" type="text" placeholder="Macro name" />
+      <input v-model="editName" type="text" :placeholder="t('Macro name')" />
       <textarea
         v-model="editScript"
         rows="6"
@@ -427,8 +473,8 @@ function moveQuick(i: number, by: number) {
         placeholder="key ctrl+alt+f2&#10;delay 500&#10;type root&#10;key enter"
       ></textarea>
       <p class="setting-note">
-        One command per line: <code>key ctrl+alt+f2</code>, <code>type some text</code>,
-        <code>delay 500</code>. Lines starting with # are ignored. Every key name is listed in
+        {{ t("One command per line:") }} <code>key ctrl+alt+f2</code>, <code>type some text</code>,
+        <code>delay 500</code>. {{ t("Lines starting with # are ignored.") }} {{ t("Every key name is listed in") }}
         <a href="https://espkvm.io/scripts/" target="_blank" rel="noopener">espkvm.io/scripts</a>.
       </p>
       <p v-if="scriptError" class="setting-note setting-note-blocked">{{ scriptError }}</p>
@@ -439,26 +485,47 @@ function moveQuick(i: number, by: number) {
           :disabled="savingMacro || !!scriptError"
           @click="saveMacro"
         >
-          {{ savingMacro ? "Saving..." : "Save" }}
+          {{ savingMacro ? t("Saving...") : t("Save") }}
         </button>
-        <button type="button" class="btn btn-sm btn-quiet" @click="cancelEdit">Cancel</button>
+        <button type="button" class="btn btn-sm btn-quiet" @click="cancelEdit">{{ t("Cancel") }}</button>
       </div>
     </div>
-    <button v-else type="button" class="btn btn-sm" @click="newMacro">New macro...</button>
+    <button v-else type="button" class="btn btn-sm" @click="newMacro">{{ t("New macro...") }}</button>
 
-    <h3>Paste text</h3>
+    <h3>{{ t("Paste text") }}</h3>
     <FoldNote>
-      <template #lead>Typed with the <strong>{{ layout }}</strong> layout.</template>
-      The text goes as key positions, so the layout must match what the target has active. Change
-      it under Settings, Input.
+      <template #lead>{{ t("Typed with the target's keyboard layout, chosen here.") }}</template>
+      {{
+        t(
+          "The text goes as key positions, so the layout must match what the target has active. Where Windows and Linux put a character on different keys, the target OS decides (Settings, Input). With the OS unknown, only characters both agree on are typed.",
+        )
+      }}
     </FoldNote>
+    <div class="layout-row">
+      <select
+        :value="layout"
+        :aria-label="t('Target keyboard layout')"
+        :disabled="savingLayout"
+        @change="setLayout(($event.target as HTMLSelectElement).value)"
+      >
+        <option v-for="id in layoutIds" :key="id" :value="id">{{ LAYOUTS[id]?.label ?? id }}</option>
+      </select>
+      <small v-if="osNote" class="layout-os">{{ osNote }}</small>
+    </div>
+    <p v-if="suggested" class="setting-note layout-hint">
+      {{ t("Your keyboard looks like {name}. If the target uses it too:", { name: LAYOUTS[suggested].label }) }}
+      <button type="button" class="btn btn-sm" @click="setLayout(suggested)">
+        {{ t("Use {name}", { name: LAYOUTS[suggested].label }) }}
+      </button>
+      <button type="button" class="btn btn-sm btn-quiet" @click="declineSuggestion">{{ t("No") }}</button>
+    </p>
     <div v-if="pasting" class="type-progress">
       <progress :max="typeTotal" :value="typed"></progress>
       <small class="mono">{{ typed }} / {{ typeTotal }}</small>
-      <button type="button" class="btn btn-sm" @click="stop">Stop</button>
+      <button type="button" class="btn btn-sm" @click="stop">{{ t("Stop") }}</button>
     </div>
     <template v-else>
-      <button type="button" class="btn btn-sm" @click="paste">Paste from clipboard</button>
+      <button type="button" class="btn btn-sm" @click="paste">{{ t("Paste from clipboard") }}</button>
       <textarea
         ref="draftBox"
         v-model="draft"
@@ -466,22 +533,42 @@ function moveQuick(i: number, by: number) {
         class="type-draft"
         spellcheck="false"
         autocomplete="off"
-        placeholder="Or type or paste text here"
+        :placeholder="t('Or type or paste text here')"
       ></textarea>
-      <button type="button" class="btn btn-sm" :disabled="!draft" @click="typeDraft">Type it</button>
+      <button type="button" class="btn btn-sm" :disabled="!draft" @click="typeDraft">{{ t("Type it") }}</button>
     </template>
 
-    <h3>Stuck input</h3>
+    <h3>{{ t("Stuck input") }}</h3>
     <FoldNote>
-      <template #lead>Lift every key and mouse button the target thinks is held.</template>
-      For a click or a key that got stuck down. It is the software version of unplugging the
-      cable.
+      <template #lead>{{ t("Lift every key and mouse button the target thinks is held.") }}</template>
+      {{ t("For a click or a key that got stuck down. It is the software version of unplugging the cable.") }}
     </FoldNote>
-    <button type="button" class="btn btn-sm" @click="releaseAll">Release all inputs</button>
+    <button type="button" class="btn btn-sm" @click="releaseAll">{{ t("Release all inputs") }}</button>
   </div>
 </template>
 
 <style scoped>
+.layout-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.layout-row select {
+  flex: 1;
+  min-width: 0;
+}
+
+.layout-os {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.layout-hint .btn {
+  margin-left: var(--space-1, 4px);
+}
+
 .type-draft {
   width: 100%;
   margin-top: var(--space-2);

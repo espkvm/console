@@ -9,6 +9,7 @@
  */
 import { computed, nextTick, ref } from "vue";
 import { choiceLabel, type Setting } from "../state/device";
+import { t } from "../i18n";
 
 const props = defineProps<{
   columns: Setting[];
@@ -63,38 +64,38 @@ async function flip(key: string, bit: number, e: Event) {
     <table class="mask-table">
       <thead>
         <tr>
-          <th scope="col" class="mask-table-corner"><span class="sr-only">What</span></th>
-          <th v-for="c in columns" :key="c.key" scope="col" :title="c.help">
-            {{ c.title }}
-            <span v-if="ready && ready[c.key] === false" class="mask-table-off">not set up</span>
+          <th scope="col" class="mask-table-corner"><span class="sr-only">{{ t("What") }}</span></th>
+          <th v-for="c in columns" :key="c.key" scope="col" :title="c.help ? t(c.help) : undefined">
+            {{ t(c.title) }}
+            <span v-if="ready && ready[c.key] === false" class="mask-table-off">{{ t("not set up") }}</span>
           </th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="bit in rows" :key="bit">
-          <th scope="row">{{ choiceLabel(columns[0], bit) }}</th>
+          <th scope="row">{{ t(choiceLabel(columns[0], bit)) }}</th>
           <td v-for="c in columns" :key="c.key">
             <input
               type="checkbox"
               :checked="on(c.key, bit)"
               :disabled="disabled"
-              :aria-label="`${choiceLabel(columns[0], bit)} to ${c.title}`"
+              :aria-label="t('{what} to {where}', { what: t(choiceLabel(columns[0], bit)), where: t(c.title) })"
               @change="flip(c.key, bit, $event)"
             />
           </td>
         </tr>
         <tr v-if="test" class="mask-table-test">
-          <th scope="row"><span class="sr-only">Try it</span></th>
+          <th scope="row"><span class="sr-only">{{ t("Try it") }}</span></th>
           <td v-for="c in columns" :key="c.key">
             <button
               v-if="ready && ready[c.key]"
               type="button"
               class="btn btn-sm"
               :disabled="disabled || !!testing"
-              :aria-label="`Send a test to ${c.title}`"
+              :aria-label="t('Send a test to {where}', { where: t(c.title) })"
               @click="runTest(c.key)"
             >
-              {{ testing === c.key ? "Sending..." : "Test" }}
+              {{ testing === c.key ? t("Sending...") : t("Test") }}
             </button>
             <span v-if="tested[c.key]" class="mask-table-off">{{ tested[c.key] }}</span>
           </td>
@@ -102,7 +103,7 @@ async function flip(key: string, bit: number, e: Event) {
       </tbody>
     </table>
     <p v-for="c in columns.filter((x) => x.help)" :key="c.key" class="setting-note">
-      <b>{{ c.title }}:</b> {{ c.help }}
+      <b>{{ t(c.title) }}:</b> {{ t(c.help ?? "") }}
     </p>
   </div>
 </template>

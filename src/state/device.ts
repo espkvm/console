@@ -17,6 +17,7 @@
  * header of its own without permission the device never grants, so this is what
  * tells the two apart. See KVM_CONSOLE_HEADER in the firmware.
  */
+import { t, tm } from "../i18n";
 export const CONSOLE_HEADER = { "X-ESP-KVM": "1" } as const;
 
 export type SettingType = "bool" | "int" | "enum" | "string";
@@ -402,9 +403,16 @@ export function noteSignedOut(): void {
  * body) fall back to @p fallback. Reads the body once - callers must not have
  * consumed it.
  */
+/** The device's { error } text in the active language, or @p fallback. */
+function errorText(body: unknown, fallback: string): string {
+  const error = (body as { error?: string } | null)?.error;
+  return error ? t(error) : fallback;
+}
+
 async function errorFromResponse(res: Response, fallback: string): Promise<string> {
   const body = await res.json().catch(() => ({}));
-  return (body as { error?: string }).error ?? fallback;
+  const error = (body as { error?: string }).error;
+  return error ? t(error) : fallback;
 }
 
 /**
@@ -415,7 +423,7 @@ async function errorFromResponse(res: Response, fallback: string): Promise<strin
 function rejectFromXhr(xhr: XMLHttpRequest, fallback: string): Error {
   try {
     const body = JSON.parse(xhr.responseText) as { error?: string };
-    if (body.error) return new Error(body.error);
+    if (body.error) return new Error(t(body.error));
   } catch {
     /* keep the fallback message */
   }
@@ -425,7 +433,7 @@ function rejectFromXhr(xhr: XMLHttpRequest, fallback: string): Error {
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { cache: "no-store" });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(`${url} returned ${res.status}`);
+  if (!res.ok) throw new Error(t("{url} returned {status}", { url, status: res.status }));
   return (await res.json()) as T;
 }
 
@@ -527,7 +535,7 @@ export async function loadScreenText(): Promise<ScreenText | null> {
   const res = await fetch("/api/v1/screen/text", { cache: "no-store" });
   if (res.status === 401) throw new Unauthorized();
   if (res.status === 204) return null;
-  if (!res.ok) throw new Error(`/api/v1/screen/text returned ${res.status}`);
+  if (!res.ok) throw new Error(t("/api/v1/screen/text returned {status}", { status: res.status }));
   return (await res.json()) as ScreenText;
 }
 
@@ -545,7 +553,7 @@ export async function saveSettings(patch: Values): Promise<Values> {
   if (res.status === 401) throw new Unauthorized();
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error((body as { error?: string }).error ?? `settings write failed (${res.status})`);
+    throw new Error(errorText(body, t("settings write failed ({status})", { status: res.status })));
   }
   return body as Values;
 }
@@ -565,7 +573,7 @@ export async function webrtcOffer(sdp: string): Promise<WebrtcAnswer> {
     body: JSON.stringify({ sdp }),
   });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `WebRTC offer failed (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("WebRTC offer failed ({status})", { status: res.status })));
   return (await res.json()) as WebrtcAnswer;
 }
 
@@ -615,7 +623,7 @@ async function postRunbooks(action: string, body?: unknown): Promise<void> {
   if (res.status === 401) throw new Unauthorized();
   if (!res.ok) {
     const j = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(j.error ?? `runbook ${action} failed (${res.status})`);
+    throw new Error(j.error ? t(j.error) : t("runbook {action} failed ({status})", { action, status: res.status }));
   }
 }
 
@@ -637,7 +645,7 @@ export async function reconnectSource(): Promise<void> {
   if (res.status === 401) throw new Unauthorized();
   if (!res.ok) {
     const j = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(j.error ?? `reconnect failed (${res.status})`);
+    throw new Error(j.error ? t(j.error) : t("reconnect failed ({status})", { status: res.status }));
   }
 }
 
@@ -670,7 +678,7 @@ export async function runSchedule(name: string): Promise<void> {
   if (res.status === 401) throw new Unauthorized();
   if (!res.ok) {
     const j = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(j.error ?? `schedule run failed (${res.status})`);
+    throw new Error(j.error ? t(j.error) : t("schedule run failed ({status})", { status: res.status }));
   }
 }
 
@@ -711,7 +719,7 @@ export async function loadNotifyStatus(): Promise<NotifyStatus> {
 export async function findTelegramChats(): Promise<void> {
   const res = await fetch("/api/v1/notify/chats", { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(`finding chats failed (${res.status})`);
+  if (!res.ok) throw new Error(t("finding chats failed ({status})", { status: res.status }));
 }
 
 export interface WifiNetwork {
@@ -733,7 +741,7 @@ export interface WifiScan {
 export async function startWifiScan(): Promise<void> {
   const res = await fetch("/api/v1/wifi/scan", { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `scan failed (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("scan failed ({status})", { status: res.status })));
 }
 
 export async function loadWifiScan(): Promise<WifiScan> {
@@ -751,12 +759,12 @@ export async function testNotify(channel?: string): Promise<void> {
     body: channel ? JSON.stringify({ channel }) : undefined,
   });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(`test failed (${res.status})`);
+  if (!res.ok) throw new Error(t("test failed ({status})", { status: res.status }));
 }
 
 export async function resetSettings(): Promise<Values> {
   const res = await fetch(`${SETTINGS_URL}/reset`, { method: "POST", headers: CONSOLE_HEADER });
-  if (!res.ok) throw new Error(`reset failed (${res.status})`);
+  if (!res.ok) throw new Error(t("reset failed ({status})", { status: res.status }));
   return (await res.json()) as Values;
 }
 
@@ -767,7 +775,7 @@ export async function resetSettings(): Promise<Values> {
 export async function wakeTarget(): Promise<void> {
   const res = await fetch("/api/v1/power/wake", { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `wake failed (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("wake failed ({status})", { status: res.status })));
 }
 
 /**
@@ -780,16 +788,17 @@ export type UsbPowerResult = "awake" | "woke" | "no answer";
 export async function powerOnUsb(): Promise<UsbPowerResult> {
   const res = await fetch("/api/v1/power/usb", { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `power on failed (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("power on failed ({status})", { status: res.status })));
   return ((await res.json()) as { status: UsbPowerResult }).status;
 }
 
 /** The toast for each answer, shared by the power menu and the no-signal screen. */
 export const USB_POWER_TEXT: Record<UsbPowerResult, string> = {
-  awake: "The target is already on: its USB is running",
-  woke: "The target woke up",
-  "no answer":
+  awake: tm("The target is already on: its USB is running"),
+  woke: tm("The target woke up"),
+  "no answer": tm(
     "Sent the USB wake signal. If the target stays off, its BIOS does not power on from USB",
+  ),
 };
 
 /** A device on the HDMI-CEC line, as the device last heard it. */
@@ -865,7 +874,7 @@ async function toolsFetch<T>(path: string, body?: unknown): Promise<T> {
   });
   if (res.status === 401) throw new Unauthorized();
   const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-  if (!res.ok) throw new ToolsError(data.error ?? `the ESP-KVM Tools request failed (${res.status})`, data.code ?? "failed");
+  if (!res.ok) throw new ToolsError(data.error ? t(data.error) : t("the ESP-KVM Tools request failed ({status})", { status: res.status }), data.code ?? "failed");
   return data as T;
 }
 
@@ -937,7 +946,7 @@ async function pushPost(path: string, body: unknown): Promise<{ id?: number }> {
     body: JSON.stringify(body),
   });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `Push request failed (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("Push request failed ({status})", { status: res.status })));
   return res.json();
 }
 
@@ -963,7 +972,7 @@ export async function tailscaleLogout(): Promise<void> {
     body: "{}",
   });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `Tailscale logout failed (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("Tailscale logout failed ({status})", { status: res.status })));
 }
 
 async function cecPost(path: string, body: unknown): Promise<Response> {
@@ -973,7 +982,7 @@ async function cecPost(path: string, body: unknown): Promise<Response> {
     body: JSON.stringify(body),
   });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `HDMI-CEC ${path} failed (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("HDMI-CEC {path} failed ({status})", { path, status: res.status })));
   return res;
 }
 
@@ -1006,7 +1015,7 @@ export async function cecSend(hex: string): Promise<string> {
 async function powerAction(action: "click" | "hold" | "reset"): Promise<void> {
   const res = await fetch(`/api/v1/power/${action}`, { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `power ${action} failed (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("power {action} failed ({status})", { action, status: res.status })));
 }
 
 /**
@@ -1018,7 +1027,7 @@ async function powerAction(action: "click" | "hold" | "reset"): Promise<void> {
 export async function replugUsb(): Promise<void> {
   const res = await fetch("/api/v1/hid/reattach", { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `re-plug failed (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("re-plug failed ({status})", { status: res.status })));
 }
 
 /** Where the KVM switch is. `machine` counts from 1. */
@@ -1045,7 +1054,7 @@ export async function selectMachine(machine?: number): Promise<void> {
   const q = machine ? `?machine=${machine}` : "";
   const res = await fetch(`/api/v1/power/switch${q}`, { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `switching failed (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("switching failed ({status})", { status: res.status })));
 }
 
 export const powerClick = () => powerAction("click");
@@ -1059,14 +1068,14 @@ export const powerReset = () => powerAction("reset");
 export async function updateCoproc(): Promise<void> {
   const res = await fetch("/api/v1/wifi/coproc/update", { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `the device answered ${res.status}`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("the device answered {status}", { status: res.status })));
 }
 
 /** Reboot the device itself (not the target). It drops off the network briefly. */
 export async function restartDevice(): Promise<void> {
   const res = await fetch("/api/v1/system/restart", { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(`restart failed (${res.status})`);
+  if (!res.ok) throw new Error(t("restart failed ({status})", { status: res.status }));
 }
 
 /**
@@ -1086,14 +1095,14 @@ export const TRIAL_SECONDS = 600;
 export async function keepUpdate(): Promise<void> {
   const res = await fetch("/api/v1/system/update/keep", { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `could not keep the update (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("could not keep the update ({status})", { status: res.status })));
 }
 
 /** Drop the update that is on trial: the device restarts onto the previous image. */
 export async function rollbackUpdate(): Promise<void> {
   const res = await fetch("/api/v1/system/update/rollback", { method: "POST", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `could not roll back (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("could not roll back ({status})", { status: res.status })));
 }
 
 export async function switchBootSlot(label: string): Promise<void> {
@@ -1103,7 +1112,7 @@ export async function switchBootSlot(label: string): Promise<void> {
     body: JSON.stringify({ label }),
   });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `switch to ${label} failed (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("switch to {label} failed ({status})", { label, status: res.status })));
 }
 
 /** Which TLS certificate the device is serving. `custom` is the operator's own. */
@@ -1143,13 +1152,13 @@ export async function runAcme(staging = false): Promise<void> {
     body: JSON.stringify({ staging }),
   });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `could not start (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("could not start ({status})", { status: res.status })));
 }
 
 export async function getTlsStatus(): Promise<TlsStatus> {
   const res = await fetch("/api/v1/tls", { cache: "no-store" });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(`tls status failed (${res.status})`);
+  if (!res.ok) throw new Error(t("tls status failed ({status})", { status: res.status }));
   return (await res.json()) as TlsStatus;
 }
 
@@ -1165,14 +1174,14 @@ export async function installCert(pem: string): Promise<void> {
     body: pem,
   });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `certificate rejected (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("certificate rejected ({status})", { status: res.status })));
 }
 
 /** Remove the operator certificate and revert to the self-signed one; restarts. */
 export async function revertCert(): Promise<void> {
   const res = await fetch("/api/v1/tls/cert", { method: "DELETE", headers: CONSOLE_HEADER });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `revert failed (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("revert failed ({status})", { status: res.status })));
 }
 
 /** How an upload ended, once every byte of the image was on the wire. */
@@ -1224,14 +1233,14 @@ export function uploadFirmware(
     xhr.onload = () => {
       if (xhr.status === 401) return reject(new Unauthorized());
       if (xhr.status >= 200 && xhr.status < 300) return resolve({ confirmed: true });
-      reject(rejectFromXhr(xhr, `update failed (${xhr.status})`));
+      reject(rejectFromXhr(xhr, t("update failed ({status})", { status: xhr.status })));
     };
     xhr.onerror = () => {
       /* A drop before the image was fully sent is a plain failure; one after it
          is the device restarting on top of its own reply, so report it as an
          unconfirmed success rather than an error the operator cannot act on. */
       if (sent) return resolve({ confirmed: false });
-      reject(new Error("update failed: the connection dropped"));
+      reject(new Error(t("update failed: the connection dropped")));
     };
     xhr.send(file);
   });
@@ -1329,10 +1338,12 @@ function rateLimitMessage(res: Response): string | null {
   if (res.headers.get("x-ratelimit-remaining") !== "0") return null;
   const reset = Number(res.headers.get("x-ratelimit-reset"));
   const when = Number.isFinite(reset) && reset > 0 ? new Date(reset * 1000) : null;
-  const at = when
-    ? ` It resets at ${when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`
-    : "";
-  return `GitHub is rate-limiting this network - 60 requests an hour, counted per address, shared with anything else here that talks to it.${at}`;
+  const text = t(
+    "GitHub is rate-limiting this network - 60 requests an hour, counted per address, shared with anything else here that talks to it.",
+  );
+  return when
+    ? `${text} ${t("It resets at {time}.", { time: when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) })}`
+    : text;
 }
 
 export async function listReleases(boardId: string | undefined): Promise<PublishedRelease[]> {
@@ -1346,7 +1357,7 @@ export async function listReleases(boardId: string | undefined): Promise<Publish
     /* private window, or something else wrote nonsense there: just ask */
   }
   const res = await fetch(RELEASES_URL);
-  if (!res.ok) throw new Error(rateLimitMessage(res) ?? `GitHub answered ${res.status}`);
+  if (!res.ok) throw new Error(rateLimitMessage(res) ?? t("GitHub answered {status}", { status: res.status }));
   const body = (await res.json()) as Array<{
     tag_name?: string;
     published_at?: string;
@@ -1393,14 +1404,14 @@ export async function installRelease(version: string, trial = 0): Promise<void> 
   if (res.status === 401) throw new Unauthorized();
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `the device answered ${res.status}`);
+    throw new Error(body.error ? t(body.error) : t("the device answered {status}", { status: res.status }));
   }
 }
 
 export async function installStatus(): Promise<InstallStatus> {
   const res = await fetch("/api/v1/system/install", { cache: "no-store" });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(`the device answered ${res.status}`);
+  if (!res.ok) throw new Error(t("the device answered {status}", { status: res.status }));
   return (await res.json()) as InstallStatus;
 }
 
@@ -1424,7 +1435,7 @@ export interface FirmwareRelease {
 
 export async function fetchRelease(manifestUrl: string): Promise<FirmwareRelease> {
   const res = await fetch(manifestUrl, { cache: "no-store" });
-  if (!res.ok) throw new Error(`the update manifest returned ${res.status}`);
+  if (!res.ok) throw new Error(t("the update manifest returned {status}", { status: res.status }));
   const body = (await res.json()) as {
     version?: string;
     file?: string;
@@ -1432,7 +1443,7 @@ export async function fetchRelease(manifestUrl: string): Promise<FirmwareRelease
     released?: string;
     notes?: string;
   };
-  if (!body.version || !body.file) throw new Error("the update manifest is missing a version");
+  if (!body.version || !body.file) throw new Error(t("the update manifest is missing a version"));
   return {
     version: body.version,
     url: new URL(body.file, manifestUrl).href,
@@ -1489,7 +1500,7 @@ export async function downloadFirmware(
   onProgress?: (fraction: number) => void,
 ): Promise<Blob> {
   const res = await fetch(release.url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`downloading ${release.version} returned ${res.status}`);
+  if (!res.ok) throw new Error(t("downloading {version} returned {status}", { version: release.version, status: res.status }));
   const total = Number(res.headers.get("content-length")) || release.size || 0;
   if (!onProgress || !total || !res.body) return await res.blob();
 
@@ -1611,7 +1622,7 @@ async function postFetch(path: string, body?: unknown): Promise<void> {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, `the download did not start (${res.status})`));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("the download did not start ({status})", { status: res.status })));
 }
 
 /** Start a download; rejects with the device's reason (no card, too big, busy). */
@@ -1666,9 +1677,9 @@ function uploadPart(
     xhr.onload = () => {
       if (xhr.status === 401) return reject(new Unauthorized());
       if (xhr.status >= 200 && xhr.status < 300) return resolve();
-      reject(rejectFromXhr(xhr, `upload failed (${xhr.status})`));
+      reject(rejectFromXhr(xhr, t("upload failed ({status})", { status: xhr.status })));
     };
-    xhr.onerror = () => reject(new Error("upload failed: the connection dropped"));
+    xhr.onerror = () => reject(new Error(t("upload failed: the connection dropped")));
     xhr.send(body);
   });
 }
@@ -1697,12 +1708,12 @@ export function uploadRescue(
         try {
           return resolve(JSON.parse(xhr.responseText) as StorageInfo);
         } catch {
-          return reject(new Error("upload succeeded but the reply was unreadable"));
+          return reject(new Error(t("upload succeeded but the reply was unreadable")));
         }
       }
-      reject(rejectFromXhr(xhr, `upload failed (${xhr.status})`));
+      reject(rejectFromXhr(xhr, t("upload failed ({status})", { status: xhr.status })));
     };
-    xhr.onerror = () => reject(new Error("upload failed: the connection dropped"));
+    xhr.onerror = () => reject(new Error(t("upload failed: the connection dropped")));
     xhr.send(file);
   });
 }
@@ -1734,7 +1745,7 @@ export async function deleteImage(name: string): Promise<StorageInfo> {
   if (res.status === 401) throw new Unauthorized();
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error((body as { error?: string }).error ?? `delete failed (${res.status})`);
+    throw new Error(errorText(body, t("delete failed ({status})", { status: res.status })));
   }
   return body as StorageInfo;
 }
@@ -1842,24 +1853,24 @@ export function settingBlockedReason(
   if (!setting.requires) return null;
   const cap = caps[setting.requires];
   if (!cap) return null;
-  if (!cap.compiled) return cap.reason ?? "not built into this firmware";
-  if (!cap.available) return cap.reason ?? "not available on this hardware";
+  if (!cap.compiled) return cap.reason ? t(cap.reason) : t("not built into this firmware");
+  if (!cap.available) return cap.reason ? t(cap.reason) : t("not available on this hardware");
   return null;
 }
 
 export const SECTION_TITLES: Record<string, string> = {
-  video: "Video",
-  input: "Input",
-  storage: "Virtual media",
-  power: "Power",
-  network: "Network",
-  vpn: "VPN",
-  mqtt: "MQTT / Home Assistant",
-  notify: "Notifications",
-  security: "Security",
-  display: "Display",
-  system: "System",
-  pins: "Pins",
+  video: tm("Video"),
+  input: tm("Input"),
+  storage: tm("Virtual media"),
+  power: tm("Power"),
+  network: tm("Network"),
+  vpn: tm("VPN"),
+  mqtt: tm("MQTT / Home Assistant"),
+  notify: tm("Notifications"),
+  security: tm("Security"),
+  display: tm("Display"),
+  system: tm("System"),
+  pins: tm("Pins"),
 };
 
 export const SECTION_ORDER = [
@@ -1939,7 +1950,7 @@ export async function searchCaptures(phrase: string): Promise<{ hits: TextHit[];
     headers: CONSOLE_HEADER,
   });
   if (res.status === 401) throw new Unauthorized();
-  if (!res.ok) throw new Error(await errorFromResponse(res, "the search failed"));
+  if (!res.ok) throw new Error(await errorFromResponse(res, t("the search failed")));
   return (await res.json()) as { hits: TextHit[]; more: boolean };
 }
 

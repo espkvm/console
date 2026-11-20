@@ -11,6 +11,7 @@ import Icon from "./Icon.vue";
 import { computed, ref } from "vue";
 
 import { CONSOLE_HEADER, logUrl, type SystemInfo } from "../state/device";
+import { t } from "../i18n";
 
 /* The feedback thread in Discussions. */
 const FEEDBACK_URL = "https://github.com/orgs/espkvm/discussions/65";
@@ -23,8 +24,8 @@ const root = ref<HTMLElement | null>(null);
 useRailPopup(root, open);
 
 const tempLabel = computed(() => {
-  const t = props.system?.tempC ?? 0;
-  return t > 0 ? `${Math.round(t)}` : "";
+  const c = props.system?.tempC ?? 0;
+  return c > 0 ? `${Math.round(c)}` : "";
 });
 
 /* A single coarse unit is enough at a glance - minutes, then hours, days,
@@ -63,8 +64,8 @@ async function eraseDump() {
       type="button"
       class="rail-btn dw-btn"
       :class="{ 'rail-btn-active': open }"
-      :title="`Diagnostics${tempLabel ? ` - ${tempLabel} C` : ''}, up ${uptimeLabel}`"
-      aria-label="Diagnostics"
+      :title="tempLabel ? t('Diagnostics - {temp} C, up {uptime}', { temp: tempLabel, uptime: uptimeLabel }) : t('Diagnostics, up {uptime}', { uptime: uptimeLabel })"
+      :aria-label="t('Diagnostics')"
       @click="open = !open"
     >
       <span v-if="tempLabel" class="dw-temp mono">{{ tempLabel }}&deg;</span>
@@ -75,12 +76,12 @@ async function eraseDump() {
       <div class="dw-backdrop" @click="open = false" />
       <div class="dw-popup">
         <div class="dw-head">
-          <h3>Diagnostics</h3>
+          <h3>{{ t("Diagnostics") }}</h3>
           <button
             type="button"
             class="btn btn-sm btn-icon btn-quiet"
-            aria-label="Close"
-            title="Close"
+            :aria-label="t('Close')"
+            :title="t('Close')"
             @click="open = false"
           >
             <Icon name="close" :size="15" />
@@ -88,28 +89,27 @@ async function eraseDump() {
         </div>
         <dl class="facts">
           <div v-if="system.tempC > 0" class="fact">
-            <dt>Chip temperature</dt>
+            <dt>{{ t("Chip temperature") }}</dt>
             <dd class="mono">{{ system.tempC.toFixed(1) }}&deg;C</dd>
           </div>
           <div class="fact">
-            <dt>Free memory</dt>
+            <dt>{{ t("Free memory") }}</dt>
             <dd class="mono">
-              {{ Math.round(system.heapFree / 1024) }}K heap,
-              {{ Math.round(system.psramFree / 1024 / 1024) }}M PSRAM
+              {{ t("{heap}K heap, {psram}M PSRAM", { heap: Math.round(system.heapFree / 1024), psram: Math.round(system.psramFree / 1024 / 1024) }) }}
             </dd>
           </div>
           <div class="fact">
-            <dt>Uptime</dt>
-            <dd class="mono">{{ Math.floor(system.uptimeSeconds / 60) }} min</dd>
+            <dt>{{ t("Uptime") }}</dt>
+            <dd class="mono">{{ t("{m} min", { m: Math.floor(system.uptimeSeconds / 60) }) }}</dd>
           </div>
           <div class="fact"><dt>ESP-IDF</dt><dd class="mono">{{ system.idf }}</dd></div>
           <div v-if="system.boardTempC != null" class="fact">
-            <dt>By the board</dt>
+            <dt>{{ t("By the board") }}</dt>
             <dd class="mono">{{ system.boardTempC.toFixed(1) }}&deg;C</dd>
           </div>
           <div v-if="system.rtc" class="fact">
-            <dt>Clock</dt>
-            <dd>battery-backed ({{ system.rtcChip || "clock chip" }})</dd>
+            <dt>{{ t("Clock") }}</dt>
+            <dd>{{ t("battery-backed ({chip})", { chip: system.rtcChip || t("clock chip") }) }}</dd>
           </div>
         </dl>
         <!--
@@ -120,31 +120,29 @@ async function eraseDump() {
         <p class="dw-log">
           <span class="dw-row">
             <button type="button" class="btn btn-sm" @click="open = false; emit('liveLog')">
-              Live log
+              {{ t("Live log") }}
             </button>
             <a :href="logUrl()" download="espkvm-log.txt" class="btn btn-sm">
-              Download the log
+              {{ t("Download the log") }}
             </a>
           </span>
           <span class="muted">
-            The last few hundred lines, including the run before the current one.
-            No passwords or keys &mdash; but it does name your network, addresses
-            and MAC, so give it a look before posting it in public.
+            {{ t("The last few hundred lines, including the run before the current one.") }}
+            {{ t("No passwords or keys \u2014 but it does name your network, addresses and MAC, so give it a look before posting it in public.") }}
           </span>
         </p>
         <p class="dw-log" v-if="dumpBytes > 0">
           <span class="dw-row">
             <a href="/api/v1/system/coredump" download class="btn btn-sm">
-              Download the crash dump
+              {{ t("Download the crash dump") }}
             </a>
             <button type="button" class="btn btn-sm" :disabled="erasing" @click="eraseDump">
-              Throw it away
+              {{ t("Throw it away") }}
             </button>
           </span>
           <span class="muted">
-            The firmware panicked and wrote {{ Math.round(dumpBytes / 1024) }} KB of
-            registers and stacks before rebooting. Worth attaching to a bug report
-            &mdash; it holds no settings and no keys.
+            {{ t("The firmware panicked and wrote {kb} KB of registers and stacks before rebooting.", { kb: Math.round(dumpBytes / 1024) }) }}
+            {{ t("Worth attaching to a bug report \u2014 it holds no settings and no keys.") }}
           </span>
         </p>
         <!--
@@ -154,20 +152,20 @@ async function eraseDump() {
         <p class="dw-log">
           <span class="dw-row">
             <a :href="FEEDBACK_URL" target="_blank" rel="noopener" class="btn btn-sm">
-              Tell me what you think
+              {{ t("Tell me what you think") }}
             </a>
             <a href="https://github.com/espkvm/espkvm/issues/new" target="_blank" rel="noopener"
               class="btn btn-sm">
-              Report a bug
+              {{ t("Report a bug") }}
             </a>
             <a href="https://github.com/espkvm/espkvm#if-it-does-not-work" target="_blank"
               rel="noopener" class="btn btn-sm btn-quiet">
-              If it does not work
+              {{ t("If it does not work") }}
             </a>
           </span>
           <span class="muted">
-            What you like, what gets in your way, what is missing &mdash; one line is
-            plenty. A bug report goes better with the log above.
+            {{ t("What you like, what gets in your way, what is missing \u2014 one line is plenty.") }}
+            {{ t("A bug report goes better with the log above.") }}
           </span>
         </p>
       </div>

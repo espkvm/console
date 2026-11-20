@@ -21,6 +21,7 @@ import {
 } from "../state/profiles";
 import { runRestart } from "../state/restart";
 import { toast } from "../state/toasts";
+import { t, tm } from "../i18n";
 
 const emit = defineEmits<{ values: [Values] }>();
 
@@ -46,9 +47,9 @@ async function settle(list: ProfileList) {
   emit("values", await loadValues());
   if (
     list.reboot &&
-    confirm("Some settings of this profile apply after a restart (the gamepad, the EDID). Restart now?")
+    confirm(t("Some settings of this profile apply after a restart (the gamepad, the EDID). Restart now?"))
   ) {
-    if (await runRestart("Restarting the device", restartDevice, { kind: "manual" })) {
+    if (await runRestart(t("Restarting the device"), restartDevice, { kind: "manual" })) {
       location.reload();
     }
   }
@@ -82,7 +83,7 @@ function openNew() {
 }
 
 const newPlaceholder = computed(
-  () => profiles.value?.presets.find((p) => p.id === newFrom.value)?.name ?? "New profile",
+  () => profiles.value?.presets.find((p) => p.id === newFrom.value)?.name ?? t("New profile"),
 );
 
 async function makeNew() {
@@ -113,13 +114,13 @@ async function saveEdit() {
 
 async function removeActive() {
   const p = active.value;
-  if (!p || !confirm(`Delete the profile "${p.name}"? Default becomes active.`)) return;
+  if (!p || !confirm(t('Delete the profile "{name}"? Default becomes active.', { name: p.name }))) return;
   await run(() => deleteProfile(p.id));
   open.value = "";
 }
 
 const OS_CHOICES = [
-  ["", "any"],
+  ["", tm("any")],
   ["windows", "Windows"],
   ["macos", "macOS"],
   ["linux", "Linux"],
@@ -130,79 +131,77 @@ const OS_CHOICES = [
 <template>
   <div v-if="profiles" class="profile-bar">
     <div class="profile-row">
-      <label class="setting-title" for="profile-pick">Profile</label>
+      <label class="setting-title" for="profile-pick">{{ t("Profile") }}</label>
       <select id="profile-pick" :value="String(profiles.active)" :disabled="busy" @change="onSelect">
         <option v-for="p in profiles.profiles" :key="p.id" :value="String(p.id)">
           {{ p.name }}
         </option>
       </select>
-      <span v-if="custom" class="badge" :title="profiles.manual ? 'Picked by hand' : 'Picked for the attached device'">
-        {{ profiles.manual ? "by hand" : "auto" }}
+      <span v-if="custom" class="badge" :title="profiles.manual ? t('Picked by hand') : t('Picked for the attached device')">
+        {{ profiles.manual ? t("by hand") : t("auto") }}
       </span>
       <span class="profile-actions">
-        <button type="button" class="btn btn-sm" :disabled="busy || full" @click="openNew">New</button>
+        <button type="button" class="btn btn-sm" :disabled="busy || full" @click="openNew">{{ t("New") }}</button>
         <button v-if="custom" type="button" class="btn btn-sm" :disabled="busy" @click="openEdit">
-          Edit
+          {{ t("Edit") }}
         </button>
       </span>
     </div>
     <p class="setting-note profile-note">
       <template v-if="custom">
-        Settings marked with the profile's name are its own. The rest come from Default.
+        {{ t("Settings marked with the profile's name are its own. The rest come from Default.") }}
       </template>
       <template v-else>
-        Default is used for every device. A profile keeps its own pointer, gamepad and
-        video settings for one device.
+        {{ t("Default is used for every device. A profile keeps its own pointer, gamepad and video settings for one device.") }}
       </template>
     </p>
 
     <form v-if="open === 'new'" class="profile-form" @submit.prevent="makeNew">
       <label>
-        Start from
+        {{ t("Start from") }}
         <select v-model="newFrom" :disabled="busy">
-          <option v-for="p in profiles.presets" :key="p.id" :value="p.id">{{ p.name }}</option>
-          <option value="current">a copy of {{ active?.name ?? "Default" }}</option>
-          <option value="empty">nothing (all from Default)</option>
+          <option v-for="p in profiles.presets" :key="p.id" :value="p.id">{{ t(p.name) }}</option>
+          <option value="current">{{ t("a copy of {name}", { name: active?.name ?? t("Default") }) }}</option>
+          <option value="empty">{{ t("nothing (all from Default)") }}</option>
         </select>
       </label>
       <label>
-        Name
+        {{ t("Name") }}
         <input v-model="newName" type="text" maxlength="31" :placeholder="newPlaceholder" />
       </label>
       <span class="profile-actions">
-        <button type="submit" class="btn btn-sm" :disabled="busy">Make it</button>
-        <button type="button" class="btn btn-sm" @click="open = ''">Cancel</button>
+        <button type="submit" class="btn btn-sm" :disabled="busy">{{ t("Make it") }}</button>
+        <button type="button" class="btn btn-sm" @click="open = ''">{{ t("Cancel") }}</button>
       </span>
     </form>
 
     <form v-if="open === 'edit'" class="profile-form" @submit.prevent="saveEdit">
       <label>
-        Name
+        {{ t("Name") }}
         <input v-model="editName" type="text" maxlength="31" />
       </label>
       <p class="setting-note">
-        Picked by itself when the attached device fits. A CEC name or vendor wins over the USB guess
-        alone. Leave all three empty to pick it only by hand.
+        {{ t("Picked by itself when the attached device fits. A CEC name or vendor wins over the USB guess alone. Leave all three empty to pick it only by hand.") }}
       </p>
       <label>
-        CEC name starts with
-        <input v-model="editMatch.cecName" type="text" maxlength="14" placeholder="any" />
+        {{ t("CEC name starts with") }}
+        <input v-model="editMatch.cecName" type="text" maxlength="14" :placeholder="t('any')" />
       </label>
       <label>
-        CEC vendor id
-        <input v-model="editMatch.cecVendor" type="text" maxlength="6" placeholder="any, e.g. 0009bf" />
+        {{ t("CEC vendor id") }}
+        <input v-model="editMatch.cecVendor" type="text" maxlength="6" :placeholder="t('any, e.g. 0009bf')" />
       </label>
       <label>
-        OS by USB
+        {{ t("OS by USB") }}
         <select v-model="editMatch.usbOs">
-          <option v-for="[v, t] in OS_CHOICES" :key="v" :value="v">{{ t }}</option>
+          <option v-for="[v, label] in OS_CHOICES" :key="v" :value="v">{{ v ? label : t(label) }}</option>
         </select>
       </label>
       <span class="profile-actions">
-        <button type="submit" class="btn btn-sm" :disabled="busy">Save</button>
-        <button type="button" class="btn btn-sm" @click="open = ''">Cancel</button>
+        <button type="submit" class="btn btn-sm" :disabled="busy">{{ t("Save") }}</button>
+        <button type="button" class="btn btn-sm" @click="open = ''">{{ t("Cancel") }}</button>
         <button type="button" class="btn btn-sm btn-danger" :disabled="busy" @click="removeActive">
-          Delete
+          {{ t("Delete") }}
         </button>
       </span>
     </form>

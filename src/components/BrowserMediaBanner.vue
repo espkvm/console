@@ -6,25 +6,29 @@
  */
 import { browserMedia, mobileBrowser, stopServing } from "../state/browserMedia";
 import { formatBytes } from "../state/device";
+import { t } from "../i18n";
 </script>
 
 <template>
   <div v-if="browserMedia.state !== 'off'" class="update-banner" role="status">
     <span>
-      The target reads <b>{{ browserMedia.name }}</b> from this tab<template
-        v-if="browserMedia.state === 'reconnecting'"
-      >
-        (reconnecting...)</template
-      ><template v-else-if="browserMedia.served">
-        ({{ formatBytes(browserMedia.served) }} so far)</template
-      >. Keep this tab open while it does.<template v-if="mobileBrowser">
-        On a phone, keep it in front: a tab in the background may be stopped.</template
+      <template v-if="browserMedia.state === 'reconnecting'">{{
+        t("The target reads {name} from this tab (reconnecting...). Keep this tab open while it does.", { name: browserMedia.name })
+      }}</template
+      ><template v-else-if="browserMedia.served">{{
+        t("The target reads {name} from this tab ({size} so far). Keep this tab open while it does.", { name: browserMedia.name, size: formatBytes(browserMedia.served) })
+      }}</template
+      ><template v-else>{{
+        t("The target reads {name} from this tab. Keep this tab open while it does.", { name: browserMedia.name })
+      }}</template
+      ><template v-if="mobileBrowser">
+        {{ t("On a phone, keep it in front: a tab in the background may be stopped.") }}</template
       >
     </span>
-    <button type="button" class="btn btn-sm" @click="stopServing">Eject</button>
+    <button type="button" class="btn btn-sm" @click="stopServing">{{ t("Eject") }}</button>
   </div>
   <div v-else-if="browserMedia.stopped" class="update-banner update-banner-bad" role="status">
-    <span>{{ browserMedia.name }} is no longer served: {{ browserMedia.stopped }}</span>
-    <button type="button" class="btn btn-sm" @click="browserMedia.stopped = ''">Dismiss</button>
+    <span>{{ t("{name} is no longer served: {reason}", { name: browserMedia.name, reason: browserMedia.stopped }) }}</span>
+    <button type="button" class="btn btn-sm" @click="browserMedia.stopped = ''">{{ t("Dismiss") }}</button>
   </div>
 </template>

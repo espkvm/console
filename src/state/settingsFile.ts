@@ -7,6 +7,7 @@
 
 import type { Setting, Values } from "./device";
 import type { Profile, ProfileMatch } from "./profiles";
+import { t, tn } from "../i18n";
 
 export const FILE_KIND = "espkvm-settings";
 export const FILE_VERSION = 1;
@@ -134,16 +135,16 @@ export function readFile(text: string): SettingsFile {
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new Error("that file is not JSON");
+    throw new Error(t("that file is not JSON"));
   }
   const f = parsed as Partial<SettingsFile>;
   if (!f || typeof f !== "object" || f.kind !== FILE_KIND) {
-    throw new Error("that is not an ESP-KVM settings file");
+    throw new Error(t("that is not an ESP-KVM settings file"));
   }
   if (typeof f.version !== "number" || f.version > FILE_VERSION) {
-    throw new Error("that file was written by a newer console");
+    throw new Error(t("that file was written by a newer console"));
   }
-  if (!f.values || typeof f.values !== "object") throw new Error("that file has no settings in it");
+  if (!f.values || typeof f.values !== "object") throw new Error(t("that file has no settings in it"));
   return f as SettingsFile;
 }
 
@@ -223,35 +224,45 @@ export function describePlan(plan: ImportPlan, applied: boolean): string[] {
   const lines: string[] = [];
   lines.push(
     applied
-      ? `${n} setting${n === 1 ? "" : "s"} applied.`
-      : `${n} setting${n === 1 ? "" : "s"} would change.`,
+      ? tn("{n} setting applied.", "{n} settings applied.", n)
+      : tn("{n} setting would change.", "{n} settings would change.", n),
   );
-  if (plan.same.length) lines.push(`${plan.same.length} already had the value in the file.`);
+  if (plan.same.length) lines.push(tn("{n} already had the value in the file.", "{n} already had the value in the file.", plan.same.length));
   if (plan.profiles.length) {
     lines.push(
-      `Device profiles: ${plan.profiles.map((p) => p.name).join(", ")}. ` +
-        "One with the same name here is updated, the others are made.",
+      t("Device profiles: {list}. One with the same name here is updated, the others are made.", {
+        list: plan.profiles.map((p) => p.name).join(", "),
+      }),
     );
   }
   if (plan.identity.length) {
     lines.push(
-      `Left alone as this device's own: ${plan.identity.join(", ")}. ` +
-        "Two devices with one hostname or one address collide, and the screen layout belongs to the computer it is plugged into.",
+      t(
+        "Left alone as this device's own: {list}. " +
+          "Two devices with one hostname or one address collide, and the screen layout belongs to the computer it is plugged into.",
+        { list: plan.identity.join(", ") },
+      ),
     );
   }
   if (plan.unknown.length) {
-    lines.push(`Not settings this firmware has: ${plan.unknown.join(", ")}.`);
+    lines.push(t("Not settings this firmware has: {list}.", { list: plan.unknown.join(", ") }));
   }
   if (plan.secrets.length) {
     lines.push(
-      `Passwords and private keys are never in the file (${plan.secrets.join(", ")}) - ` +
-        "set them again by hand, or the VPN and the broker will not come up.",
+      t(
+        "Passwords and private keys are never in the file ({list}) - " +
+          "set them again by hand, or the VPN and the broker will not come up.",
+        { list: plan.secrets.join(", ") },
+      ),
     );
   }
   if (plan.otherBoard) {
     lines.push(
-      `The file came off "${plan.file.board}" and this is a "${plan.board}" - ` +
-        "check the Pins tab before trusting the pin settings.",
+      t(
+        'The file came off "{from}" and this is a "{board}" - ' +
+          "check the Pins tab before trusting the pin settings.",
+        { from: plan.file.board ?? "", board: plan.board ?? "" },
+      ),
     );
   }
   return lines;

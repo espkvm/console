@@ -14,6 +14,7 @@ import Icon from "./Icon.vue";
 import type { Capability, Values } from "../state/device";
 import { UI_FEATURES, uiHidden } from "../ui/features";
 import { TOUR_FEATURES, featureShown, type TourAction, type TourPanel } from "../ui/tour";
+import { t } from "../i18n";
 
 type IconName = InstanceType<typeof Icon>["$props"]["name"];
 
@@ -64,7 +65,7 @@ const shown = computed(() => {
       state,
       off: state === "Off" || state === "No password",
       fresh: fresh.has(f.title),
-      hidden: (f.ui ?? []).filter((id) => uiHidden.value.has(id)).map((id) => LABELS.get(id) ?? id),
+      hidden: (f.ui ?? []).filter((id) => uiHidden.value.has(id)).map((id) => t(LABELS.get(id) ?? id)),
     };
   });
 });
@@ -80,15 +81,15 @@ function run(a: TourAction) {
 <template>
   <button v-if="folded" type="button" class="btn btn-sm ft-chip" @click="emit('unfold')">
     <Icon name="info" :size="14" />
-    Back to the overview
+    {{ t("Back to the overview") }}
   </button>
   <section v-else class="ft" role="dialog" aria-labelledby="ft-title">
     <header class="ft-head">
       <div>
         <small v-if="step" class="ft-step">{{ step }}</small>
-        <h2 id="ft-title">What this device can do</h2>
+        <h2 id="ft-title">{{ t("What this device can do") }}</h2>
       </div>
-      <button type="button" class="icon-btn" aria-label="Close" title="Close" @click="emit('done')">
+      <button type="button" class="icon-btn" :aria-label="t('Close')" :title="t('Close')" @click="emit('done')">
         <Icon name="close" :size="15" />
       </button>
     </header>
@@ -97,14 +98,14 @@ function run(a: TourAction) {
         <Icon :name="f.icon" :size="20" class="ft-icon" />
         <div class="ft-text">
           <div class="ft-title">
-            <strong>{{ f.title }}</strong>
-            <span v-if="f.fresh" class="ft-badge ft-new">New</span>
-            <span v-if="f.state" :class="['ft-badge', { 'ft-off': f.off }]">{{ f.state }}</span>
+            <strong>{{ t(f.title) }}</strong>
+            <span v-if="f.fresh" class="ft-badge ft-new">{{ t("New") }}</span>
+            <span v-if="f.state" :class="['ft-badge', { 'ft-off': f.off }]">{{ t(f.state) }}</span>
           </div>
-          <small><KeyText :text="f.line" /></small>
+          <small><KeyText :text="t(f.line)" /></small>
           <small v-if="f.hidden.length" class="ft-hidden">
-            Hidden in this console: {{ f.hidden.join(", ") }}.
-            <button type="button" class="ft-link" @click="emit('settings', 'ui', 'Buttons')">Show them</button>
+            {{ t("Hidden in this console: {list}.", { list: f.hidden.join(", ") }) }}
+            <button type="button" class="ft-link" @click="emit('settings', 'ui', 'Buttons')">{{ t("Show them") }}</button>
           </small>
           <div class="ft-actions">
             <button
@@ -113,23 +114,23 @@ function run(a: TourAction) {
               type="button"
               class="btn btn-sm"
               :disabled="a.select && !textMode"
-              :title="a.select && !textMode ? 'The target is not showing a text screen' : undefined"
+              :title="a.select && !textMode ? t('The target is not showing a text screen') : undefined"
               @click="run(a)"
             >
-              {{ a.label }}
+              {{ t(a.label) }}
             </button>
-            <a v-if="f.docs" :href="f.docs" target="_blank" rel="noopener" class="ft-more">More</a>
+            <a v-if="f.docs" :href="f.docs" target="_blank" rel="noopener" class="ft-more">{{ t("More") }}</a>
           </div>
         </div>
       </li>
     </ul>
     <p class="ft-missing">
-      Missing something you need?
-      <a :href="DISCUSSIONS" target="_blank" rel="noopener">Open a discussion on GitHub</a>
-      and say what it is.
+      {{ t("Missing something you need?") }}
+      <a :href="DISCUSSIONS" target="_blank" rel="noopener">{{ t("Open a discussion on GitHub") }}</a>
+      {{ t("and say what it is.") }}
     </p>
     <div class="ft-foot">
-      <button type="button" class="btn btn-primary" @click="emit('done')">Got it</button>
+      <button type="button" class="btn btn-primary" @click="emit('done')">{{ t("Got it") }}</button>
     </div>
   </section>
 </template>

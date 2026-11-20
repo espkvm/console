@@ -23,6 +23,7 @@ import { RtcStream, rtcSupported } from "../video/rtcStream";
 import { playersOpen, WsSound, wsSoundSupported } from "../video/sound";
 import { VideoStream, drawn, type Handlers } from "../video/stream";
 import Icon from "./Icon.vue";
+import { t } from "../i18n";
 
 const props = defineProps<{
   status: VideoStatus | null;
@@ -346,8 +347,8 @@ function dockTile(W: number, H: number, i: number) {
 }
 function dockHit(W: number, H: number, x: number, y: number): number {
   for (let i = 0; i < 6; i++) {
-    const t = dockTile(W, H, i);
-    if (x > t.x && x < t.x + t.w && y > t.y - DOCK.up && y < t.y + t.h) return i;
+    const tile = dockTile(W, H, i);
+    if (x > tile.x && x < tile.x + tile.w && y > tile.y - DOCK.up && y < tile.y + tile.h) return i;
   }
   return -1;
 }
@@ -385,18 +386,18 @@ function drawPearDesktop(
   const over = hover ? dockHit(W, H, hover.x, hover.y) : -1;
   const colours = ["#5b8def", "#57b894", "#e6a23c", "#e26d6d", "#9b6de2", "#6dc7e2"];
   colours.forEach((col, i) => {
-    const t = dockTile(W, H, i);
+    const tile = dockTile(W, H, i);
     /* A tile rises under the pointer. Without it the dock looks painted on, and
        nobody finds the one that does something. */
     const lift = i === over ? DOCK.up : 0;
     c.fillStyle = col;
     c.beginPath();
-    c.roundRect(t.x, t.y - lift, t.w, t.h, 10);
+    c.roundRect(tile.x, tile.y - lift, tile.w, tile.h, 10);
     c.fill();
     if (lift) {
       c.fillStyle = "rgba(255,255,255,0.85)";
       c.beginPath();
-      c.arc(t.x + t.w / 2, H - 12, 3, 0, Math.PI * 2);
+      c.arc(tile.x + tile.w / 2, H - 12, 3, 0, Math.PI * 2);
       c.fill();
     }
   });
@@ -410,10 +411,10 @@ function drawMac(
   hover: { x: number; y: number } | null,
 ) {
   if (ms < 3200) return drawHappyMac(c, W, H, Math.min(1, ms / 2800));
-  const t = ms - 3200;
+  const since = ms - 3200;
   /* The bar that stops at nine tenths, which is the whole joke. */
-  const k = t < 2200 ? (t / 2200) * 0.9 : t < 6200 ? 0.9 : Math.min(1, 0.9 + (t - 6200) / 900);
-  if (t < 7400) return drawPearBoot(c, W, H, k);
+  const k = since < 2200 ? (since / 2200) * 0.9 : since < 6200 ? 0.9 : Math.min(1, 0.9 + (since - 6200) / 900);
+  if (since < 7400) return drawPearBoot(c, W, H, k);
   drawPearDesktop(c, W, H, hover);
 }
 
@@ -655,7 +656,7 @@ function drawHills(
   c: CanvasRenderingContext2D,
   W: number,
   H: number,
-  t: number,
+  now: number,
   dt: number,
   herd: { x: number; y: number } | null,
 ) {
@@ -672,7 +673,7 @@ function drawHills(
   moveFlock(W, H, dt, herd);
   /* Far ones first, so a near sheep passes in front of one further up. */
   for (const s of [...SHEEP].sort((a, b) => a.y - b.y)) {
-    drawSheep(c, s.x, s.y, s.size, (t / 220) * s.speed * 0.08, s.dir, s.black);
+    drawSheep(c, s.x, s.y, s.size, (now / 220) * s.speed * 0.08, s.dir, s.black);
     if (s.black) {
       blackSheepAt.x = s.x;
       blackSheepAt.y = s.y;
@@ -833,9 +834,9 @@ function startDemoScreen() {
   const t0 = performance.now();
   let lastText = "";
   let lastFrame = 0;
-  const draw = (t: number) => {
-    const dt = lastFrame ? Math.min(0.1, (t - lastFrame) / 1000) : 0;
-    lastFrame = t;
+  const draw = (now: number) => {
+    const dt = lastFrame ? Math.min(0.1, (now - lastFrame) / 1000) : 0;
+    lastFrame = now;
     drawn.frames++;
     /* A text screen while the machine is booting or sitting at a prompt. It
        changes rarely, so it is redrawn only when it changes. */
@@ -851,7 +852,7 @@ function startDemoScreen() {
     lastText = "";
     /* The eased pointer is caught up here, before the branches, because every
        picture guest draws it - not just the constellation. */
-    const byHid = t - hidAt < HID_DRIVES_MS;
+    const byHid = now - hidAt < HID_DRIVES_MS;
     if (!props.engaged && !byHid) hasPointer = false;
     const driving = (props.engaged || byHid) && hasPointer;
     /* The scene's focus eases along whatever it is given - the visitor's hand
@@ -877,8 +878,8 @@ function startDemoScreen() {
     if (scene === "hills") {
       /* The flock only has a shepherd once the visitor is actually driving, and
          only while the hand keeps moving. */
-      const shepherd = driving && t - movedAt < STILL_MS ? cur : null;
-      drawHills(c, W, H, t, dt, shepherd);
+      const shepherd = driving && now - movedAt < STILL_MS ? cur : null;
+      drawHills(c, W, H, now, dt, shepherd);
       if (everPointed) drawCursor(c, pointerAt.x, pointerAt.y);
       demoRAF = requestAnimationFrame(draw);
       return;
@@ -896,7 +897,7 @@ function startDemoScreen() {
       demoRAF = requestAnimationFrame(draw);
       return;
     }
-    const s = (t - t0) / 1000;
+    const s = (now - t0) / 1000;
     /* Gentle autonomous motion until the visitor moves the mouse. */
     if (!hasPointer) {
       target.x = W / 2 + Math.cos(s * 0.6) * W * 0.34;
@@ -911,7 +912,7 @@ function startDemoScreen() {
     c.fillStyle = glow;
     c.fillRect(0, 0, W, H);
 
-    const age = t - clickT;
+    const age = now - clickT;
     const pulse = age >= 0 && age < PULSE ? 1 - age / PULSE : 0;
     const ease = pulse > 0 ? 1 - Math.pow(1 - age / PULSE, 3) : 0;
     const R = 260;
@@ -1308,32 +1309,32 @@ watch([canvas, () => props.status?.width, () => props.status?.height], sizeCanva
 });
 
 const layerRows = computed(() => {
-  const t = props.textLayer;
-  if (!t) return [];
-  return textSpans(t.text, t.rows, t.highlight);
+  const layer = props.textLayer;
+  if (!layer) return [];
+  return textSpans(layer.text, layer.rows, layer.highlight);
 });
 
 const layerStyle = computed(() => {
-  const t = props.textLayer;
-  if (!t || box.value.width <= 0) return {};
+  const layer = props.textLayer;
+  if (!layer || box.value.width <= 0) return {};
   /*
    * The grid is not always the whole frame: a UEFI console centres 40 rows of
    * 19 in a 768-tall picture and leaves 4 pixels above and below. So scale the
    * frame the reading came from onto the video rectangle, and place the grid
    * inside it at the origin it was read at.
    */
-  const scaleX = t.width > 0 ? box.value.width / t.width : box.value.width / (t.cols * t.cellWidth);
+  const scaleX = layer.width > 0 ? box.value.width / layer.width : box.value.width / (layer.cols * layer.cellWidth);
   const scaleY =
-    t.height > 0 ? box.value.height / t.height : box.value.height / (t.rows * t.cellHeight);
-  const cellW = t.cellWidth * scaleX;
-  const cellH = t.cellHeight * scaleY;
+    layer.height > 0 ? box.value.height / layer.height : box.value.height / (layer.rows * layer.cellHeight);
+  const cellW = layer.cellWidth * scaleX;
+  const cellH = layer.cellHeight * scaleY;
   /* Size by the cell height, then pull the advance onto the cell width. */
   const fontPx = cellH * 0.82;
   return {
-    left: `${box.value.left + t.originX * scaleX}px`,
-    top: `${box.value.top + t.originY * scaleY}px`,
-    width: `${t.cols * cellW}px`,
-    height: `${t.rows * cellH}px`,
+    left: `${box.value.left + layer.originX * scaleX}px`,
+    top: `${box.value.top + layer.originY * scaleY}px`,
+    width: `${layer.cols * cellW}px`,
+    height: `${layer.rows * cellH}px`,
     font: `${fontPx}px/${cellH}px ${LAYER_FONT}`,
     letterSpacing: `${cellW - measureAdvance(fontPx)}px`,
   };
@@ -1358,16 +1359,16 @@ const noSignalNote = computed(() => {
   const st = props.status;
   if (!st) return "";
   if (!powerKnown.value) {
-    return (
+    return t(
       "This capture chip cannot tell a machine that is off or asleep from one that has " +
       "stopped sending. If the target should be showing something, reconnect the HDMI - " +
       "to the target that looks like the monitor was unplugged and plugged back in."
     );
   }
   if ((st.sysStatus & DDC5V) === 0) {
-    return "Nothing is plugged into the HDMI input, or the machine on the other end is powered off.";
+    return t("Nothing is plugged into the HDMI input, or the machine on the other end is powered off.");
   }
-  return (
+  return t(
     "The cable is connected and the target has power, but it is not sending a picture. " +
     "Its output may be switched off, or it decided nothing was connected when it started - " +
     "the device offers it a fresh hotplug a few times when this happens."
@@ -1483,7 +1484,7 @@ const fitClass = computed(() =>
           { 'screen-engaged': engaged, 'screen-img-blank': textView },
         ]"
         :src="imgSrc"
-        alt="Target screen"
+        :alt="t('Target screen')"
         :draggable="false"
         @load="
           loaded = true;
@@ -1508,7 +1509,7 @@ const fitClass = computed(() =>
           { 'screen-text-solid': textView, 'screen-engaged': engaged && textView },
         ]"
         :style="layerStyle"
-        aria-label="Screen text, selectable"
+        :aria-label="t('Screen text, selectable')"
       >
         <div v-for="(spans, i) in layerRows" :key="i" class="screen-text-line">
           <span
@@ -1529,20 +1530,20 @@ const fitClass = computed(() =>
             :size="26"
           />
         </span>
-        <h2 v-if="videoBlocked">Video is not available</h2>
-        <h2 v-else-if="paused">{{ pauseNote ? "Video paused for the update" : "Video paused" }}</h2>
-        <h2 v-else-if="noSignal">No signal</h2>
-        <h2 v-else-if="tooFast">The input mode is too fast</h2>
-        <h2 v-else-if="codecError">Cannot play this stream</h2>
-        <h2 v-else-if="failed">Stream interrupted</h2>
-        <h2 v-else>Waiting for the first frame...</h2>
+        <h2 v-if="videoBlocked">{{ t("Video is not available") }}</h2>
+        <h2 v-else-if="paused">{{ pauseNote ? t("Video paused for the update") : t("Video paused") }}</h2>
+        <h2 v-else-if="noSignal">{{ t("No signal") }}</h2>
+        <h2 v-else-if="tooFast">{{ t("The input mode is too fast") }}</h2>
+        <h2 v-else-if="codecError">{{ t("Cannot play this stream") }}</h2>
+        <h2 v-else-if="failed">{{ t("Stream interrupted") }}</h2>
+        <h2 v-else>{{ t("Waiting for the first frame...") }}</h2>
         <!-- The device's own sentence: it knows why, and inventing a second
              wording here would only disagree with Settings. -->
-        <p v-if="videoBlocked" class="muted">{{ videoBlocked }}</p>
+        <p v-if="videoBlocked" class="muted">{{ t(videoBlocked) }}</p>
         <p v-else-if="paused" class="muted">
           {{
-            pauseNote ||
-            "The stream is disconnected and the device has stopped encoding. Input still works."
+            pauseNote ? t(pauseNote) :
+            t("The stream is disconnected and the device has stopped encoding. Input still works.")
           }}
         </p>
         <p v-else-if="noSignal" class="muted">{{ noSignalNote }}</p>
@@ -1552,23 +1553,23 @@ const fitClass = computed(() =>
           <button
             type="button"
             class="btn btn-sm"
-            title="Moves the target's mouse one pixel and back, which wakes a screen that went dark"
+            :title="t('Moves the target\'s mouse one pixel and back, which wakes a screen that went dark')"
             @click="emit('wake')"
           >
-            Wake the target
+            {{ t("Wake the target") }}
           </button>
           <button
             type="button"
             class="btn btn-sm"
-            title="Sends the USB wake signal a keyboard key sends. Turns the target on from off if its BIOS allows it"
+            :title="t('Sends the USB wake signal a keyboard key sends. Turns the target on from off if its BIOS allows it')"
             @click="emit('usb-power')"
           >
-            Power on over USB
+            {{ t("Power on over USB") }}
           </button>
           <template v-if="reconnectState === 'counting'">
-            <p class="muted">Reconnecting the HDMI in {{ reconnectLeft }} s.</p>
-            <button type="button" class="btn btn-sm" @click="reconnectNow">Reconnect now</button>
-            <button type="button" class="btn btn-sm btn-quiet" @click="cancelReconnect">Don't</button>
+            <p class="muted">{{ t("Reconnecting the HDMI in {n} s.", { n: reconnectLeft }) }}</p>
+            <button type="button" class="btn btn-sm" @click="reconnectNow">{{ t("Reconnect now") }}</button>
+            <button type="button" class="btn btn-sm btn-quiet" @click="cancelReconnect">{{ t("Don't") }}</button>
           </template>
           <button
             v-else
@@ -1577,23 +1578,21 @@ const fitClass = computed(() =>
             :disabled="reconnectState === 'busy'"
             @click="reconnectNow"
           >
-            {{ reconnectState === "busy" ? "Reconnecting..." : "Reconnect HDMI" }}
+            {{ reconnectState === "busy" ? t("Reconnecting...") : t("Reconnect HDMI") }}
           </button>
-          <p v-if="reconnectError" class="muted">{{ reconnectError }}</p>
+          <p v-if="reconnectError" class="muted">{{ t(reconnectError) }}</p>
           <button v-if="serial" type="button" class="btn btn-sm btn-quiet" @click="emit('open-serial')">
-            Open the serial console
+            {{ t("Open the serial console") }}
           </button>
         </div>
         <p v-else-if="tooFast" class="muted">
-          The target sends {{ status?.width }}x{{ status?.height }} at {{ status?.inputHz }} Hz, more
-          than the capture link carries, so no frames arrive. Set it to 30 Hz or a smaller mode, or
-          pick the 1080p30 or 720p EDID profile in Settings > Video.
+          {{ t("The target sends {w}x{h} at {hz} Hz, more than the capture link carries, so no frames arrive.", { w: status?.width ?? "", h: status?.height ?? "", hz: status?.inputHz ?? "" }) }}
+          {{ t("Set it to 30 Hz or a smaller mode, or pick the 1080p30 or 720p EDID profile in Settings > Video.") }}
         </p>
         <p v-else-if="codecError" class="muted">
-          {{ codecError }}. Picking MJPEG in the video readout gives a picture this page can
-          always show.
+          {{ t(codecError) }}. {{ t("Picking MJPEG in the video readout gives a picture this page can always show.") }}
         </p>
-        <p v-else-if="failed" class="muted">Reconnecting...</p>
+        <p v-else-if="failed" class="muted">{{ t("Reconnecting...") }}</p>
       </div>
     </div>
   </div>

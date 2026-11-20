@@ -13,8 +13,9 @@
  * Macros are stored on the device (the macros_json setting), so they follow the
  * device rather than the browser.
  */
-import { charToHid, HID_MOD_LCTRL, HID_MOD_LSHIFT, HID_MOD_LALT, HID_MOD_LGUI } from "./layouts";
+import { charToStrokes, HID_MOD_LCTRL, HID_MOD_LSHIFT, HID_MOD_LALT, HID_MOD_LGUI } from "./layouts";
 import type { Control } from "./input/control";
+import { t } from "./i18n";
 
 export interface Macro {
   name: string;
@@ -98,15 +99,15 @@ export function parseCombo(combo: string): { mod: number; code: number } {
     if (tok in MODIFIERS) {
       mod |= MODIFIERS[tok];
     } else if (tok in KEYS) {
-      if (code) throw new Error(`more than one non-modifier key in "${combo}"`);
+      if (code) throw new Error(t('more than one non-modifier key in "{combo}"', { combo }));
       code = KEYS[tok];
     } else {
-      throw new Error(`unknown key "${tok}"`);
+      throw new Error(t('unknown key "{key}"', { key: tok }));
     }
   }
   // A lone modifier is a real keypress (GUI opens the Start menu); the report
   // path already sends a modifier with no key. Refuse only an empty chord.
-  if (!code && !mod) throw new Error(`no key in "${combo}"`);
+  if (!code && !mod) throw new Error(t('no key in "{combo}"', { combo }));
   return { mod, code };
 }
 
@@ -209,7 +210,7 @@ function duckyLine(line: string, out: string[], defDelay: number, at: (m: string
     if (rest) {
       for (const ch of rest) {
         const c = ch.charCodeAt(0);
-        if (c < 0x20 || c > 0x7e) throw at("STRING is US layout, ASCII only");
+        if (c < 0x20 || c > 0x7e) throw at(t("STRING is US layout, ASCII only"));
       }
       out.push(`type ${rest}`);
     }
@@ -219,7 +220,7 @@ function duckyLine(line: string, out: string[], defDelay: number, at: (m: string
   }
   if (verb === "DELAY") {
     if (!/^\d+$/.test(rest) || +rest < 1 || +rest > 60000) {
-      throw at("DELAY wants 1..60000 milliseconds");
+      throw at(t("DELAY wants 1..60000 milliseconds"));
     }
     out.push(`delay ${+rest}`);
     return;
@@ -234,9 +235,9 @@ function duckyLine(line: string, out: string[], defDelay: number, at: (m: string
       mods.push(DUCKY_MODS[tok]);
       continue;
     }
-    if (key) throw at("more than one key in the line");
+    if (key) throw at(t("more than one key in the line"));
     const k = duckyKey(tok);
-    if (!k) throw at(`unknown key "${tok}"`);
+    if (!k) throw at(t('unknown key "{key}"', { key: tok }));
     key = k;
   }
   const chord = [...mods, key].filter(Boolean).join("+");
@@ -254,20 +255,20 @@ export function duckyToNative(src: string): string {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
-    const at = (m: string) => new Error(`line ${i + 1}: ${m}`);
+    const at = (m: string) => new Error(t("line {line}: {problem}", { line: i + 1, problem: m }));
     const sp = line.search(/\s/);
     const verb = sp < 0 ? line : line.slice(0, sp);
     const rest = sp < 0 ? "" : line.slice(sp + 1).trim();
 
     if (verb === "REM") continue;
     if (verb === "DEFAULT_DELAY" || verb === "DEFAULTDELAY") {
-      if (!/^\d+$/.test(rest) || +rest > 60000) throw at("DEFAULT_DELAY wants 0..60000 milliseconds");
+      if (!/^\d+$/.test(rest) || +rest > 60000) throw at(t("DEFAULT_DELAY wants 0..60000 milliseconds"));
       defDelay = +rest;
       continue;
     }
     if (verb === "REPEAT") {
-      if (!/^\d+$/.test(rest) || +rest < 1 || +rest > 1000) throw at("REPEAT wants 1..1000");
-      if (!prev) throw at("REPEAT with nothing before it");
+      if (!/^\d+$/.test(rest) || +rest < 1 || +rest > 1000) throw at(t("REPEAT wants 1..1000"));
+      if (!prev) throw at(t("REPEAT with nothing before it"));
       for (let r = 0; r < +rest; r++) duckyLine(prev, out, defDelay, at);
       continue;
     }
@@ -296,35 +297,60 @@ export function parseMacroScript(script: string): ParsedStep[] {
         const { mod, code } = parseCombo(arg);
         steps.push({ kind: "key", mod, code });
       } else if (cmd === "type") {
-        if (!arg) throw new Error("type needs text");
+        if (!arg) throw new Error(t("type needs text"));
         steps.push({ kind: "type", text: arg });
       } else if (cmd === "delay") {
         const ms = Number(arg);
-        if (!Number.isFinite(ms) || ms < 0) throw new Error(`bad delay "${arg}"`);
+        if (!Number.isFinite(ms) || ms < 0) throw new Error(t('bad delay "{value}"', { value: arg }));
         steps.push({ kind: "delay", ms });
       } else {
-        throw new Error(`unknown command "${cmd}"`);
+        throw new Error(t('unknown command "{command}"', { command: cmd }));
       }
     } catch (e) {
-      throw new Error(`line ${i + 1}: ${e instanceof Error ? e.message : String(e)}`);
+      throw new Error(t("line {line}: {problem}", { line: i + 1, problem: e instanceof Error ? e.message : String(e) }));
     }
   }
-  if (steps.length === 0) throw new Error("the macro is empty");
+  if (steps.length === 0) throw new Error(t("the macro is empty"));
   return steps;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * Type one character: its key presses one after another (two for a dead-key
+ * character such as é on a German layout). False when the layout cannot type
+ * it. @p typeDelay paces the presses so the target does not drop any.
+ */
+export async function typeChar(
+  control: Control,
+  ch: string,
+  layout: string,
+  os: string | undefined,
+  typeDelay: number,
+): Promise<boolean> {
+  const strokes = charToStrokes(layout, ch, os);
+  if (!strokes) return false;
+  for (const s of strokes) {
+    control.keyboard(s.mod, [s.hid]);
+    await sleep(typeDelay + 12);
+    control.keyboard(0, []);
+    await sleep(typeDelay);
+  }
+  return true;
+}
+
+/**
  * Play a parsed macro into the target. A `type` step sends each character
  * through @p layout, the same way paste does; a `key` step sends one chord.
- * @p typeDelay paces the typing so the target does not drop characters.
+ * @p typeDelay paces the typing so the target does not drop characters. @p os
+ * is the target's OS, where a layout differs between Windows and Linux.
  */
 export async function runMacroScript(
   script: string,
   control: Control,
   layout: string,
   typeDelay = 8,
+  os?: string,
 ): Promise<void> {
   const steps = parseMacroScript(script);
   try {
@@ -337,14 +363,7 @@ export async function runMacroScript(
         control.keyboard(0, []);
         await sleep(40);
       } else if (step.kind === "type") {
-        for (const ch of step.text ?? "") {
-          const row = charToHid(layout, ch) as { mod: number; hid: number } | null;
-          if (!row) continue;
-          control.keyboard(row.mod, [row.hid]);
-          await sleep(typeDelay + 12);
-          control.keyboard(0, []);
-          await sleep(typeDelay);
-        }
+        for (const ch of step.text ?? "") await typeChar(control, ch, layout, os, typeDelay);
       }
     }
   } finally {

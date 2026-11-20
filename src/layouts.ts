@@ -8,7 +8,13 @@
  *
  * Characters absent from a table are skipped rather than guessed, because a
  * wrong guess types the wrong character into whatever has focus.
+ *
+ * The first five tables are written by hand. The rest are generated from the
+ * Windows and Linux layouts (layoutsGen.ts, tools/gen_layouts.py), and those
+ * carry dead keys: on a German target é is ´ then e.
  */
+
+import { GENERATED, KEYS, type GenLayout, type GenTable } from "./layoutsGen";
 
 export const HID_MOD_LCTRL = 0x01;
 export const HID_MOD_LSHIFT = 0x02;
@@ -26,12 +32,6 @@ export interface KeyStroke {
 
 /** Character -> key press for one layout. */
 export type CharMap = Record<string, KeyStroke>;
-
-/** A selectable keyboard layout: a display label and its character table. */
-export interface Layout {
-  label: string;
-  map: CharMap;
-}
 
 /* US key positions, named for what they produce on a US layout. */
 const K = {
@@ -338,28 +338,138 @@ function buildLt(): CharMap {
   return m;
 }
 
+/* ---- generated layouts ------------------------------------------------- */
+
+/** One OS's version of a layout, in the form the paste code uses. */
+export interface Variant {
+  /** Characters typed by one key press. */
+  map: CharMap;
+  /** Characters typed with a dead key first: ´ then a for á. */
+  seq: Record<string, KeyStroke[]>;
+  /** The dead keys, by the accent they carry. */
+  dead: CharMap;
+}
+
+const same = (a: KeyStroke, b: KeyStroke) => a.mod === b.mod && a.hid === b.hid;
+const LEVEL_MODS = [0, SH, RA, RA | SH];
+
+/* Every key press that types each character, in the order to prefer them:
+   fewer modifiers first. */
+function strokesOf(t: GenTable): Map<string, KeyStroke[]> {
+  const out = new Map<string, KeyStroke[]>();
+  t.levels.forEach((row, level) => {
+    [...row].forEach((ch, i) => {
+      if (ch === " ") return;
+      const list = out.get(ch) ?? [];
+      list.push({ mod: LEVEL_MODS[level], hid: KEYS[i] });
+      out.set(ch, list);
+    });
+  });
+  return out;
+}
+
+/* Every dead-key pair of a table, also for characters a key types directly:
+   Linux has ' on AltGr on US International, Windows only as ' then Space,
+   and that pair is what the two share. */
+function pairsOf(t: GenTable, map: CharMap, dead: CharMap): Record<string, KeyStroke[]> {
+  const seq: Record<string, KeyStroke[]> = {};
+  const runs = [...t.compose];
+  for (let i = 0; i + 2 < runs.length; i += 3) {
+    const [d, base, out] = [runs[i], runs[i + 1], runs[i + 2]];
+    if (seq[out] || !dead[d] || !map[base]) continue;
+    seq[out] = [dead[d], map[base]];
+  }
+  return seq;
+}
+
+function variantOf(t: GenTable): Variant {
+  const map = addCommon({});
+  for (const [ch, list] of strokesOf(t)) map[ch] ??= list[0];
+  const dead: CharMap = {};
+  for (const [ch, mod, hid] of t.dead) dead[ch] ??= { mod, hid };
+  const seq: Record<string, KeyStroke[]> = {};
+  for (const [ch, s] of Object.entries(pairsOf(t, map, dead))) if (!map[ch]) seq[ch] = s;
+  return { map, seq, dead };
+}
+
+/* What Windows and Linux agree on: the layout to use when the target's OS is
+   not known. A key that is dead on either side is never a plain character. */
+function commonOf(g: GenLayout, win: Variant, lin: Variant): Variant {
+  const winAll = strokesOf(g.windows);
+  const linAll = strokesOf(g.linux);
+  const map = addCommon({});
+  for (const [ch, list] of winAll) {
+    const other = linAll.get(ch) ?? [];
+    const s = list.find((a) => other.some((b) => same(a, b)));
+    if (s) map[ch] = s;
+  }
+  const dead: CharMap = {};
+  for (const [ch, s] of Object.entries(win.dead)) {
+    if (Object.values(lin.dead).some((b) => same(s, b))) dead[ch] = s;
+  }
+  const seq: Record<string, KeyStroke[]> = {};
+  const linPairs = pairsOf(g.linux, lin.map, lin.dead);
+  for (const [ch, a] of Object.entries(pairsOf(g.windows, win.map, win.dead))) {
+    const b = linPairs[ch];
+    if (!map[ch] && b && a.length === b.length && a.every((s, i) => same(s, b[i]))) seq[ch] = a;
+  }
+  return { map, seq, dead };
+}
+
+/* ---- the list ------------------------------------------------------------ */
+
+/** A selectable keyboard layout: a display label and its character tables. */
+export interface Layout extends Variant {
+  label: string;
+  /** Where Windows and Linux differ: each one's own version. The base tables
+      above are what both agree on. */
+  os?: { windows: Variant; linux: Variant };
+}
+
+const plain = (label: string, map: CharMap): Layout => ({ label, map, seq: {}, dead: {} });
+
 export const LAYOUTS: Record<string, Layout> = {
-  en_us: { label: "English (US)", map: buildUs() },
-  ru_ru: { label: "Русская", map: buildRu() },
-  cs_cz: { label: "Čeština", map: buildCz() },
-  uk_ua: { label: "Українська", map: buildUa() },
-  lt_lt: { label: "Lietuvių", map: buildLt() },
+  en_us: plain("English (US)", buildUs()),
+  ru_ru: plain("Русская", buildRu()),
+  cs_cz: plain("Čeština", buildCz()),
+  uk_ua: plain("Українська", buildUa()),
+  lt_lt: plain("Lietuvių", buildLt()),
 };
+for (const g of GENERATED) {
+  const windows = variantOf(g.windows);
+  const linux = variantOf(g.linux);
+  const common = commonOf(g, windows, linux);
+  /* A character both type takes the same key whatever the OS: € on Italian is
+     on AltGr+E and AltGr+5 on Windows, only AltGr+E on Linux. */
+  for (const v of [windows, linux]) Object.assign(v.map, common.map);
+  LAYOUTS[g.id] = { label: g.label, ...common, os: { windows, linux } };
+}
 
 export const DEFAULT_LAYOUT = "en_us";
 
-/** The key press for a character on a layout, or null when it cannot type it. */
-export function charToHid(layoutId: string, ch: string): KeyStroke | null {
+/* The target's OS as the console names it ("windows", "linux", "macos", ...)
+   -> the table to use. macOS, Android and an unknown OS get what Windows and
+   Linux agree on: their own layouts are neither, and a BIOS is usually US. */
+function variantFor(layoutId: string, os?: string): Variant {
   const layout = LAYOUTS[layoutId] || LAYOUTS[DEFAULT_LAYOUT];
-  return layout.map[ch] || null;
+  if (layout.os && (os === "windows" || os === "linux")) return layout.os[os];
+  return layout;
+}
+
+/** The key presses that type a character on a layout, or null when it cannot. */
+export function charToStrokes(layoutId: string, ch: string, os?: string): KeyStroke[] | null {
+  const v = variantFor(layoutId, os);
+  const one = v.map[ch];
+  if (one) return [one];
+  return v.seq[ch] ?? null;
 }
 
 /** Characters in @p text that the layout cannot produce, for warning the user. */
-export function untypeableChars(layoutId: string, text: string): string[] {
+export function untypeableChars(layoutId: string, text: string, os?: string): string[] {
   const missing = new Set<string>();
   for (const ch of text) {
     if (ch === "\r") continue;
-    if (!charToHid(layoutId, ch)) missing.add(ch);
+    if (!charToStrokes(layoutId, ch, os)) missing.add(ch);
   }
   return [...missing];
 }

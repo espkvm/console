@@ -27,6 +27,7 @@ import {
   type KvmSwitch,
 } from "../state/device";
 import { toast } from "../state/toasts";
+import { t } from "../i18n";
 import Icon from "./Icon.vue";
 
 const props = defineProps<{
@@ -69,10 +70,12 @@ const on = computed(() => Boolean(props.atx?.on));
 
 /* The button says what it knows at a glance, the way the diagnostics one does. */
 const title = computed(() => {
-  if (!available.value) return props.caps.atx?.reason ?? "Power control is off";
-  const disk = props.hdd ? ", disk working" : "";
-  if (hasAtx.value && known.value) return `Target power: ${on.value ? "on" : "off"}${disk}`;
-  return "Power";
+  if (!available.value) return props.caps.atx?.reason ? t(props.caps.atx.reason) : t("Power control is off");
+  if (hasAtx.value && known.value) {
+    if (props.hdd) return on.value ? t("Target power: on, disk working") : t("Target power: off, disk working");
+    return on.value ? t("Target power: on") : t("Target power: off");
+  }
+  return t("Power");
 });
 
 async function act(run: () => Promise<void>, ok: string) {
@@ -81,44 +84,44 @@ async function act(run: () => Promise<void>, ok: string) {
     await run();
     toast.info(ok);
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     busy.value = false;
   }
 }
 
 function press() {
-  void act(powerClick, "Power button pressed");
+  void act(powerClick, t("Power button pressed"));
 }
 
 function reset() {
-  if (!confirm("Press the reset button on the target?")) return;
-  void act(powerReset, "Reset button pressed");
+  if (!confirm(t("Press the reset button on the target?"))) return;
+  void act(powerReset, t("Reset button pressed"));
 }
 
 function forceOff() {
-  if (!confirm("Hold the power button to force the target off? Unsaved work is lost.")) return;
-  void act(powerHold, "Holding power button (force off)");
+  if (!confirm(t("Hold the power button to force the target off? Unsaved work is lost."))) return;
+  void act(powerHold, t("Holding power button (force off)"));
 }
 
 function hdmi(action: "standby" | "wake") {
   void act(
     () => cecPower(action),
-    action === "wake" ? "Asked the HDMI source to wake" : "Asked the HDMI source to sleep",
+    action === "wake" ? t("Asked the HDMI source to wake") : t("Asked the HDMI source to sleep"),
   );
 }
 
 function pick(n: number) {
   if (n === props.kvmSwitch?.machine) return;
-  void act(() => selectMachine(n), `Switching to ${machines.value[n - 1]}`);
+  void act(() => selectMachine(n), t("Switching to {name}", { name: machines.value[n - 1] }));
 }
 
 async function usbOn() {
   usbBusy.value = true;
   try {
-    toast.info(USB_POWER_TEXT[await powerOnUsb()]);
+    toast.info(t(USB_POWER_TEXT[await powerOnUsb()]));
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     usbBusy.value = false;
   }
@@ -128,9 +131,9 @@ async function wake() {
   waking.value = true;
   try {
     await wakeTarget();
-    toast.info("Wake-on-LAN packet sent");
+    toast.info(t("Wake-on-LAN packet sent"));
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     waking.value = false;
   }
@@ -145,7 +148,7 @@ async function wake() {
       :class="{ 'rail-btn-active': open }"
       :disabled="!available"
       :title="title"
-      aria-label="Power"
+      :aria-label="t('Power')"
       :aria-expanded="open"
       @click="open = !open"
     >
@@ -160,15 +163,15 @@ async function wake() {
       <div class="pw-backdrop" @click="open = false" />
       <div class="pw-menu" role="menu">
         <div class="pw-head">
-          <h3>Power</h3>
+          <h3>{{ t("Power") }}</h3>
           <span v-if="hasAtx && known" :class="['pill', on ? 'pill-on' : 'pill-off']">
-            {{ on ? "on" : "off" }}
+            {{ on ? t("on") : t("off") }}
           </span>
         </div>
 
-        <p v-if="watchOnly" class="pw-note">This sign-in can only watch.</p>
+        <p v-if="watchOnly" class="pw-note">{{ t("This sign-in can only watch.") }}</p>
         <template v-if="machines.length">
-          <div class="pw-machines" role="group" aria-label="KVM switch">
+          <div class="pw-machines" role="group" :aria-label="t('KVM switch')">
             <button
               v-for="(name, i) in machines"
               :key="i"
@@ -182,22 +185,22 @@ async function wake() {
             </button>
           </div>
           <small v-if="kvmSwitch?.error" class="pw-note pw-note-bad">
-            The KVM switch does not answer. Check its address under Settings &rarr; Power.
+            {{ t("The KVM switch does not answer. Check its address under Settings \u2192 Power.") }}
           </small>
-          <small v-else class="pw-note">KVM switch. The picture and USB move to the machine picked.</small>
+          <small v-else class="pw-note">{{ t("KVM switch. The picture and USB move to the machine picked.") }}</small>
         </template>
         <template v-if="hasAtx && !watchOnly">
           <button type="button" class="pw-item" :disabled="busy" @click="press">
-            Press power
-            <small>A short press, as on the front panel</small>
+            {{ t("Press power") }}
+            <small>{{ t("A short press, as on the front panel") }}</small>
           </button>
           <button type="button" class="pw-item" :disabled="busy" @click="reset">
-            Press reset
-            <small>Restarts the target where it stands</small>
+            {{ t("Press reset") }}
+            <small>{{ t("Restarts the target where it stands") }}</small>
           </button>
           <button type="button" class="pw-item pw-item-danger" :disabled="busy" @click="forceOff">
-            Force off
-            <small>Holds power down; unsaved work is lost</small>
+            {{ t("Force off") }}
+            <small>{{ t("Holds power down; unsaved work is lost") }}</small>
           </button>
         </template>
 
@@ -209,27 +212,27 @@ async function wake() {
             :disabled="waking"
             @click="wake"
           >
-            {{ waking ? "Sending..." : "Wake on LAN" }}
-            <small>Magic packet to {{ wolMac }}</small>
+            {{ waking ? t("Sending...") : t("Wake on LAN") }}
+            <small>{{ t("Magic packet to {mac}", { mac: wolMac }) }}</small>
           </button>
           <p v-else class="pw-note">
-            Set the target's MAC under Settings &rarr; Power to wake it from here.
+            {{ t("Set the target's MAC under Settings \u2192 Power to wake it from here.") }}
           </p>
         </template>
 
         <button v-if="hasUsb && !watchOnly" type="button" class="pw-item" :disabled="usbBusy" @click="usbOn">
-          {{ usbBusy ? "Waiting..." : "Power on over USB" }}
-          <small>Wakes it from sleep, or from off if its BIOS allows</small>
+          {{ usbBusy ? t("Waiting...") : t("Power on over USB") }}
+          <small>{{ t("Wakes it from sleep, or from off if its BIOS allows") }}</small>
         </button>
 
         <template v-if="hasCec && !watchOnly">
           <button type="button" class="pw-item" :disabled="busy" @click="hdmi('wake')">
-            Wake over HDMI
-            <small>HDMI-CEC; TV boxes and consoles, not most PCs</small>
+            {{ t("Wake over HDMI") }}
+            <small>{{ t("HDMI-CEC; TV boxes and consoles, not most PCs") }}</small>
           </button>
           <button type="button" class="pw-item" :disabled="busy" @click="hdmi('standby')">
-            Sleep over HDMI
-            <small>HDMI-CEC standby to the source</small>
+            {{ t("Sleep over HDMI") }}
+            <small>{{ t("HDMI-CEC standby to the source") }}</small>
           </button>
         </template>
       </div>

@@ -7,6 +7,7 @@
  * the other way round: the desktop sits inside the picture.
  */
 import { computed } from "vue";
+import { t } from "../i18n";
 
 const props = defineProps<{
   deskW: number;
@@ -70,7 +71,7 @@ const alone = computed(() => props.deskW === props.w && props.deskH === props.h)
       :width="VIEW_W"
       :height="viewH"
       role="img"
-      :aria-label="`Desktop ${deskW} by ${deskH}; this screen ${w} by ${h} at ${x}, ${y}`"
+      :aria-label="t('Desktop {dw} by {dh}; this screen {w} by {h} at {x}, {y}', { dw: deskW, dh: deskH, w, h, x, y })"
     >
       <rect
         class="desk"
@@ -85,7 +86,7 @@ const alone = computed(() => props.deskW === props.w && props.deskH === props.h)
         :x="fit.desk.x + 6"
         :y="fit.desk.y + fit.desk.h - 6"
       >
-        other screens
+        {{ t("other screens") }}
       </text>
       <rect
         class="scr"
@@ -101,7 +102,7 @@ const alone = computed(() => props.deskW === props.w && props.deskH === props.h)
         :y="fit.scr.y + fit.scr.h / 2 + 4"
         text-anchor="middle"
       >
-        {{ bordered ? "desktop" : "this screen" }}
+        {{ bordered ? t("desktop") : t("this screen") }}
       </text>
       <text
         v-if="bordered"
@@ -109,15 +110,14 @@ const alone = computed(() => props.deskW === props.w && props.deskH === props.h)
         :x="fit.scr.x + 6"
         :y="fit.scr.y + fit.scr.h - 6"
       >
-        picture
+        {{ t("picture") }}
       </text>
     </svg>
     <figcaption>
-      Desktop {{ deskW }}&times;{{ deskH }}; this screen {{ w }}&times;{{ h }} at
-      {{ x }}, {{ y }}.
-      <span v-if="bordered">The rest of the picture is black borders.</span>
+      {{ t("Desktop {dw}\u00d7{dh}; this screen {w}\u00d7{h} at {x}, {y}.", { dw: deskW, dh: deskH, w, h, x, y }) }}
+      <span v-if="bordered">{{ t("The rest of the picture is black borders.") }}</span>
       <span v-if="outside" class="warn">
-        It does not fit inside the desktop: run "Find this screen" again.
+        {{ t('It does not fit inside the desktop: run "Find this screen" again.') }}
       </span>
     </figcaption>
   </figure>

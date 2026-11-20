@@ -6,6 +6,7 @@
  */
 import { ref } from "vue";
 import Icon from "./Icon.vue";
+import { t } from "../i18n";
 
 const open = ref(false);
 </script>
@@ -17,8 +18,8 @@ const open = ref(false);
       type="button"
       :class="['fold-i', { 'fold-i-open': open }]"
       :aria-expanded="open"
-      :aria-label="open ? 'Less' : 'More about this'"
-      :title="open ? 'Less' : 'More'"
+      :aria-label="open ? t('Less') : t('More about this')"
+      :title="open ? t('Less') : t('More')"
       @click="open = !open"
     >
       <Icon name="info" :size="13" />

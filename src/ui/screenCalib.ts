@@ -20,6 +20,7 @@
 import type { Control } from "../input/control";
 import { ABS_MAX } from "../input/control";
 import type { Picture } from "./picture";
+import { t } from "../i18n";
 
 export interface ScreenWindow {
   deskW: number;
@@ -145,7 +146,7 @@ export async function sweep(
 ): Promise<ScreenWindow | null> {
   const w = p.width;
   const h = p.height;
-  if (w < 64 || h < 64) throw new Error("there is no picture to watch yet");
+  if (w < 64 || h < 64) throw new Error(t("there is no picture to watch yet"));
 
   const xs = Array.from({ length: 12 }, (_, i) => (i + 0.5) / 12);
   const ys = [0.15, 0.5, 0.85];
@@ -243,9 +244,11 @@ export async function sweep(
   const fy = robustFit(yPairs);
   if (!fx || !fy || xPairs.length < 3) {
     throw new Error(
-      `the pointer did not show up in the picture often enough - make it visible on the target, on a still screen, and try again ` +
-        `(seen at ${xPairs.length} of ${grid.length} points; the picture changed at ${changed}, ` +
-        `${unsure} too busy to tell)`,
+      t(
+        "the pointer did not show up in the picture often enough - make it visible on the target, on a still screen, and try again " +
+          "(seen at {seen} of {points} points; the picture changed at {changed}, {unsure} too busy to tell)",
+        { seen: xPairs.length, points: grid.length, changed, unsure },
+      ),
     );
   }
   /* picture = slope * abs + offset, and abs = (x + picture) / desk * ABS_MAX. */
@@ -271,8 +274,11 @@ export async function sweep(
     (at >= -16 && at + shown <= desk + 16) || (-at >= -16 && -at + desk <= shown + 16);
   if (!fits(x, deskW, w) || !fits(y, deskH, h)) {
     throw new Error(
-      `the figures came out impossible (desktop ${deskW}x${deskH}, this screen at ${x}, ${y}) - ` +
-        "keep the mouse still and the screen still while it looks, and try again",
+      t(
+        "the figures came out impossible (desktop {w}x{h}, this screen at {x}, {y}) - " +
+          "keep the mouse still and the screen still while it looks, and try again",
+        { w: deskW, h: deskH, x, y },
+      ),
     );
   }
   /* A few pixels either way of an edge is the fit's noise, not a border. */

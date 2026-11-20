@@ -9,6 +9,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 import { clampRect, rectUsable, type RegionRect } from "../state/regions";
 import { pictureRect, type FitMode } from "../video/picture";
+import { t } from "../i18n";
 
 const props = defineProps<{
   surface: HTMLElement | null;
@@ -111,8 +112,8 @@ function style(r: RegionRect) {
     <div v-for="(o, i) in others" :key="i" class="rg-box rg-box-other" :style="style(o)" />
     <div v-if="rect" class="rg-box" :style="style(rect)" />
     <div class="rg-hint">
-      Drag over the part of the screen to watch.
-      <button type="button" class="btn btn-sm" @pointerdown.stop @click="emit('cancel')">Cancel</button>
+      {{ t("Drag over the part of the screen to watch.") }}
+      <button type="button" class="btn btn-sm" @pointerdown.stop @click="emit('cancel')">{{ t("Cancel") }}</button>
     </div>
   </div>
 </template>

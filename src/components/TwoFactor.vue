@@ -15,6 +15,7 @@ import {
   twoFactorRecovery,
   type TwoFactorSetup,
 } from "../state/auth";
+import { t } from "../i18n";
 
 const on = ref(false);
 const setup = ref<TwoFactorSetup | null>(null);
@@ -98,7 +99,7 @@ function cancel() {
 
 function downloadCodes() {
   const text =
-    "ESP-KVM recovery codes - each works once, in place of the app's code.\n\n" +
+    t("ESP-KVM recovery codes - each works once, in place of the app's code.") + "\n\n" +
     recovery.value.join("\n") +
     "\n";
   const a = document.createElement("a");
@@ -111,71 +112,71 @@ function downloadCodes() {
 
 <template>
   <details class="firmware fold" :open="recovery.length > 0 || mode !== 'idle'">
-    <summary><h3>Two-factor sign-in</h3><span class="fold-status">{{ on ? "On" : "Off" }}</span></summary>
+    <summary><h3>{{ t("Two-factor sign-in") }}</h3><span class="fold-status">{{ on ? t("On") : t("Off") }}</span></summary>
     <div class="fold-body">
     <p class="setting-note">
-      After the password, a six-digit code from an authenticator app (Google Authenticator, Aegis,
-      1Password and the like). The reset button on the board turns it off with the password.
-      <template v-if="on"> <strong>It is on.</strong></template>
+      {{ t("After the password, a six-digit code from an authenticator app (Google Authenticator, Aegis, 1Password and the like).") }}
+      {{ t("The reset button on the board turns it off with the password.") }}
+      <template v-if="on"> <strong>{{ t("It is on.") }}</strong></template>
     </p>
 
     <div v-if="recovery.length" class="tf-codes">
       <p class="setting-note">
-        <strong>Recovery codes.</strong> Each works once in place of the app's code, if the phone
-        is lost. Keep them somewhere safe - this is the only time they are shown.
+        <strong>{{ t("Recovery codes.") }}</strong>
+        {{ t("Each works once in place of the app's code, if the phone is lost. Keep them somewhere safe - this is the only time they are shown.") }}
       </p>
       <ul class="mono">
         <li v-for="c in recovery" :key="c">{{ c }}</li>
       </ul>
-      <button type="button" class="btn btn-sm" @click="downloadCodes">Download them</button>
-      <button type="button" class="btn btn-sm btn-quiet" @click="recovery = []">I have saved them</button>
+      <button type="button" class="btn btn-sm" @click="downloadCodes">{{ t("Download them") }}</button>
+      <button type="button" class="btn btn-sm btn-quiet" @click="recovery = []">{{ t("I have saved them") }}</button>
     </div>
 
     <template v-if="mode === 'idle'">
       <button v-if="!on" type="button" class="btn btn-sm" :disabled="busy" @click="start">
-        Turn on two-factor sign-in
+        {{ t("Turn on two-factor sign-in") }}
       </button>
       <template v-else>
         <button type="button" class="btn btn-sm" :disabled="busy" @click="mode = 'recovery'">
-          New recovery codes
+          {{ t("New recovery codes") }}
         </button>
         <button type="button" class="btn btn-sm" :disabled="busy" @click="mode = 'disable'">
-          Turn it off
+          {{ t("Turn it off") }}
         </button>
       </template>
     </template>
 
     <form v-else @submit.prevent="submit">
       <template v-if="mode === 'enable' && setup">
-        <p class="setting-note">Scan this in the app, then type the code it shows.</p>
+        <p class="setting-note">{{ t("Scan this in the app, then type the code it shows.") }}</p>
         <svg
           v-if="qrPath"
           class="tf-qr"
           :viewBox="`0 0 ${setup.qrSize + 8} ${setup.qrSize + 8}`"
           shape-rendering="crispEdges"
           role="img"
-          aria-label="QR code to add this device to an authenticator app"
+          :aria-label="t('QR code to add this device to an authenticator app')"
         >
           <rect :width="setup.qrSize + 8" :height="setup.qrSize + 8" fill="#fff" />
           <path :d="qrPath" fill="#000" />
         </svg>
         <p class="setting-note">
-          Or type the key by hand: <code class="mono tf-secret">{{ setup.secret }}</code>
+          {{ t("Or type the key by hand:") }} <code class="mono tf-secret">{{ setup.secret }}</code>
         </p>
       </template>
       <p v-else class="setting-note">
         {{
           mode === "disable"
-            ? "To turn it off, your password and a code from the app (or a recovery code)."
-            : "New codes need your password and a code from the app; the old ones stop working."
+            ? t("To turn it off, your password and a code from the app (or a recovery code).")
+            : t("New codes need your password and a code from the app; the old ones stop working.")
         }}
       </p>
       <label class="field">
-        <span>Password</span>
+        <span>{{ t("Password") }}</span>
         <input v-model="password" type="password" autocomplete="current-password" />
       </label>
       <label class="field">
-        <span>Code</span>
+        <span>{{ t("Code") }}</span>
         <input
           v-model="code"
           type="text"
@@ -188,9 +189,9 @@ function downloadCodes() {
       <p v-if="error" class="setting-note setting-note-blocked">{{ error }}</p>
       <div class="tf-actions">
         <button type="submit" class="btn btn-sm" :disabled="busy || !password || !code">
-          {{ mode === "enable" ? "Turn on" : mode === "disable" ? "Turn off" : "Make new codes" }}
+          {{ mode === "enable" ? t("Turn on") : mode === "disable" ? t("Turn off") : t("Make new codes") }}
         </button>
-        <button type="button" class="btn btn-sm btn-quiet" :disabled="busy" @click="cancel">Cancel</button>
+        <button type="button" class="btn btn-sm btn-quiet" :disabled="busy" @click="cancel">{{ t("Cancel") }}</button>
       </div>
     </form>
     <p v-if="error && mode === 'idle'" class="setting-note setting-note-blocked">{{ error }}</p>

@@ -44,6 +44,7 @@ import {
 import { toast } from "../state/toasts";
 import { browserMedia, mobileBrowser, serveFile } from "../state/browserMedia";
 import UploadChart from "./UploadChart.vue";
+import { t, tn } from "../i18n";
 
 const props = defineProps<{
   values: Values;
@@ -121,7 +122,7 @@ function cancelUpload() {
 }
 
 function uploadFailed(err: unknown, name: string) {
-  if (err instanceof UploadCancelled) toast.info(`${name}: upload cancelled`);
+  if (err instanceof UploadCancelled) toast.info(t("{name}: upload cancelled", { name }));
   else toast.error(err instanceof Error ? err.message : String(err));
 }
 const rescuePct = ref(0);
@@ -185,13 +186,13 @@ watch(
     if (!file || !st) return;
     emit("dropped-taken");
     if (uploadingImage.value || uploadingRescue.value) {
-      toast.error("An upload is already running");
+      toast.error(t("An upload is already running"));
     } else if (!st.mounted || st.handedOver) {
-      toast.error(`${file.name}: no microSD card the device can write to right now`);
+      toast.error(t("{name}: no microSD card the device can write to right now", { name: file.name }));
     } else if (!st.writable) {
-      toast.error(sentence(st.writeReason ?? "The card is read-only on this device."));
+      toast.error(sentence(st.writeReason ? t(st.writeReason) : t("The card is read-only on this device.")));
     } else if (file.size > st.freeBytes) {
-      toast.error(`${file.name} is larger than the ${formatBytes(st.freeBytes)} free on the card`);
+      toast.error(t("{name} is larger than the {size} free on the card", { name: file.name, size: formatBytes(st.freeBytes) }));
     } else {
       void uploadToCard(file);
     }
@@ -219,7 +220,7 @@ async function uploadToCard(file: File) {
       },
       uploadAbort.signal,
     );
-    toast.info(`${file.name} uploaded`);
+    toast.info(t("{name} uploaded", { name: file.name }));
     await refreshImages();
   } catch (err) {
     uploadFailed(err, file.name);
@@ -235,7 +236,7 @@ async function onRescueChosen(e: Event) {
   if (!file) return;
   const cap = storage.value?.rescue?.capacityBytes ?? 0;
   if (cap && file.size > cap) {
-    toast.error(`${file.name} is larger than the ${formatBytes(cap)} rescue partition`);
+    toast.error(t("{name} is larger than the {size} rescue partition", { name: file.name, size: formatBytes(cap) }));
     input.value = "";
     return;
   }
@@ -258,7 +259,7 @@ async function onRescueChosen(e: Event) {
       },
       uploadAbort.signal,
     );
-    toast.info(`Rescue image written (${file.name})`);
+    toast.info(t("Rescue image written ({name})", { name: file.name }));
   } catch (err) {
     uploadFailed(err, file.name);
   } finally {
@@ -278,8 +279,8 @@ let fetchTimer = 0;
 
 /* The device's reasons are lower-case fragments; here one starts a sentence. */
 function sentence(s: string): string {
-  const t = s.trim();
-  return t ? t[0].toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? "" : ".") : t;
+  const str = s.trim();
+  return str ? str[0].toUpperCase() + str.slice(1) + (/[.!?]$/.test(str) ? "" : ".") : str;
 }
 
 /* The file name a link would save as: its last path part, without the query. */
@@ -307,9 +308,9 @@ async function pollFetch() {
     window.clearTimeout(fetchTimer);
     fetchTimer = window.setTimeout(() => void pollFetch(), 1000);
   } else if (was === "running") {
-    if (st.state === "done") toast.info(`Downloaded ${st.dest === "rescue" ? "the rescue image" : st.name}`);
-    else if (st.state === "error") toast.error(`Download failed: ${st.message}`);
-    else if (st.state === "cancelled") toast.info("Download cancelled");
+    if (st.state === "done") toast.info(st.dest === "rescue" ? t("Downloaded the rescue image") : t("Downloaded {name}", { name: st.name ?? "" }));
+    else if (st.state === "error") toast.error(t("Download failed: {reason}", { reason: t(st.message) }));
+    else if (st.state === "cancelled") toast.info(t("Download cancelled"));
     void refreshImages(true);
   }
 }
@@ -376,10 +377,10 @@ const urlLabel = computed(() => {
 
 const urlSub = computed(() => {
   const u = storage.value?.url;
-  if (!u || storage.value?.active !== URL_MEDIUM) return "from a web server";
-  if (u.state === "ready") return `from a web server · ${formatBytes(u.size)}`;
-  if (u.state === "error") return `${u.message} · trying again`;
-  return "connecting...";
+  if (!u || storage.value?.active !== URL_MEDIUM) return t("from a web server");
+  if (u.state === "ready") return t("from a web server \u00b7 {size}", { size: formatBytes(u.size) });
+  if (u.state === "error") return t("{reason} \u00b7 trying again", { reason: t(u.message) });
+  return t("connecting...");
 });
 
 /* A file served by a console tab: this one, or another. */
@@ -389,9 +390,9 @@ const servedHere = computed(
 );
 const browserSub = computed(() => {
   const b = storage.value?.browser;
-  if (!b || b.state === "off") return "the tab that served it is closed";
-  const where = servedHere.value ? "from this computer" : "from another console tab";
-  if (b.state === "waiting") return `${where} · waiting for the tab to come back`;
+  if (!b || b.state === "off") return t("the tab that served it is closed");
+  const where = servedHere.value ? t("from this computer") : t("from another console tab");
+  if (b.state === "waiting") return t("{where} \u00b7 waiting for the tab to come back", { where });
   return `${where} · ${formatBytes(b.size)}`;
 });
 
@@ -412,7 +413,7 @@ const canDownload = computed(
 );
 
 async function removeImage(name: string) {
-  if (!confirm(`Delete ${name} from the card?`)) return;
+  if (!confirm(t("Delete {name} from the card?", { name }))) return;
   writes++;
   try {
     storage.value = await deleteImage(name);
@@ -424,31 +425,28 @@ async function removeImage(name: string) {
 
 <template>
   <div class="media-panel">
-    <p v-if="loadingImages && !storage" class="setting-note">Reading media...</p>
+    <p v-if="loadingImages && !storage" class="setting-note">{{ t("Reading media...") }}</p>
     <p
       v-else-if="storage && !storage.mounted && !storage.rescue?.supported"
       class="section-blocked"
     >
-      No microSD card and no built-in rescue partition. Insert a card formatted FAT32 or exFAT
-      with your boot images copied on (exFAT for images over 4&nbsp;GB).
+      {{ t("No microSD card and no built-in rescue partition. Insert a card formatted FAT32 or exFAT with your boot images copied on (exFAT for images over 4\u00a0GB).") }}
     </p>
     <template v-else-if="storage">
       <label class="expose-toggle">
         <input type="checkbox" :checked="exposed" @change="toggleExpose" />
-        <span>Expose virtual media to the target</span>
+        <span>{{ t("Expose virtual media to the target") }}</span>
       </label>
       <FoldNote>
         <template #lead>
-          <template v-if="exposed">The medium picked below is a USB drive the target can boot from.</template>
-          <template v-else>Off: the target sees no drive.</template>
+          <template v-if="exposed">{{ t("The medium picked below is a USB drive the target can boot from.") }}</template>
+          <template v-else>{{ t("Off: the target sees no drive.") }}</template>
         </template>
-        Adding or removing the drive re-plugs USB, so switching this takes effect after a restart.
+        {{ t("Adding or removing the drive re-plugs USB, so switching this takes effect after a restart.") }}
       </FoldNote>
 
       <p v-if="storage.handedOver" class="setting-note setting-note-blocked">
-        The whole microSD card is handed to the target as a read-write drive. While it is,
-        uploading and the file list here are paused so the target owns the card alone &mdash;
-        select a different medium (or eject) to manage files from here again.
+        {{ t("The whole microSD card is handed to the target as a read-write drive. While it is, uploading and the file list here are paused so the target owns the card alone \u2014 select a different medium (or eject) to manage files from here again.") }}
       </p>
 
       <ul class="image-list">
@@ -461,8 +459,8 @@ async function removeImage(name: string) {
               @change="selectImage('')"
             />
             <span class="image-text">
-              <span class="image-name">No medium</span>
-              <span class="muted image-sub">eject: the target sees an empty drive</span>
+              <span class="image-name">{{ t("No medium") }}</span>
+              <span class="muted image-sub">{{ t("eject: the target sees an empty drive") }}</span>
             </span>
           </label>
         </li>
@@ -479,12 +477,12 @@ async function removeImage(name: string) {
               @change="selectImage(RESCUE_MEDIUM)"
             />
             <span class="image-text">
-              <span class="image-name">Rescue image</span>
+              <span class="image-name">{{ t("Rescue image") }}</span>
               <span class="muted image-sub">
                 {{
                   storage.rescue.hasImage
-                    ? `on flash · ${formatBytes(storage.rescue.capacityBytes)} slot`
-                    : `empty · up to ${formatBytes(storage.rescue.capacityBytes)}`
+                    ? t("on flash \u00b7 {size} slot", { size: formatBytes(storage.rescue.capacityBytes) })
+                    : t("empty \u00b7 up to {size}", { size: formatBytes(storage.rescue.capacityBytes) })
                 }}
               </span>
             </span>
@@ -494,8 +492,8 @@ async function removeImage(name: string) {
               uploadingRescue
                 ? `${rescuePct}%...`
                 : storage.rescue.hasImage
-                  ? "Replace..."
-                  : "Upload..."
+                  ? t("Replace...")
+                  : t("Upload...")
             }}
             <input type="file" class="sr-only" :disabled="uploadingRescue" @change="onRescueChosen" />
           </label>
@@ -513,9 +511,9 @@ async function removeImage(name: string) {
               @change="selectImage(WHOLE_SD_MEDIUM)"
             />
             <span class="image-text">
-              <span class="image-name">Whole microSD card</span>
+              <span class="image-name">{{ t("Whole microSD card") }}</span>
               <span class="muted image-sub">
-                every file on the card · {{ formatBytes(storage.totalBytes) }}
+                {{ t("every file on the card \u00b7 {size}", { size: formatBytes(storage.totalBytes) }) }}
               </span>
             </span>
           </label>
@@ -528,15 +526,15 @@ async function removeImage(name: string) {
           <label class="image-pick">
             <input type="radio" name="active-image" :checked="storage.active === BROWSER_MEDIUM" disabled />
             <span class="image-text">
-              <span class="mono image-name">{{ storage.browser?.name || "A file from a computer" }}</span>
+              <span class="mono image-name">{{ storage.browser?.name || t("A file from a computer") }}</span>
               <span class="muted image-sub">{{ browserSub }}</span>
             </span>
           </label>
           <p v-if="servedHere && browserMedia.rate > 0" class="setting-note">
-            The target reads {{ formatBytes(browserMedia.rate) }}/s.<template v-if="!streamPaused">
-              Video runs at 2 fps meanwhile -
-              <button type="button" class="btn-link" @click="emit('pause-stream')">pause it</button>
-              for full speed.</template
+            {{ t("The target reads {rate}/s.", { rate: formatBytes(browserMedia.rate) }) }}<template v-if="!streamPaused">
+              {{ t("Video runs at 2 fps meanwhile -") }}
+              <button type="button" class="btn-link" @click="emit('pause-stream')">{{ t("pause it") }}</button>
+              {{ t("for full speed.") }}</template
             >
           </p>
         </li>
@@ -590,14 +588,14 @@ async function removeImage(name: string) {
             class="btn btn-sm btn-quiet"
             @click="removeImage(img.name)"
           >
-            Delete
+            {{ t("Delete") }}
           </button>
         </li>
         <li
           v-if="storage.mounted && !storage.handedOver && storage.images.length === 0"
           class="muted image-empty"
         >
-          No images on the card yet. Upload one below.
+          {{ t("No images on the card yet. Upload one below.") }}
         </li>
       </ul>
 
@@ -608,67 +606,66 @@ async function removeImage(name: string) {
         :rate="rescueRate"
       />
       <p v-if="uploadingRescue" class="setting-note upload-stats">
-        {{ rescueRate > 0 ? `${formatBytes(rescueRate)}/s` : "starting..." }}
-        <span v-if="rescueRate > 0"> · ~{{ formatDuration(rescueEta) }} left</span>
-        <button type="button" class="btn btn-sm btn-quiet" @click="cancelUpload">Cancel</button>
+        {{ rescueRate > 0 ? `${formatBytes(rescueRate)}/s` : t("starting...") }}
+        <span v-if="rescueRate > 0"> · {{ t("~{time} left", { time: formatDuration(rescueEta) }) }}</span>
+        <button type="button" class="btn btn-sm btn-quiet" @click="cancelUpload">{{ t("Cancel") }}</button>
       </p>
       <p v-if="uploadingRescue && !streamPaused" class="setting-note">
-        Video runs at 2 fps meanwhile -
-        <button type="button" class="btn-link" @click="emit('pause-stream')">pause it</button>
-        for full speed.
+        {{ t("Video runs at 2 fps meanwhile -") }}
+        <button type="button" class="btn-link" @click="emit('pause-stream')">{{ t("pause it") }}</button>
+        {{ t("for full speed.") }}
       </p>
 
       <div v-if="fetching && fetchSt" class="fetch-progress">
         <p class="setting-note upload-stats">
-          Downloading {{ fetchSt.dest === "rescue" ? "to the rescue slot" : fetchSt.name }}:
-          {{ formatBytes(fetchSt.bytes) }}<template v-if="fetchSt.total > 0">
-            of {{ formatBytes(fetchSt.total) }}</template
-          ><template v-if="fetchSt.rateBps > 0"> · {{ formatBytes(fetchSt.rateBps) }}/s</template>
-          <template v-if="fetchSt.message"> · {{ fetchSt.message }}</template>
-          <button type="button" class="btn btn-sm btn-quiet" @click="stopFetch">Cancel</button>
+          {{ fetchSt.dest === "rescue" ? t("Downloading to the rescue slot:") : t("Downloading {name}:", { name: fetchSt.name ?? "" }) }}
+          {{
+            fetchSt.total > 0
+              ? t("{done} of {total}", { done: formatBytes(fetchSt.bytes), total: formatBytes(fetchSt.total) })
+              : formatBytes(fetchSt.bytes)
+          }}<template v-if="fetchSt.rateBps > 0"> · {{ formatBytes(fetchSt.rateBps) }}/s</template>
+          <template v-if="fetchSt.message"> · {{ t(fetchSt.message) }}</template>
+          <button type="button" class="btn btn-sm btn-quiet" @click="stopFetch">{{ t("Cancel") }}</button>
         </p>
         <progress v-if="fetchSt.total > 0" :value="fetchPct" max="100" />
       </div>
 
       <FoldNote v-if="storage.rescue?.supported">
         <template #lead>
-          Need a rescue image?
+          {{ t("Need a rescue image?") }}
           <button
             type="button"
             class="btn-link"
             :disabled="fetching || uploadingRescue"
             @click="beginFetch(NETBOOT_XYZ_ISO, 'rescue')"
           >
-            Download netboot.xyz to the rescue slot.
+            {{ t("Download netboot.xyz to the rescue slot.") }}
           </button>
         </template>
         <a href="https://netboot.xyz" target="_blank" rel="noreferrer">netboot.xyz</a>
-        fits the flash slot and boots a menu of rescue systems and installers over the network. The
-        device fetches it itself.
+        {{ t("fits the flash slot and boots a menu of rescue systems and installers over the network. The device fetches it itself.") }}
       </FoldNote>
 
 
       <template v-if="storage.mounted && !storage.handedOver">
         <p class="setting-note">
-          {{ formatBytes(storage.freeBytes) }} free of {{ formatBytes(storage.totalBytes) }} on the
-          card.
+          {{ t("{free} free of {total} on the card.", { free: formatBytes(storage.freeBytes), total: formatBytes(storage.totalBytes) }) }}
           <template v-if="storage.busKhz">
-            Bus {{ formatMhz(storage.busKhz) }}<template v-if="storage.busErrors">
-              - slowed after {{ storage.busErrors }} failed
-              {{ storage.busErrors === 1 ? "transfer" : "transfers" }}</template
+            {{ t("Bus {speed}", { speed: formatMhz(storage.busKhz) }) }}<template v-if="storage.busErrors">
+              - {{ tn("slowed after {n} failed transfer", "slowed after {n} failed transfers", storage.busErrors) }}</template
             ><template v-if="storage.busRetryS && storage.busMaxKhz && storage.busKhz < storage.busMaxKhz"
-              >; trying faster again in {{ formatDuration(storage.busRetryS) }}</template
+              >; {{ t("trying faster again in {time}", { time: formatDuration(storage.busRetryS) }) }}</template
             >.
           </template>
         </p>
         <p v-if="!storage.writable" class="setting-note setting-note-blocked">
-          {{ sentence(storage.writeReason ?? "The card is read-only on this device.") }}
+          {{ sentence(storage.writeReason ? t(storage.writeReason) : t("The card is read-only on this device.")) }}
         </p>
         <label
           v-if="storage.writable"
           :class="['btn', 'btn-sm', { 'btn-disabled': uploadingImage }]"
         >
-          {{ uploadingImage ? `Uploading ${uploadPct}%...` : "Upload card image..." }}
+          {{ uploadingImage ? t("Uploading {pct}%...", { pct: uploadPct }) : t("Upload card image...") }}
           <input type="file" class="sr-only" :disabled="uploadingImage" @change="onImageChosen" />
         </label>
         <UploadChart
@@ -678,27 +675,24 @@ async function removeImage(name: string) {
           :rate="uploadRate"
         />
         <p v-if="uploadingImage" class="setting-note upload-stats">
-          {{ uploadRate > 0 ? `${formatBytes(uploadRate)}/s` : "starting..." }}
-          <span v-if="uploadRate > 0"> · ~{{ formatDuration(uploadEta) }} left</span>
-          <button type="button" class="btn btn-sm btn-quiet" @click="cancelUpload">Cancel</button>
+          {{ uploadRate > 0 ? `${formatBytes(uploadRate)}/s` : t("starting...") }}
+          <span v-if="uploadRate > 0"> · {{ t("~{time} left", { time: formatDuration(uploadEta) }) }}</span>
+          <button type="button" class="btn btn-sm btn-quiet" @click="cancelUpload">{{ t("Cancel") }}</button>
         </p>
         <p v-if="uploadingImage && !streamPaused" class="setting-note">
-          Video runs at 2 fps meanwhile -
-          <button type="button" class="btn-link" @click="emit('pause-stream')">pause it</button>
-          for full speed.
+          {{ t("Video runs at 2 fps meanwhile -") }}
+          <button type="button" class="btn-link" @click="emit('pause-stream')">{{ t("pause it") }}</button>
+          {{ t("for full speed.") }}
         </p>
       </template>
 
       <label v-if="exposed" class="btn btn-sm">
-        Boot from this computer...
+        {{ t("Boot from this computer...") }}
         <input type="file" class="sr-only" @change="onServeChosen" />
       </label>
       <p v-if="exposed" class="setting-note">
-        The target reads the file from this tab as it boots. Nothing is uploaded first or put on the
-        card, so keep the tab open meanwhile. It is slow, about 11 minutes a gigabyte, so I suggest it
-        for images up to 1 GB. A bigger one is faster from the card or a URL. Video runs at 2 fps while
-        the target reads.<template v-if="mobileBrowser">
-          On a phone, keep it in front: a tab in the background may be stopped.</template
+        {{ t("The target reads the file from this tab as it boots. Nothing is uploaded first or put on the card, so keep the tab open meanwhile. It is slow, about 11 minutes a gigabyte, so I suggest it for images up to 1 GB. A bigger one is faster from the card or a URL. Video runs at 2 fps while the target reads.") }}<template v-if="mobileBrowser">
+          {{ t("On a phone, keep it in front: a tab in the background may be stopped.") }}</template
         >
       </p>
 
@@ -708,7 +702,7 @@ async function removeImage(name: string) {
           type="url"
           required
           placeholder="https://.../image.iso"
-          aria-label="Image URL"
+          :aria-label="t('Image URL')"
           :disabled="fetching"
         />
         <input
@@ -717,7 +711,7 @@ async function removeImage(name: string) {
           class="mono"
           required
           placeholder="name.iso"
-          aria-label="Save as"
+          :aria-label="t('Save as')"
           :disabled="fetching"
         />
         <button
@@ -726,7 +720,7 @@ async function removeImage(name: string) {
           :disabled="!fetchUrl.trim()"
           @click="bootFromUrl(fetchUrl.trim())"
         >
-          Boot from URL
+          {{ t("Boot from URL") }}
         </button>
         <button
           v-if="canDownload"
@@ -734,16 +728,13 @@ async function removeImage(name: string) {
           class="btn btn-sm btn-quiet"
           :disabled="fetching || !fetchUrl.trim()"
         >
-          Download to card
+          {{ t("Download to card") }}
         </button>
       </form>
       <FoldNote>
-        <template #lead>The device opens the link itself, so it needs internet (or your NAS), not this browser.</template>
-        Boot from URL leaves the image on the server: the target reads it part by part as it boots,
-        and nothing goes onto the card. The server has to answer HTTP Range requests, as nginx,
-        Apache, Caddy and most NAS servers do.<template v-if="canDownload">
-          Download to card copies the whole file first, so it boots at card speed and without the
-          server.</template
+        <template #lead>{{ t("The device opens the link itself, so it needs internet (or your NAS), not this browser.") }}</template>
+        {{ t("Boot from URL leaves the image on the server: the target reads it part by part as it boots, and nothing goes onto the card. The server has to answer HTTP Range requests, as nginx, Apache, Caddy and most NAS servers do.") }}<template v-if="canDownload">
+          {{ t("Download to card copies the whole file first, so it boots at card speed and without the server.") }}</template
         >
       </FoldNote>
     </template>

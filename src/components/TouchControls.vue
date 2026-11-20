@@ -21,15 +21,18 @@ import { onUnmounted, ref, watch } from "vue";
 import Icon from "./Icon.vue";
 
 
-import { charToHid } from "../layouts";
+import { charToStrokes } from "../layouts";
 import { usageForCode } from "../input/keymap";
 import { keyboardUp, virtualKeyboard } from "../input/keyboardInset";
 import type { Control } from "../input/control";
 import { haptic } from "../ui/haptic";
+import { t } from "../i18n";
 
 const props = defineProps<{
   control: Control;
   layout: string;
+  /** The target's OS, where a layout differs between Windows and Linux. */
+  os: string;
   stick: boolean;
   /* The keyboard button opens the console's own keyboard (the setting
      ui_touch_kbd), which the page shows and reports as open. */
@@ -68,8 +71,7 @@ function sendKey(hid: number, mod = 0) {
 }
 
 function sendChar(ch: string) {
-  const row = charToHid(props.layout, ch) as { mod: number; hid: number } | null;
-  if (row) sendKey(row.hid, row.mod);
+  for (const s of charToStrokes(props.layout, ch, props.os) ?? []) sendKey(s.hid, s.mod);
 }
 
 /*
@@ -123,13 +125,13 @@ const PAD_REPEAT_MS = 90;
 /* `area` places each key in the grid below; the arrows keep the shape they have
    on a keyboard so a thumb finds them without reading. */
 const PAD_KEYS = [
-  { code: "Escape", text: "Esc", label: "Escape", area: "esc" },
-  { code: "ArrowUp", text: "\u2191", label: "Arrow up", area: "up" },
-  { code: "Tab", text: "Tab", label: "Tab", area: "tab" },
-  { code: "ArrowLeft", text: "\u2190", label: "Arrow left", area: "left" },
-  { code: "ArrowDown", text: "\u2193", label: "Arrow down", area: "down" },
-  { code: "ArrowRight", text: "\u2192", label: "Arrow right", area: "right" },
-  { code: "Enter", text: "Enter", label: "Enter", area: "enter" },
+  { code: "Escape", text: "Esc", label: () => "Escape", area: "esc" },
+  { code: "ArrowUp", text: "\u2191", label: () => t("Arrow up"), area: "up" },
+  { code: "Tab", text: "Tab", label: () => "Tab", area: "tab" },
+  { code: "ArrowLeft", text: "\u2190", label: () => t("Arrow left"), area: "left" },
+  { code: "ArrowDown", text: "\u2193", label: () => t("Arrow down"), area: "down" },
+  { code: "ArrowRight", text: "\u2192", label: () => t("Arrow right"), area: "right" },
+  { code: "Enter", text: "Enter", label: () => "Enter", area: "enter" },
 ];
 
 const padOpen = ref(false);
@@ -172,17 +174,17 @@ function toggleKeyboard() {
 </script>
 
 <template>
-  <div :class="['touch-controls', { 'touch-docked': docked }]" role="toolbar" aria-label="Touch controls">
+  <div :class="['touch-controls', { 'touch-docked': docked }]" role="toolbar" :aria-label="t('Touch controls')">
     <!-- The pad sits above the row so a thumb on it is nowhere near the
          buttons that open and close it. -->
-    <div v-if="padOpen" class="touch-pad" role="group" aria-label="Keys">
+    <div v-if="padOpen" class="touch-pad" role="group" :aria-label="t('Keys')">
       <button
         v-for="k in PAD_KEYS"
         :key="k.code"
         type="button"
         class="touch-btn touch-pad-btn"
         :style="{ gridArea: k.area }"
-        :aria-label="k.label"
+        :aria-label="k.label()"
         @pointerdown.prevent="padPress(k.code)"
         @pointerup="padRelease"
         @pointercancel="padRelease"
@@ -193,18 +195,18 @@ function toggleKeyboard() {
     </div>
 
     <div class="touch-row">
-      <button type="button" class="touch-btn" aria-label="Left click" title="Left click" @click="tap(1)">
+      <button type="button" class="touch-btn" :aria-label="t('Left click')" :title="t('Left click')" @click="tap(1)">
         <Icon name="mouse-left" :size="22" />
       </button>
-      <button type="button" class="touch-btn" aria-label="Right click" title="Right click" @click="tap(2)">
+      <button type="button" class="touch-btn" :aria-label="t('Right click')" :title="t('Right click')" @click="tap(2)">
         <Icon name="mouse-right" :size="22" />
       </button>
       <button
         type="button"
         class="touch-btn"
         :class="{ 'touch-btn-on': padOpen }"
-        aria-label="Arrow keys"
-        title="Arrow keys, Esc, Tab and Enter"
+        :aria-label="t('Arrow keys')"
+        :title="t('Arrow keys, Esc, Tab and Enter')"
         @click="padOpen = !padOpen"
       >
         <Icon name="arrows" :size="22" />
@@ -213,8 +215,8 @@ function toggleKeyboard() {
         type="button"
         class="touch-btn"
         :class="{ 'touch-btn-on': stick }"
-        aria-label="Pointer stick"
-        title="A drag works as a stick: the pointer keeps moving while the finger is held off where it landed"
+        :aria-label="t('Pointer stick')"
+        :title="t('A drag works as a stick: the pointer keeps moving while the finger is held off where it landed')"
         :aria-pressed="stick"
         @click="emit('stick', !stick)"
       >
@@ -224,8 +226,8 @@ function toggleKeyboard() {
         type="button"
         class="touch-btn"
         :class="{ 'touch-btn-on': consoleKeyboard ? consoleKeyboardOpen : oskOpen }"
-        aria-label="Keyboard"
-        :title="consoleKeyboard ? 'The console\'s keyboard' : 'The phone\'s keyboard'"
+        :aria-label="t('Keyboard')"
+        :title="consoleKeyboard ? t('The console\'s keyboard') : t('The phone\'s keyboard')"
         @click="toggleKeyboard"
       >
         <Icon name="keyboard" :size="22" />
@@ -233,8 +235,8 @@ function toggleKeyboard() {
       <button
         type="button"
         class="touch-btn touch-btn-dock"
-        :aria-label="docked ? 'Let it float over the picture' : 'Dock it under the picture'"
-        :title="docked ? 'Let it float over the picture' : 'Dock it under the picture'"
+        :aria-label="docked ? t('Let it float over the picture') : t('Dock it under the picture')"
+        :title="docked ? t('Let it float over the picture') : t('Dock it under the picture')"
         @click="emit('dock', !docked)"
       >
         <Icon :name="docked ? 'float' : 'dock'" :size="18" />
@@ -251,7 +253,7 @@ function toggleKeyboard() {
       autocomplete="off"
       autocorrect="off"
       spellcheck="false"
-      aria-label="On-screen keyboard input"
+      :aria-label="t('On-screen keyboard input')"
       :value="''"
       @beforeinput="onBeforeInput"
       @keydown="onKeydown"

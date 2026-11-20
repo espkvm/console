@@ -11,6 +11,7 @@ import Icon from "./Icon.vue";
 import { cueAt, parseSrt, toVtt, type Cue } from "../video/srt";
 import { playersOpen } from "../video/sound";
 import { TsPlayer } from "../video/tsPlayer";
+import { t } from "../i18n";
 
 const props = defineProps<{ file: CaptureFile; start?: number }>();
 const emit = defineEmits<{ close: [] }>();
@@ -38,10 +39,10 @@ const vttUrl = ref("");
 let player: TsPlayer | null = null;
 
 function clock(s: number): string {
-  const t = Math.max(0, Math.floor(s));
-  const h = Math.floor(t / 3600);
-  const m = Math.floor((t % 3600) / 60);
-  const ss = String(t % 60).padStart(2, "0");
+  const sec = Math.max(0, Math.floor(s));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const ss = String(sec % 60).padStart(2, "0");
   return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
 
@@ -112,8 +113,8 @@ function onVideoTime(e: Event) {
           <button
             type="button"
             class="btn btn-sm btn-icon btn-quiet"
-            aria-label="Close"
-            title="Close"
+            :aria-label="t('Close')"
+            :title="t('Close')"
             @click="emit('close')"
           >
             <Icon name="close" :size="15" />
@@ -121,11 +122,11 @@ function onVideoTime(e: Event) {
         </div>
         <div class="player-screen">
           <video v-if="mp4" ref="video" :src="url" controls autoplay playsinline @timeupdate="onVideoTime">
-            <track v-if="vttUrl" kind="subtitles" srclang="en" label="Keys pressed" :src="vttUrl" default />
+            <track v-if="vttUrl" kind="subtitles" srclang="en" :label="t('Keys pressed')" :src="vttUrl" default />
           </video>
           <template v-else>
             <canvas ref="canvas" @click="toggle" />
-            <span v-if="waiting && !error" class="player-wait muted">Loading…</span>
+            <span v-if="waiting && !error" class="player-wait muted">{{ t("Loading\u2026") }}</span>
           </template>
           <span v-if="subtitle" class="player-sub">{{ subtitle }}</span>
         </div>
@@ -134,8 +135,8 @@ function onVideoTime(e: Event) {
           <button
             type="button"
             class="btn btn-sm btn-icon"
-            :aria-label="playing ? 'Pause' : 'Play'"
-            :title="playing ? 'Pause' : 'Play'"
+            :aria-label="playing ? t('Pause') : t('Play')"
+            :title="playing ? t('Pause') : t('Play')"
             :disabled="!!error"
             @click="toggle"
           >
@@ -149,7 +150,7 @@ function onVideoTime(e: Event) {
             step="0.1"
             :value="dragging ?? time"
             :disabled="!duration || !!error"
-            aria-label="Position"
+            :aria-label="t('Position')"
             @input="onSlide"
             @change="onSeek"
           />
@@ -158,8 +159,8 @@ function onVideoTime(e: Event) {
             type="button"
             :class="['btn', 'btn-sm', 'btn-icon', { 'btn-on': showSubs }]"
             :aria-pressed="showSubs"
-            aria-label="Subtitles"
-            title="Show what was pressed during the recording"
+            :aria-label="t('Subtitles')"
+            :title="t('Show what was pressed during the recording')"
             @click="showSubs = !showSubs"
           >
             <Icon name="captions" :size="15" />

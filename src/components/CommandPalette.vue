@@ -8,6 +8,8 @@ import Keys from "./Keys.vue";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import Icon from "./Icon.vue";
 import { findCommands, remember, type Command } from "../ui/commands";
+import KeyText from "./KeyText.vue";
+import { t } from "../i18n";
 
 const props = defineProps<{ commands: Command[] }>();
 const emit = defineEmits<{ close: [] }>();
@@ -70,15 +72,15 @@ function onKey(e: KeyboardEvent) {
 
 <template>
   <div class="cp-backdrop" @click.self="emit('close')">
-    <section class="cp" role="dialog" aria-label="Commands">
+    <section class="cp" role="dialog" :aria-label="t('Commands')">
       <div class="cp-search">
         <Icon name="search" :size="16" />
         <input
           ref="box"
           v-model="query"
           type="text"
-          placeholder="Type a command: screenshot, serial, ctrl+alt+del..."
-          aria-label="Command"
+          :placeholder="t('Type a command: screenshot, serial, ctrl+alt+del...')"
+          :aria-label="t('Command')"
           aria-controls="cp-list"
           :aria-activedescendant="shown.length ? `cp-${active}` : undefined"
           autocomplete="off"
@@ -97,16 +99,16 @@ function onKey(e: KeyboardEvent) {
           @mousemove="active = i"
           @click="run(c)"
         >
-          <span class="cp-title">{{ c.title }}</span>
+          <span class="cp-title">{{ t(c.title) }}</span>
           <span class="cp-meta">
-            <span v-if="recentIds.has(c.id)" class="cp-group">Recent</span>
-            <span v-else class="cp-group">{{ c.group }}</span>
+            <span v-if="recentIds.has(c.id)" class="cp-group">{{ t("Recent") }}</span>
+            <span v-else class="cp-group">{{ t(c.group) }}</span>
             <Keys v-if="c.hint" :combo="c.hint" />
           </span>
         </li>
-        <li v-if="!shown.length" class="cp-none">Nothing matches "{{ query }}".</li>
+        <li v-if="!shown.length" class="cp-none">{{ t('Nothing matches "{query}".', { query }) }}</li>
       </ul>
-      <p class="cp-foot"><Keys combo="↑" /> <Keys combo="↓" /> to choose, <Keys combo="Enter" /> to run, <Keys combo="Esc" /> to close.</p>
+      <p class="cp-foot"><KeyText :text="t('[[\u2191]] [[\u2193]] to choose, [[Enter]] to run, [[Esc]] to close.')" /></p>
     </section>
   </div>
 </template>

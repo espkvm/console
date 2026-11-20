@@ -208,6 +208,8 @@ async function demoRegionsPost(path: string, body: Json): Promise<Response> {
   return json(regionsJson());
 }
 
+let demoLocale: string | null = null;
+
 async function demoProfiles(path: string, body: Json): Promise<Response> {
   const id = Number(body.id ?? -1);
   const found = profileList.find((p) => p.id === id);
@@ -860,6 +862,20 @@ async function route(
   }
   if (method === "POST" && path.startsWith("/api/v1/profiles")) {
     return demoProfiles(path, (await bodyJson(init, req)) as Json);
+  }
+  /* The device's language, held for this visit as the device would keep it. */
+  if (path === "/api/v1/locale") {
+    if (method === "PUT") {
+      demoLocale = String(init?.body ?? (req ? await req.text() : ""));
+      return json({ kept: true });
+    }
+    if (method === "DELETE") {
+      demoLocale = null;
+      return json({ kept: false });
+    }
+    return demoLocale
+      ? new Response(demoLocale, { headers: { "Content-Type": "application/json; charset=utf-8" } })
+      : json({ error: "no device language" }, 404);
   }
   if (method === "PUT" && path === "/api/v1/settings") {
     const patch = { ...((await bodyJson(init, req)) as Json) };

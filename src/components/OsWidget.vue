@@ -27,6 +27,7 @@ import {
   type ProfileList,
 } from "../state/profiles";
 import { targetKind } from "../state/targetKind";
+import { t } from "../i18n";
 
 const props = defineProps<{
   probe: UsbProbe | null;
@@ -59,8 +60,8 @@ async function apply(fn: () => Promise<ProfileList>) {
     emit("values", await loadValues());
     if (
       list.reboot &&
-      confirm("Some settings of this profile apply after a restart (the gamepad, the EDID). Restart now?") &&
-      (await runRestart("Restarting the device", restartDevice, { kind: "manual" }))
+      confirm(t("Some settings of this profile apply after a restart (the gamepad, the EDID). Restart now?")) &&
+      (await runRestart(t("Restarting the device"), restartDevice, { kind: "manual" }))
     ) {
       location.reload();
     }
@@ -117,7 +118,7 @@ const show = computed(
 );
 const name = computed(() =>
   target.value.kind === "unknown" && target.value.from === "cec"
-    ? (props.cec?.name ?? "unknown")
+    ? (props.cec?.name ?? t("unknown"))
     : (OS_NAMES[target.value.kind] ?? target.value.kind),
 );
 const usbName = computed(() => OS_NAMES[props.probe?.os ?? ""] ?? props.probe?.os);
@@ -129,8 +130,8 @@ const usbName = computed(() => OS_NAMES[props.probe?.os ?? ""] ?? props.probe?.o
       type="button"
       class="rail-btn ow-btn"
       :class="{ 'rail-btn-active': open }"
-      :title="target.from === 'cec' ? `Target: ${name}` : `Target looks like ${name} - click for the USB fingerprint`"
-      :aria-label="`Target OS: ${name}`"
+      :title="target.from === 'cec' ? t('Target: {name}', { name }) : t('Target looks like {name} - click for the USB fingerprint', { name })"
+      :aria-label="t('Target OS: {name}', { name })"
       @click="open = !open"
     >
       <OsIcon :os="target.kind" />
@@ -141,39 +142,38 @@ const usbName = computed(() => OS_NAMES[props.probe?.os ?? ""] ?? props.probe?.o
       <div class="ow-popup">
         <div class="ow-head">
           <OsIcon :os="target.kind" />
-          <template v-if="target.from === 'cec'">This is <strong>{{ name }}</strong></template>
-          <template v-else>Looks like <strong>{{ name }}</strong></template>
+          <template v-if="target.from === 'cec'">{{ t("This is {name}", { name }) }}</template>
+          <template v-else>{{ t("Looks like {name}", { name }) }}</template>
         </div>
         <p v-if="target.from === 'cec'">
-          It names itself over HDMI-CEC: {{ cec?.name || "no name" }}, vendor {{ cec?.vendor }}.
+          {{ t("It names itself over HDMI-CEC: {name}, vendor {vendor}.", { name: cec?.name || t("no name"), vendor: cec?.vendor ?? "" }) }}
         </p>
         <template v-if="probe && attached">
           <p v-if="target.from === 'cec'">
-            Over USB it looks like {{ probe.os === "unknown" ? "nothing known" : usbName }}:
+            {{ t("Over USB it looks like {name}:", { name: probe.os === "unknown" ? t("nothing known") : (usbName ?? "") }) }}
           </p>
           <p v-else>
-            Inferred from how the target enumerated over USB. If that is wrong,
-            send this fingerprint in an issue so a later build can learn it:
+            {{ t("Inferred from how the target enumerated over USB. If that is wrong, send this fingerprint in an issue so a later build can learn it:") }}
           </p>
           <pre class="fingerprint">{{ probe.trace }}</pre>
         </template>
         <div v-if="profiles" class="ow-profile">
           <label>
-            Profile
+            {{ t("Profile") }}
             <select :value="String(profiles.active)" :disabled="busy" @change="onPick">
               <option v-for="p in profiles.profiles" :key="p.id" :value="String(p.id)">{{ p.name }}</option>
             </select>
           </label>
-          <span v-if="active && active.id !== 0" class="badge">{{ profiles.manual ? "by hand" : "auto" }}</span>
+          <span v-if="active && active.id !== 0" class="badge">{{ profiles.manual ? t("by hand") : t("auto") }}</span>
           <button
             v-if="!active || active.id === 0"
             type="button"
             class="btn btn-sm"
             :disabled="busy || profiles.profiles.length > profiles.max"
-            title="A profile with its own pointer, gamepad and video settings, picked when this device is attached"
+            :title="t('A profile with its own pointer, gamepad and video settings, picked when this device is attached')"
             @click="saveForDevice"
           >
-            Profile for this device
+            {{ t("Profile for this device") }}
           </button>
         </div>
       </div>

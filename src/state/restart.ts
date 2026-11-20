@@ -11,6 +11,7 @@
 import { reactive } from "vue";
 
 import { waitForDevice } from "./device";
+import { t } from "../i18n";
 
 const NOTE_KEY = "espkvm.restart";
 
@@ -215,7 +216,7 @@ export function dismissRestart() {
  * @returns true if it came back.
  */
 export async function watchBack(): Promise<boolean> {
-  watchStep("restart", "Waiting for the device to come back...", {
+  watchStep("restart", t("Waiting for the device to come back..."), {
     expectedMs: EXPECTED_RESTART_MS,
   });
   const back = await waitForDevice(90_000, 4000);
@@ -259,7 +260,7 @@ export async function runRestart(
   /* A beat on "it is back" before the reload. Without it the panel vanishes and
      the sign-in page appears out of nowhere, which reads as something going
      wrong rather than as the thing having worked. */
-  watchStep("restart", "The device is back. Reloading the console...");
+  watchStep("restart", t("The device is back. Reloading the console..."));
   await new Promise((r) => setTimeout(r, 1200));
   return true;
 }

@@ -154,7 +154,7 @@ export interface QuickContext {
 export async function runQuick(q: QuickItem, ctx: QuickContext): Promise<void> {
   switch (q.t) {
     case "key":
-      await runMacroScript(`key ${q.v}`, ctx.control, ctx.layout, ctx.typeDelay);
+      await runMacroScript(`key ${q.v}`, ctx.control, ctx.layout, ctx.typeDelay, ctx.os);
       return;
     case "combo": {
       const m = findMacro(q.v);
@@ -165,7 +165,7 @@ export async function runQuick(q: QuickItem, ctx: QuickContext): Promise<void> {
     case "macro": {
       const m = ctx.macros.find((x) => x.name === q.v);
       if (!m) throw new Error(`There is no macro "${q.v}" any more`);
-      await runMacroScript(m.script, ctx.control, ctx.layout, ctx.typeDelay);
+      await runMacroScript(m.script, ctx.control, ctx.layout, ctx.typeDelay, ctx.os);
       return;
     }
     case "runbook":

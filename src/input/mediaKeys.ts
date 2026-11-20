@@ -3,8 +3,9 @@
  * sends them as consumer-control usages (HID usage page 0x0C), not as key
  * positions, so they go to the device as their own message.
  */
+import { tm } from "../i18n";
 
-const BRIGHTNESS_NOTE = "On the target's own screen, a laptop's - not a monitor on HDMI.";
+const BRIGHTNESS_NOTE = tm("On the target's own screen, a laptop's - not a monitor on HDMI.");
 
 export interface MediaKey {
   label: string;
@@ -17,20 +18,20 @@ export interface MediaKey {
 
 /* `as const` keeps each icon a literal name, which Icon checks. */
 export const MEDIA_KEYS = [
-  { label: "Mute", icon: "volume-off", usage: 0xe2, code: "AudioVolumeMute" },
-  { label: "Volume down", icon: "volume-down", usage: 0xea, code: "AudioVolumeDown" },
-  { label: "Volume up", icon: "volume-up", usage: 0xe9, code: "AudioVolumeUp" },
-  { label: "Previous track", icon: "skip-back", usage: 0xb6, code: "MediaTrackPrevious" },
-  { label: "Play/Pause", icon: "play-pause", usage: 0xcd, code: "MediaPlayPause" },
-  { label: "Next track", icon: "skip-forward", usage: 0xb5, code: "MediaTrackNext" },
+  { label: tm("Mute"), icon: "volume-off", usage: 0xe2, code: "AudioVolumeMute" },
+  { label: tm("Volume down"), icon: "volume-down", usage: 0xea, code: "AudioVolumeDown" },
+  { label: tm("Volume up"), icon: "volume-up", usage: 0xe9, code: "AudioVolumeUp" },
+  { label: tm("Previous track"), icon: "skip-back", usage: 0xb6, code: "MediaTrackPrevious" },
+  { label: tm("Play/Pause"), icon: "play-pause", usage: 0xcd, code: "MediaPlayPause" },
+  { label: tm("Next track"), icon: "skip-forward", usage: 0xb5, code: "MediaTrackNext" },
   {
-    label: "Brightness down",
+    label: tm("Brightness down"),
     icon: "sun-dim",
     usage: 0x70,
     code: "BrightnessDown",
     note: BRIGHTNESS_NOTE,
   },
-  { label: "Brightness up", icon: "sun", usage: 0x6f, code: "BrightnessUp", note: BRIGHTNESS_NOTE },
+  { label: tm("Brightness up"), icon: "sun", usage: 0x6f, code: "BrightnessUp", note: BRIGHTNESS_NOTE },
 ] as const satisfies readonly MediaKey[];
 
 /**

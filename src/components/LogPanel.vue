@@ -15,6 +15,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { logUrl } from "../state/device";
 import { toast } from "../state/toasts";
 import Icon from "./Icon.vue";
+import { t } from "../i18n";
 
 const props = withDefaults(defineProps<{ source?: "device" | "netlog" }>(), { source: "device" });
 const emit = defineEmits<{ close: [] }>();
@@ -22,7 +23,7 @@ const emit = defineEmits<{ close: [] }>();
 const isNet = computed(() => props.source === "netlog");
 const endpoint = computed(() => (isNet.value ? "/api/v1/netlog/log" : "/api/v1/system/log"));
 const fileUrl = computed(() => (isNet.value ? "/api/v1/netlog/log" : logUrl()));
-const title = computed(() => (isNet.value ? "Target log (netconsole)" : "Device log"));
+const title = computed(() => (isNet.value ? t("Target log (netconsole)") : t("Device log")));
 
 const MAX_LINES = 3000;
 
@@ -75,7 +76,7 @@ async function poll() {
       parts.push(partial);
       partial = "";
     }
-    const add = parts.map((t) => ({ text: t, level: levelOf(t) }));
+    const add = parts.map((s) => ({ text: s, level: levelOf(s) }));
     const all = lines.value.concat(add);
     lines.value = all.length > MAX_LINES ? all.slice(all.length - MAX_LINES) : all;
     if (atBottom) void nextTick(() => el && (el.scrollTop = el.scrollHeight));
@@ -97,9 +98,9 @@ const shown = computed(() => {
 async function copyShown() {
   try {
     await navigator.clipboard.writeText(shown.value.map((l) => l.text).join("\n"));
-    toast.info("Copied");
+    toast.info(t("Copied"));
   } catch {
-    toast.error("Could not copy - select and copy it manually");
+    toast.error(t("Could not copy - select and copy it manually"));
   }
 }
 
@@ -116,30 +117,30 @@ onUnmounted(() => window.clearInterval(timer));
 
 <template>
   <Teleport to="main.stage > .stage-view">
-    <section class="lg" aria-label="Device log">
+    <section class="lg" :aria-label="t('Device log')">
       <div class="lg-head">
         <h3>{{ title }}</h3>
-        <span :class="['pill', failed ? 'pill-off' : 'pill-on']">{{ failed ? "no answer" : "live" }}</span>
+        <span :class="['pill', failed ? 'pill-off' : 'pill-on']">{{ failed ? t("no answer") : t("live") }}</span>
         <label
           v-for="lv in (isNet ? [] : (['E', 'W', 'I', 'D'] as const))"
           :key="lv"
           :class="['lg-lv', `lg-${lv}`]"
         >
           <input v-model="show[lv]" type="checkbox" />
-          {{ { E: "errors", W: "warnings", I: "info", D: "debug" }[lv] }}
+          {{ { E: t("errors"), W: t("warnings"), I: t("info"), D: t("debug") }[lv] }}
         </label>
-        <input v-model="query" class="lg-search" type="search" placeholder="Find" aria-label="Find in the log" />
+        <input v-model="query" class="lg-search" type="search" :placeholder="t('Find')" :aria-label="t('Find in the log')" />
         <span class="lg-gap" />
-        <button type="button" class="btn btn-sm btn-quiet" title="Copy what is shown" @click="copyShown">
+        <button type="button" class="btn btn-sm btn-quiet" :title="t('Copy what is shown')" @click="copyShown">
           <Icon name="copy" :size="14" />
         </button>
-        <a :href="fileUrl" :download="isNet ? 'target-netlog.txt' : 'espkvm-log.txt'" class="btn btn-sm btn-quiet" title="Download the log">
+        <a :href="fileUrl" :download="isNet ? 'target-netlog.txt' : 'espkvm-log.txt'" class="btn btn-sm btn-quiet" :title="t('Download the log')">
           <Icon name="download" :size="14" />
         </a>
-        <button type="button" class="btn btn-sm btn-quiet" title="Clear this view (the device keeps its log)" @click="clearView">
-          Clear
+        <button type="button" class="btn btn-sm btn-quiet" :title="t('Clear this view (the device keeps its log)')" @click="clearView">
+          {{ t("Clear") }}
         </button>
-        <button type="button" class="btn btn-sm btn-icon btn-quiet" aria-label="Close the log" title="Close" @click="emit('close')">
+        <button type="button" class="btn btn-sm btn-icon btn-quiet" :aria-label="t('Close the log')" :title="t('Close')" @click="emit('close')">
           <Icon name="close" :size="15" />
         </button>
       </div>
@@ -147,11 +148,11 @@ onUnmounted(() => window.clearInterval(timer));
         <div v-for="(l, i) in shown" :key="i" :class="['lg-line', l.level && `lg-${l.level}`]">{{ l.text }}</div>
       </div>
       <p v-if="isNet" class="lg-hint">
-        Received as plain UDP: anyone on the network could have sent a line here. Nothing seen yet?
-        On the target: modprobe netconsole netconsole=@/,6666@&lt;this device's IP&gt;/
+        {{ t("Received as plain UDP: anyone on the network could have sent a line here. Nothing seen yet?") }}
+        {{ t("On the target: {command}", { command: `modprobe netconsole netconsole=@/,6666@<${t("this device's IP")}>/` }) }}
       </p>
       <p v-else class="lg-hint">
-        No passwords or keys, but it names your network, addresses and MAC - look before you post it.
+        {{ t("No passwords or keys, but it names your network, addresses and MAC - look before you post it.") }}
       </p>
     </section>
   </Teleport>

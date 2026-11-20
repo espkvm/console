@@ -33,6 +33,7 @@ import {
   type TextHit,
 } from "../state/device";
 import { toast } from "../state/toasts";
+import { t, tn } from "../i18n";
 import Icon from "./Icon.vue";
 import RecordingPlayer from "./RecordingPlayer.vue";
 
@@ -59,7 +60,7 @@ async function search() {
     hits.value = r.hits;
     more.value = r.more;
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     searching.value = false;
   }
@@ -85,7 +86,7 @@ async function refresh() {
     /* Files the device sends on its own show up without a click. */
     if (captures.value?.canUpload) void pollUploads();
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     loading.value = false;
   }
@@ -139,13 +140,13 @@ function upNote(path: string): string {
   const u = upItem(path);
   if (!u) return "";
   if (u.state === "queued" && u.retryIn)
-    return `waiting for the server (${u.message}), next try in ${u.retryIn} s`;
-  if (u.state === "queued") return "waiting to upload";
+    return t("waiting for the server ({message}), next try in {n} s", { message: t(u.message ?? ""), n: u.retryIn });
+  if (u.state === "queued") return t("waiting to upload");
   if (u.state === "sending")
-    return `uploading ${u.total ? Math.floor((u.bytes / u.total) * 100) : 0}%`;
-  if (u.state === "done") return "uploaded";
-  if (u.state === "cancelled") return "upload cancelled";
-  return `upload failed: ${u.message}`;
+    return t("uploading {pct}%", { pct: u.total ? Math.floor((u.bytes / u.total) * 100) : 0 });
+  if (u.state === "done") return t("uploaded");
+  if (u.state === "cancelled") return t("upload cancelled");
+  return t("upload failed: {message}", { message: t(u.message ?? "") });
 }
 
 function upBusy(path: string): boolean {
@@ -158,7 +159,7 @@ async function upload(path: string) {
     uploads.value = await uploadCapture(path);
     schedulePoll();
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   }
 }
 
@@ -172,7 +173,7 @@ async function uploadAll() {
     try {
       uploads.value = await uploadCapture(f.path);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(t(err instanceof Error ? err.message : String(err)));
       break;
     }
   }
@@ -184,7 +185,7 @@ async function cancelAll() {
     uploads.value = await cancelUploads();
     schedulePoll();
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   }
 }
 
@@ -197,15 +198,15 @@ const videos = computed(() => newestFirst(captures.value?.video));
 const shots = computed(() => newestFirst(captures.value?.screenshots));
 
 function kind(path: string): string {
-  if (path.includes("-event")) return "dashcam clip";
-  if (path.includes("-timelapse")) return "timelapse";
-  return "video";
+  if (path.includes("-event")) return t("dashcam clip");
+  if (path.includes("-timelapse")) return t("timelapse");
+  return t("video");
 }
 
 /* "1:05" - where a hit sits in its recording. */
 function clock(seconds: number): string {
-  const t = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+  const secs = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 }
 
 function base(path: string): string {
@@ -220,13 +221,13 @@ function when(path: string): string {
 
 /* A timelapse: one frame every so often, played at 25 fps. An hour at 10 s
    plays in 14 seconds, a night at a minute in 20. */
-const EVERY = [
-  { s: 2, label: "every 2 s" },
-  { s: 10, label: "every 10 s" },
-  { s: 30, label: "every 30 s" },
-  { s: 60, label: "every minute" },
-  { s: 300, label: "every 5 minutes" },
-];
+const EVERY = computed(() => [
+  { s: 2, label: t("every 2 s") },
+  { s: 10, label: t("every 10 s") },
+  { s: 30, label: t("every 30 s") },
+  { s: 60, label: t("every minute") },
+  { s: 300, label: t("every 5 minutes") },
+]);
 const every = ref(10);
 const tlBusy = ref(false);
 
@@ -235,21 +236,21 @@ async function timelapse() {
   tlBusy.value = true;
   try {
     const r = await startTimelapse(every.value);
-    toast.info(`Timelapse to ${r.file} - stop it with the record button`);
+    toast.info(t("Timelapse to {file} - stop it with the record button", { file: r.file }));
     emit("started");
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   } finally {
     tlBusy.value = false;
   }
 }
 
 async function remove(path: string) {
-  if (!confirm(`Delete ${path} from the card?`)) return;
+  if (!confirm(t("Delete {path} from the card?", { path }))) return;
   try {
     captures.value = await deleteCapture(path);
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(t(err instanceof Error ? err.message : String(err)));
   }
 }
 </script>
@@ -257,36 +258,34 @@ async function remove(path: string) {
 <template>
   <section class="capture-list">
     <div class="capture-head">
-      <span class="muted">On the microSD card, newest first</span>
+      <span class="muted">{{ t("On the microSD card, newest first") }}</span>
       <span class="capture-head-actions">
         <button
           v-if="captures?.canUpload && !watchOnly"
           type="button"
           class="btn btn-sm btn-quiet"
-          :title="`Send every file in this tab that has not gone yet to the ${uploads?.dest ?? 'upload'} folder`"
+          :title="t('Send every file in this tab that has not gone yet to the {dest} folder', { dest: uploads?.dest ?? 'upload' })"
           @click="uploadAll"
         >
-          Upload all
+          {{ t("Upload all") }}
         </button>
         <button type="button" class="btn btn-sm btn-quiet" :disabled="loading" @click="refresh">
-          Refresh
+          {{ t("Refresh") }}
         </button>
       </span>
     </div>
     <p v-if="activeUploads.length" class="setting-note capture-uploading">
-      Uploading {{ activeUploads.length }} file{{ activeUploads.length === 1 ? "" : "s" }} to
-      {{ uploads?.dest }}.
-      <button type="button" class="btn-link" @click="cancelAll">Cancel</button>
+      {{ tn("Uploading {n} file to {dest}.", "Uploading {n} files to {dest}.", activeUploads.length, { dest: uploads?.dest ?? "" }) }}
+      <button type="button" class="btn-link" @click="cancelAll">{{ t("Cancel") }}</button>
     </p>
 
 
     <p v-if="record?.dashcamNoMemory" class="setting-note setting-note-blocked">
-      The dashcam is on, but this board has too little memory left for it while H.264 runs.
-      Recording and screenshots still work.
+      {{ t("The dashcam is on, but this board has too little memory left for it while H.264 runs. Recording and screenshots still work.") }}
     </p>
 
     <p v-if="captures?.blocked" class="setting-note setting-note-blocked">
-      {{ captures.blocked }}
+      {{ t(captures.blocked) }}
     </p>
     <template v-else-if="captures">
       <div class="tabs" role="tablist">
@@ -297,7 +296,7 @@ async function remove(path: string) {
           :class="['tab', { 'tab-active': tab === 'video' }]"
           @click="tab = 'video'"
         >
-          Videos ({{ videos.length }})
+          {{ t("Videos ({n})", { n: videos.length }) }}
         </button>
         <button
           type="button"
@@ -306,7 +305,7 @@ async function remove(path: string) {
           :class="['tab', { 'tab-active': tab === 'screenshots' }]"
           @click="tab = 'screenshots'"
         >
-          Screenshots ({{ shots.length }})
+          {{ t("Screenshots ({n})", { n: shots.length }) }}
         </button>
       </div>
 
@@ -316,18 +315,21 @@ async function remove(path: string) {
           <input
             v-model="phrase"
             type="search"
-            placeholder="Find words that were on the screen"
-            aria-label="Find words that were on the screen"
+            :placeholder="t('Find words that were on the screen')"
+            :aria-label="t('Find words that were on the screen')"
           />
           <button type="submit" class="btn btn-sm" :disabled="searching || !phrase.trim()">
-            {{ searching ? "Looking..." : "Find" }}
+            {{ searching ? t("Looking...") : t("Find") }}
           </button>
         </form>
 
         <template v-if="hits">
           <p v-if="!hits.length" class="setting-note">
-            Nothing found. Only screens the device could read as text are saved, and only with
-            "Save the screen's text with a recording" on (Settings, Video).
+            {{
+              t(
+                "Nothing found. Only screens the device could read as text are saved, and only with \"Save the screen's text with a recording\" on (Settings, Video).",
+              )
+            }}
           </p>
           <ul v-else class="image-list">
             <li v-for="(h, i) in hits" :key="i" class="image-row">
@@ -340,8 +342,8 @@ async function remove(path: string) {
                 <button
                   type="button"
                   class="btn btn-sm btn-icon btn-quiet"
-                  aria-label="Play from here"
-                  title="Play from here"
+                  :aria-label="t('Play from here')"
+                  :title="t('Play from here')"
                   @click="openHit(h)"
                 >
                   <Icon name="play" :size="15" />
@@ -349,12 +351,11 @@ async function remove(path: string) {
               </span>
             </li>
           </ul>
-          <p v-if="more" class="setting-note">Only the first {{ hits.length }} are shown.</p>
+          <p v-if="more" class="setting-note">{{ t("Only the first {n} are shown.", { n: hits.length }) }}</p>
         </template>
 
         <p v-if="!videos.length" class="muted image-empty">
-          No videos yet. The record button under the picture saves them to the VIDEO folder on
-          the card.
+          {{ t("No videos yet. The record button under the picture saves them to the VIDEO folder on the card.") }}
         </p>
         <ul v-else class="image-list">
           <li v-for="f in videos" :key="f.path" class="image-row">
@@ -369,8 +370,8 @@ async function remove(path: string) {
               <button
                 type="button"
                 class="btn btn-sm btn-icon btn-quiet"
-                aria-label="Play"
-                title="Play"
+                :aria-label="t('Play')"
+                :title="t('Play')"
                 @click="play(f)"
               >
                 <Icon name="play" :size="15" />
@@ -379,8 +380,8 @@ async function remove(path: string) {
                 class="btn btn-sm btn-icon btn-quiet"
                 :href="captureUrl(f.path)"
                 :download="base(f.path)"
-                aria-label="Download"
-                title="Download"
+                :aria-label="t('Download')"
+                :title="t('Download')"
               >
                 <Icon name="download" :size="15" />
               </a>
@@ -389,8 +390,8 @@ async function remove(path: string) {
                 class="btn btn-sm btn-icon btn-quiet"
                 :href="captureUrl(f.subtitles)"
                 :download="base(f.subtitles)"
-                aria-label="Download subtitles"
-                title="Subtitles: what was pressed. Keep the file next to the video under the same name and the player shows it."
+                :aria-label="t('Download subtitles')"
+                :title="t('Subtitles: what was pressed. Keep the file next to the video under the same name and the player shows it.')"
               >
                 <Icon name="captions" :size="15" />
               </a>
@@ -399,8 +400,8 @@ async function remove(path: string) {
                 type="button"
                 class="btn btn-sm btn-icon btn-quiet"
                 :disabled="upBusy(f.path)"
-                aria-label="Upload"
-                :title="`Upload to the ${uploads?.dest ?? 'upload'} folder`"
+                :aria-label="t('Upload')"
+                :title="t('Upload to the {dest} folder', { dest: uploads?.dest ?? 'upload' })"
                 @click="upload(f.path)"
               >
                 <Icon name="upload" :size="15" />
@@ -409,8 +410,8 @@ async function remove(path: string) {
                 v-if="captures.canDelete && !watchOnly"
                 type="button"
                 class="btn btn-sm btn-icon btn-quiet"
-                aria-label="Delete"
-                title="Delete"
+                :aria-label="t('Delete')"
+                :title="t('Delete')"
                 @click="remove(f.path)"
               >
                 <Icon name="trash" :size="15" />
@@ -419,25 +420,25 @@ async function remove(path: string) {
           </li>
         </ul>
         <FoldNote>
-          <template #lead>Play streams a video from the card without downloading it.</template>
-          Videos are .ts files (dashcam clips and timelapses are MP4). VLC, mpv and most players
-          open them, and one cut off by a pulled card still plays up to where it stopped. With
-          keystrokes in recordings on (Settings, Video), each also gets a .srt of what was pressed.
-          Put it next to the video under the same name and the player shows it.
+          <template #lead>{{ t("Play streams a video from the card without downloading it.") }}</template>
+          {{
+            t(
+              "Videos are .ts files (dashcam clips and timelapses are MP4). VLC, mpv and most players open them, and one cut off by a pulled card still plays up to where it stopped. With keystrokes in recordings on (Settings, Video), each also gets a .srt of what was pressed. Put it next to the video under the same name and the player shows it.",
+            )
+          }}
         </FoldNote>
       </template>
 
       <template v-else>
         <p v-if="!shots.length" class="muted image-empty">
-          No screenshots yet. The camera button under the picture saves them to the SCREENSHOTS
-          folder on the card.
+          {{ t("No screenshots yet. The camera button under the picture saves them to the SCREENSHOTS folder on the card.") }}
         </p>
         <ul v-else class="image-list">
           <li v-for="f in shots" :key="f.path" class="image-row">
             <Icon name="image" :size="18" class="capture-kind" />
             <span class="image-text">
               <span class="image-name">{{ when(f.path) }}</span>
-              <span class="muted image-sub">screenshot · {{ formatBytes(f.size) }}</span>
+              <span class="muted image-sub">{{ t("screenshot") }} · {{ formatBytes(f.size) }}</span>
               <span v-if="upNote(f.path)" :class="['muted', 'image-sub', { 'capture-upfail': upItem(f.path)?.state === 'error' }]">{{ upNote(f.path) }}</span>
             </span>
             <span class="capture-actions">
@@ -446,8 +447,8 @@ async function remove(path: string) {
                 :href="captureUrl(f.path)"
                 target="_blank"
                 rel="noreferrer"
-                aria-label="Open"
-                title="Open in a new tab"
+                :aria-label="t('Open')"
+                :title="t('Open in a new tab')"
               >
                 <Icon name="external" :size="15" />
               </a>
@@ -455,8 +456,8 @@ async function remove(path: string) {
                 class="btn btn-sm btn-icon btn-quiet"
                 :href="captureUrl(f.path)"
                 :download="base(f.path)"
-                aria-label="Download"
-                title="Download"
+                :aria-label="t('Download')"
+                :title="t('Download')"
               >
                 <Icon name="download" :size="15" />
               </a>
@@ -465,8 +466,8 @@ async function remove(path: string) {
                 type="button"
                 class="btn btn-sm btn-icon btn-quiet"
                 :disabled="upBusy(f.path)"
-                aria-label="Upload"
-                :title="`Upload to the ${uploads?.dest ?? 'upload'} folder`"
+                :aria-label="t('Upload')"
+                :title="t('Upload to the {dest} folder', { dest: uploads?.dest ?? 'upload' })"
                 @click="upload(f.path)"
               >
                 <Icon name="upload" :size="15" />
@@ -475,8 +476,8 @@ async function remove(path: string) {
                 v-if="captures.canDelete && !watchOnly"
                 type="button"
                 class="btn btn-sm btn-icon btn-quiet"
-                aria-label="Delete"
-                title="Delete"
+                :aria-label="t('Delete')"
+                :title="t('Delete')"
                 @click="remove(f.path)"
               >
                 <Icon name="trash" :size="15" />
@@ -487,14 +488,14 @@ async function remove(path: string) {
       </template>
 
       <p v-if="!captures.canDelete && !watchOnly && (videos.length || shots.length)" class="setting-note">
-        Files cannot be deleted while a recording runs.
+        {{ t("Files cannot be deleted while a recording runs.") }}
       </p>
     </template>
     <RecordingPlayer v-if="playing" :file="playing" :start="playFrom" @close="playing = null" />
 
     <div v-if="record && !watchOnly" class="capture-timelapse capture-timelapse-end">
-      <span class="muted">Timelapse</span>
-      <select v-model.number="every" aria-label="One frame">
+      <span class="muted">{{ t("Timelapse") }}</span>
+      <select v-model.number="every" :aria-label="t('One frame')">
         <option v-for="o in EVERY" :key="o.s" :value="o.s">{{ o.label }}</option>
       </select>
       <button
@@ -503,12 +504,14 @@ async function remove(path: string) {
         :disabled="tlBusy || record.on || !!record.blocked"
         :title="
           record.on
-            ? 'A recording is running'
-            : (record.blocked ?? 'One frame at a time, played back at 25 fps, until you stop it')
+            ? t('A recording is running')
+            : record.blocked
+              ? t(record.blocked)
+              : t('One frame at a time, played back at 25 fps, until you stop it')
         "
         @click="timelapse"
       >
-        Start
+        {{ t("Start") }}
       </button>
     </div>
   </section>

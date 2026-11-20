@@ -10,6 +10,7 @@
  * harmless.
  */
 import { ref, watch } from "vue";
+import { tm } from "../i18n";
 
 export interface UiFeature {
   id: string;
@@ -18,25 +19,25 @@ export interface UiFeature {
 }
 
 export const UI_FEATURES: UiFeature[] = [
-  { id: "serial", label: "Serial console", group: "Connections" },
-  { id: "tools", label: "ESP-KVM Tools", group: "Connections" },
-  { id: "keyboard", label: "On-screen keyboard", group: "Input" },
-  { id: "cec", label: "TV remote (HDMI-CEC)", group: "Input" },
-  { id: "gamepad", label: "Gamepad", group: "Input" },
-  { id: "touch", label: "Touch mode", group: "Input" },
-  { id: "padmouse", label: "Controller as mouse", group: "Input" },
-  { id: "keylock", label: "Keyboard lock (shortcuts to the target)", group: "Input" },
-  { id: "pause", label: "Pause the stream", group: "Picture" },
-  { id: "scale", label: "Scale", group: "Picture" },
-  { id: "fullscreen", label: "Full screen", group: "Picture" },
-  { id: "pip", label: "Picture in a small window", group: "Picture" },
-  { id: "sound", label: "Sound", group: "Picture" },
-  { id: "select", label: "Select text on the screen", group: "Screen text" },
-  { id: "copy", label: "Copy the screen as text", group: "Screen text" },
-  { id: "screenshot", label: "Screenshot", group: "Recording" },
-  { id: "clip", label: "Save clip (dashcam)", group: "Recording" },
-  { id: "record", label: "Record", group: "Recording" },
-  { id: "netlog", label: "Target log (netconsole)", group: "Logs" },
+  { id: "serial", label: tm("Serial console"), group: tm("Connections") },
+  { id: "tools", label: tm("ESP-KVM Tools"), group: tm("Connections") },
+  { id: "keyboard", label: tm("On-screen keyboard"), group: tm("Input") },
+  { id: "cec", label: tm("TV remote (HDMI-CEC)"), group: tm("Input") },
+  { id: "gamepad", label: tm("Gamepad"), group: tm("Input") },
+  { id: "touch", label: tm("Touch mode"), group: tm("Input") },
+  { id: "padmouse", label: tm("Controller as mouse"), group: tm("Input") },
+  { id: "keylock", label: tm("Keyboard lock (shortcuts to the target)"), group: tm("Input") },
+  { id: "pause", label: tm("Pause the stream"), group: tm("Picture") },
+  { id: "scale", label: tm("Scale"), group: tm("Picture") },
+  { id: "fullscreen", label: tm("Full screen"), group: tm("Picture") },
+  { id: "pip", label: tm("Picture in a small window"), group: tm("Picture") },
+  { id: "sound", label: tm("Sound"), group: tm("Picture") },
+  { id: "select", label: tm("Select text on the screen"), group: tm("Screen text") },
+  { id: "copy", label: tm("Copy the screen as text"), group: tm("Screen text") },
+  { id: "screenshot", label: tm("Screenshot"), group: tm("Recording") },
+  { id: "clip", label: tm("Save clip (dashcam)"), group: tm("Recording") },
+  { id: "record", label: tm("Record"), group: tm("Recording") },
+  { id: "netlog", label: tm("Target log (netconsole)"), group: tm("Logs") },
 ];
 
 /** Parse the stored list: ids separated by commas or spaces. */

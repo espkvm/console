@@ -12,6 +12,7 @@ import { onMounted, onUnmounted, ref } from "vue";
 
 import Icon from "./Icon.vue";
 import { toast } from "../state/toasts";
+import { t } from "../i18n";
 
 const props = defineProps<{ card: boolean; type: boolean }>();
 const emit = defineEmits<{ (e: "card", f: File): void; (e: "type", text: string): void }>();
@@ -67,16 +68,16 @@ async function dropOn(where: "card" | "type", f: File) {
     return;
   }
   if (!looksLikeText(f)) {
-    toast.error(`${f.name} is not a text file. Drop it on the card instead.`);
+    toast.error(t("{name} is not a text file. Drop it on the card instead.", { name: f.name }));
     return;
   }
   if (f.size > TYPE_MAX) {
-    toast.error(`${f.name} is too long to type (over ${TYPE_MAX / 1024} KB)`);
+    toast.error(t("{name} is too long to type (over {kb} KB)", { name: f.name, kb: TYPE_MAX / 1024 }));
     return;
   }
   const text = await f.text();
   if (text.includes("\u0000")) {
-    toast.error(`${f.name} is not a text file. Drop it on the card instead.`);
+    toast.error(t("{name} is not a text file. Drop it on the card instead.", { name: f.name }));
     return;
   }
   emit("type", text);
@@ -91,7 +92,7 @@ function onDrop(e: DragEvent) {
   zone.value = null;
   const files = e.dataTransfer?.files;
   if (!where || !files?.length) return;
-  if (files.length > 1) toast.info(`One file at a time: took ${files[0].name}`);
+  if (files.length > 1) toast.info(t("One file at a time: took {name}", { name: files[0].name }));
   void dropOn(where, files[0]);
 }
 
@@ -112,7 +113,7 @@ onUnmounted(() => {
 <template>
   <div v-if="over" class="file-drop">
     <p v-if="!props.card && !props.type" class="file-drop-none">
-      Files cannot go to the target from this sign-in.
+      {{ t("Files cannot go to the target from this sign-in.") }}
     </p>
     <div
       v-if="props.card"
@@ -122,8 +123,8 @@ onUnmounted(() => {
       @dragleave="leaveZone"
     >
       <Icon name="disc" :size="28" />
-      <strong>Put it on the microSD card</strong>
-      <small>The target sees it on the virtual drive.</small>
+      <strong>{{ t("Put it on the microSD card") }}</strong>
+      <small>{{ t("The target sees it on the virtual drive.") }}</small>
     </div>
     <div
       v-if="props.type"
@@ -133,8 +134,8 @@ onUnmounted(() => {
       @dragleave="leaveZone"
     >
       <Icon name="keyboard" :size="28" />
-      <strong>Type it on the target</strong>
-      <small>A text file goes into the Input panel first.</small>
+      <strong>{{ t("Type it on the target") }}</strong>
+      <small>{{ t("A text file goes into the Input panel first.") }}</small>
     </div>
   </div>
 </template>

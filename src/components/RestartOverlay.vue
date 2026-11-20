@@ -13,6 +13,7 @@ import { computed } from "vue";
 import { dismissRestart, restartWatch, watchFraction } from "../state/restart";
 import Icon from "./Icon.vue";
 import RestartRays from "./RestartRays.vue";
+import { t } from "../i18n";
 
 const fraction = computed(() => watchFraction());
 const sweep = computed(() => restartWatch.pct === null && restartWatch.slow);
@@ -24,8 +25,8 @@ const expectedSeconds = computed(() => Math.round(restartWatch.expectedMs / 1000
     where there is not, and plain words once it runs long. */
 const measure = computed(() => {
   if (restartWatch.pct !== null) return `${restartWatch.pct}%`;
-  if (restartWatch.slow) return `${seconds.value}s - longer than the usual ${expectedSeconds.value}s`;
-  return `${seconds.value}s of about ${expectedSeconds.value}s`;
+  if (restartWatch.slow) return t("{s}s - longer than the usual {expected}s", { s: seconds.value, expected: expectedSeconds.value });
+  return t("{s}s of about {expected}s", { s: seconds.value, expected: expectedSeconds.value });
 });
 
 function stepState(i: number): "done" | "now" | "todo" {
@@ -43,16 +44,14 @@ function reload() {
     <div class="restart-card">
       <template v-if="restartWatch.lost">
         <h2 class="restart-title">
-          <Icon name="warning" :size="18" /> The device did not come back
+          <Icon name="warning" :size="18" /> {{ t("The device did not come back") }}
         </h2>
         <p class="setting-note">
-          {{ restartWatch.label }} was asked for, and nothing has answered for a minute and a
-          half. It may still be starting, it may have come back on another address, or it may
-          need its power cycled.
+          {{ t("{action} was asked for, and nothing has answered for a minute and a half. It may still be starting, it may have come back on another address, or it may need its power cycled.", { action: restartWatch.label }) }}
         </p>
         <div class="restart-actions">
-          <button type="button" class="btn btn-primary" @click="reload()">Try to reconnect</button>
-          <button type="button" class="btn" @click="dismissRestart()">Leave it</button>
+          <button type="button" class="btn btn-primary" @click="reload()">{{ t("Try to reconnect") }}</button>
+          <button type="button" class="btn" @click="dismissRestart()">{{ t("Leave it") }}</button>
         </div>
       </template>
 
@@ -78,21 +77,20 @@ function reload() {
 
         <template v-if="restartWatch.moving">
           <p class="setting-note">
-            On the other network the device usually gets a new address, and this page cannot
-            follow it. The name can also point at the old address for about a minute.
-            <template v-if="restartWatch.byName">Open it by name, or reload.</template>
-            <template v-else>Reload once it has had time to start.</template>
+            {{ t("On the other network the device usually gets a new address, and this page cannot follow it.") }}
+            {{ t("The name can also point at the old address for about a minute.") }}
+            <template v-if="restartWatch.byName">{{ t("Open it by name, or reload.") }}</template>
+            <template v-else>{{ t("Reload once it has had time to start.") }}</template>
           </p>
           <div class="restart-actions">
             <a v-if="restartWatch.byName" class="btn btn-primary" :href="restartWatch.byName">
-              Open {{ restartWatch.byName }}
+              {{ t("Open {name}", { name: restartWatch.byName }) }}
             </a>
-            <button type="button" class="btn" @click="reload()">Reload</button>
+            <button type="button" class="btn" @click="reload()">{{ t("Reload") }}</button>
           </div>
         </template>
         <p v-else class="setting-note">
-          The target machine is not affected - only this console loses contact. Keep this page
-          open; it carries on by itself once the device answers.
+          {{ t("The target machine is not affected - only this console loses contact. Keep this page open; it carries on by itself once the device answers.") }}
         </p>
       </template>
     </div>

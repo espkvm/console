@@ -9,6 +9,7 @@
 import { computed, ref, watch } from "vue";
 
 import { formatBytes } from "../state/device";
+import { t } from "../i18n";
 
 const props = defineProps<{
   /** Speed in bytes/s per slice of progress; 0 where nothing is known yet. */
@@ -93,7 +94,7 @@ const hoverLeft = computed(() =>
     :aria-valuenow="pct"
     aria-valuemin="0"
     aria-valuemax="100"
-    :aria-label="`Uploaded ${pct}%, ${formatBytes(rate)}/s`"
+    :aria-label="t('Uploaded {pct}%, {rate}/s', { pct, rate: formatBytes(rate) })"
     @pointermove="onMove"
     @pointerleave="hover = null"
   >

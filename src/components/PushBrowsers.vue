@@ -17,6 +17,7 @@ import {
   type PushBrowser,
 } from "../state/device";
 import { toast } from "../state/toasts";
+import { t } from "../i18n";
 
 const ID_KEY = "espkvm.push.id";
 
@@ -34,15 +35,15 @@ const standalone =
 
 /* Why this browser cannot, or "" when it can. */
 const why = computed(() => {
-  if (!window.isSecureContext) return "Needs the console over HTTPS.";
+  if (!window.isSecureContext) return t("Needs the console over HTTPS.");
   if (isIos && !standalone)
-    return "On an iPhone or iPad: Share, Add to Home Screen, then open the console from there.";
+    return t("On an iPhone or iPad: Share, Add to Home Screen, then open the console from there.");
   if (
     !("serviceWorker" in navigator) ||
     !("PushManager" in window) ||
     !("Notification" in window)
   )
-    return "This browser has no Web Push.";
+    return t("This browser has no Web Push.");
   return "";
 });
 
@@ -132,7 +133,7 @@ async function demoTurnOn() {
   await demoPushStart();
   demoShowMine();
   toast.info(
-    "On. Switch to another tab: in 3 seconds an alert comes, the way the device sends one.",
+    t("On. Switch to another tab: in 3 seconds an alert comes, the way the device sends one."),
   );
 }
 function demoShowMine() {
@@ -154,7 +155,7 @@ async function turnOn() {
   try {
     if ((await Notification.requestPermission()) !== "granted") {
       toast.error(
-        "The browser said no. Allow notifications for this site in its settings.",
+        t("The browser said no. Allow notifications for this site in its settings."),
       );
       return;
     }
@@ -165,7 +166,7 @@ async function turnOn() {
     const reg = await registration();
     if (!reg) {
       toast.error(
-        "No service worker here. Is the device's certificate trusted?",
+        t("No service worker here. Is the device's certificate trusted?"),
       );
       return;
     }
@@ -184,10 +185,10 @@ async function turnOn() {
     const id = await pushSubscribe(sub.toJSON(), browserName());
     writeId(id);
     toast.info(
-      "This browser gets the notifications now. Send a test to check.",
+      t("This browser gets the notifications now. Send a test to check."),
     );
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : String(e));
+    toast.error(t(e instanceof Error ? e.message : String(e)));
   } finally {
     busy.value = false;
     if (!DEMO) await load();
@@ -208,7 +209,7 @@ async function remove(b: PushBrowser) {
       writeId(null);
     }
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : String(e));
+    toast.error(t(e instanceof Error ? e.message : String(e)));
   } finally {
     busy.value = false;
     await load();
@@ -221,19 +222,18 @@ const subscribedHere = computed(
     browsers.value.some((b) => b.id === myId.value),
 );
 
-function when(t: number): string {
-  return t ? new Date(t * 1000).toLocaleDateString() : "";
+function when(secs: number): string {
+  return secs ? new Date(secs * 1000).toLocaleDateString() : "";
 }
 </script>
 
 <template>
   <div v-if="loaded && key" class="setting push">
     <div class="setting-head">
-      <label class="setting-title">Notifications in this browser</label>
+      <label class="setting-title">{{ t("Notifications in this browser") }}</label>
     </div>
     <p class="setting-note">
-      Web Push: alerts come to this browser like any app's, also with the
-      console closed. No account or bot needed.
+      {{ t("Web Push: alerts come to this browser like any app's, also with the console closed. No account or bot needed.") }}
     </p>
     <p v-if="why" class="setting-note">{{ why }}</p>
     <p v-else-if="!subscribedHere" class="push-actions">
@@ -243,7 +243,7 @@ function when(t: number): string {
         :disabled="busy"
         @click="turnOn"
       >
-        Send them to this browser
+        {{ t("Send them to this browser") }}
       </button>
     </p>
 
@@ -251,8 +251,8 @@ function when(t: number): string {
       <tbody>
         <tr v-for="b in browsers" :key="b.id">
           <td>
-            {{ b.name || "A browser" }}
-            <small v-if="b.id === myId && subscribedHere">(this one)</small>
+            {{ b.name || t("A browser") }}
+            <small v-if="b.id === myId && subscribedHere">{{ t("(this one)") }}</small>
           </td>
           <td class="muted">{{ when(b.added) }}</td>
           <td class="num">
@@ -262,7 +262,7 @@ function when(t: number): string {
               :disabled="busy"
               @click="remove(b)"
             >
-              Remove
+              {{ t("Remove") }}
             </button>
           </td>
         </tr>

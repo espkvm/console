@@ -12,6 +12,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { keyBytes, Terminal } from "../input/terminal";
 import { toast } from "../state/toasts";
 import Icon from "./Icon.vue";
+import { t } from "../i18n";
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -107,18 +108,18 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 function onPaste(e: ClipboardEvent) {
-  const t = e.clipboardData?.getData("text/plain");
-  if (!t) return;
+  const text = e.clipboardData?.getData("text/plain");
+  if (!text) return;
   e.preventDefault();
-  send(t.replace(/\r?\n/g, "\r"));
+  send(text.replace(/\r?\n/g, "\r"));
 }
 
 async function copyAll() {
   try {
     await navigator.clipboard.writeText(term.text());
-    toast.info("Copied");
+    toast.info(t("Copied"));
   } catch {
-    toast.error("Could not copy - select and copy it manually");
+    toast.error(t("Could not copy - select and copy it manually"));
   }
 }
 
@@ -169,36 +170,44 @@ const lines = computed(() => {
 });
 
 const status = computed(() => {
-  if (info.value && !info.value.running) return { cls: "pill-off", text: "port off" };
+  if (info.value && !info.value.running) return { cls: "pill-off", text: t("port off") };
   if (state.value === "open") {
-    const text = !info.value ? "open" : info.value.usb ? "USB" : `${info.value.baud} 8N1`;
+    const text = !info.value ? t("open") : info.value.usb ? "USB" : `${info.value.baud} 8N1`;
     return { cls: "pill-on", text };
   }
-  return { cls: "pill-off", text: state.value === "connecting" ? "connecting" : "reconnecting" };
+  return { cls: "pill-off", text: state.value === "connecting" ? t("connecting") : t("reconnecting") };
 });
+
+/* The hint under the terminal, one key with the key caps put in at the placeholders. */
+const HINT_KEYS: Record<string, string> = { "{ctrlc}": "Ctrl+C", "{copy}": "Ctrl+Shift+C", "{paste}": "Ctrl+Shift+V" };
+const hintParts = computed(() =>
+  t(
+    "Click the terminal and type. Every key goes to the target, {ctrlc} too. {copy} and {paste} stay with the browser.",
+  ).split(/(\{ctrlc\}|\{copy\}|\{paste\})/),
+);
 </script>
 
 <template>
   <Teleport to="main.stage > .stage-view">
-    <section class="ser" aria-label="Serial console">
+    <section class="ser" :aria-label="t('Serial console')">
       <div class="ser-head">
-        <h3>Serial console</h3>
+        <h3>{{ t("Serial console") }}</h3>
         <span :class="['pill', status.cls]">{{ status.text }}</span>
         <span v-if="info && info.running && !info.usb" class="ser-pins mono">TX {{ info.tx }} / RX {{ info.rx }}</span>
         <span class="ser-gap" />
-        <button type="button" class="btn btn-sm btn-quiet" title="Copy the screen and what scrolled off it" @click="copyAll">
+        <button type="button" class="btn btn-sm btn-quiet" :title="t('Copy the screen and what scrolled off it')" @click="copyAll">
           <Icon name="copy" :size="14" />
         </button>
-        <button type="button" class="btn btn-sm btn-quiet" title="Download what the device kept (raw)" @click="download">
+        <button type="button" class="btn btn-sm btn-quiet" :title="t('Download what the device kept (raw)')" @click="download">
           <Icon name="download" :size="14" />
         </button>
-        <button type="button" class="btn btn-sm btn-quiet" title="Clear this screen" @click="clearScreen">Clear</button>
-        <button type="button" class="btn btn-sm btn-icon btn-quiet" aria-label="Close the serial console" title="Close" @click="emit('close')">
+        <button type="button" class="btn btn-sm btn-quiet" :title="t('Clear this screen')" @click="clearScreen">{{ t("Clear") }}</button>
+        <button type="button" class="btn btn-sm btn-icon btn-quiet" :aria-label="t('Close the serial console')" :title="t('Close')" @click="emit('close')">
           <Icon name="close" :size="15" />
         </button>
       </div>
       <p v-if="info && !info.running" class="ser-note">
-        The serial port is off. Turn it on and pick its pins in Settings &rarr; Power &rarr; Serial console.
+        {{ t("The serial port is off. Turn it on and pick its pins in Settings \u2192 Power \u2192 Serial console.") }}
       </p>
       <div
         ref="box"
@@ -218,7 +227,10 @@ const status = computed(() => {
         </div>
       </div>
       <p class="ser-hint">
-        Click the terminal and type. Every key goes to the target, <Keys combo="Ctrl+C" /> too. <Keys combo="Ctrl+Shift+C" /> and <Keys combo="Ctrl+Shift+V" /> stay with the browser.
+        <template v-for="(part, i) in hintParts" :key="i">
+          <Keys v-if="HINT_KEYS[part]" :combo="HINT_KEYS[part]" />
+          <template v-else>{{ part }}</template>
+        </template>
       </p>
     </section>
   </Teleport>

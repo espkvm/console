@@ -3,6 +3,7 @@
  * change, for stillness, for a remembered picture, or for a colour - and
  * reports to notifications, the dashcam, Home Assistant and runbooks.
  */
+import { t, tm } from "../i18n";
 import { ref } from "vue";
 
 import { CONSOLE_HEADER, Unauthorized } from "./device";
@@ -26,11 +27,11 @@ export const REGION_COLOURS = [
 export type RegionColour = (typeof REGION_COLOURS)[number];
 
 export const MODE_LABELS: Record<RegionMode, string> = {
-  change: "Changes",
-  still: "Stops changing",
-  like: "Looks like the saved picture",
-  unlike: "No longer looks like it",
-  colour: "Colour",
+  change: tm("Changes"),
+  still: tm("Stops changing"),
+  like: tm("Looks like the saved picture"),
+  unlike: tm("No longer looks like it"),
+  colour: tm("Colour"),
 };
 
 /** Parts of the screen, 0..1. */
@@ -119,19 +120,19 @@ export const draftIndex = ref(-1);
 /** The other areas, outlined while drawing. */
 export const outlines = ref<RegionRect[]>([]);
 
-/** A short line for what an area is watching for. */
+/** A short line for what an area is watching for, in the console's language. */
 export function describe(r: Region): string {
   switch (r.mode) {
     case "change":
-      return r.hold ? `changes for ${r.hold} s` : "changes";
+      return r.hold ? t("changes for {n} s", { n: r.hold }) : t("changes");
     case "still":
-      return `still for ${r.hold} s`;
+      return t("still for {n} s", { n: r.hold });
     case "like":
-      return r.hasRef ? "looks like the saved picture" : "looks like... (nothing saved yet)";
+      return r.hasRef ? t("looks like the saved picture") : t("looks like... (nothing saved yet)");
     case "unlike":
-      return r.hasRef ? "no longer looks like the saved picture" : "no longer like... (nothing saved yet)";
+      return r.hasRef ? t("no longer looks like the saved picture") : t("no longer like... (nothing saved yet)");
     case "colour":
-      return r.colour === "any" ? "colour changes" : `turns ${r.colour}`;
+      return r.colour === "any" ? t("colour changes") : t("turns {colour}", { colour: r.colour });
   }
 }
 

@@ -23,6 +23,7 @@ import { computed, onUnmounted, ref } from "vue";
 
 import type { VideoStatus } from "../state/device";
 import { toast } from "../state/toasts";
+import { t } from "../i18n";
 import { copyToClipboard } from "../ui/clipboard";
 import { inputRtt } from "../input/control";
 import { browserLag, drawn, transport } from "../video/stream";
@@ -114,9 +115,9 @@ async function copyFacts() {
     const dd = f.querySelector("dd")?.textContent?.trim() ?? "";
     return `${dt}: ${dd}`;
   });
-  if (props.latency) lines.push(`Measured delay: ${props.latency}`);
-  if (await copyToClipboard(lines.join("\n"))) toast.info("Copied to clipboard");
-  else toast.error("The browser would not give this page the clipboard");
+  if (props.latency) lines.push(t("Measured delay: {value}", { value: props.latency }));
+  if (await copyToClipboard(lines.join("\n"))) toast.info(t("Copied to clipboard"));
+  else toast.error(t("The browser would not give this page the clipboard"));
 }
 
 const signal = computed(() => Boolean(props.status?.signal));
@@ -151,7 +152,7 @@ window.addEventListener("resize", onResize);
 onUnmounted(() => window.removeEventListener("resize", onResize));
 
 function rate(kbps: number): string {
-  if (kbps <= 0) return "idle";
+  if (kbps <= 0) return t("idle");
   if (kbps < 1000) return `${kbps} kbit/s`;
   return `${(kbps / 1000).toFixed(1)} Mbit/s`;
 }
@@ -164,8 +165,8 @@ function rate(kbps: number): string {
       type="button"
       class="vw-trigger"
       :class="{ 'vw-trigger-on': open }"
-      title="Capture figures - click for the rest"
-      aria-label="Video status"
+      :title="t('Capture figures - click for the rest')"
+      :aria-label="t('Video status')"
       :aria-expanded="open"
       @click="toggle"
     >
@@ -177,17 +178,17 @@ function rate(kbps: number): string {
              like a fault rather than the saving it is, so say what is on screen
              instead. Which codec is selected still shows in the popup, because
              it is what comes back the moment the screen stops being text. -->
-        <span v-if="textView" class="stat mono hide-narrow">text</span>
+        <span v-if="textView" class="stat mono hide-narrow">{{ t("text") }}</span>
         <template v-else>
           <span class="stat mono hide-narrow">{{ codec }} {{ status.fps.toFixed(1) }} fps</span>
           <span class="stat mono hide-narrow">{{ rate(status.kbps) }}</span>
           <span v-if="status.encoderBusyPct >= 90" class="stat mono warn">
-            encoder {{ status.encoderBusyPct }}%
+            {{ t("encoder {pct}%", { pct: status.encoderBusyPct }) }}
           </span>
         </template>
       </template>
-      <span v-else class="stat" :title="videoBlocked ?? undefined">
-        {{ videoBlocked ? "No capture" : "No signal" }}
+      <span v-else class="stat" :title="videoBlocked ? t(videoBlocked) : undefined">
+        {{ videoBlocked ? t("No capture") : t("No signal") }}
       </span>
     </button>
 
@@ -199,13 +200,13 @@ function rate(kbps: number): string {
         :style="{ left: at.left + 'px', top: at.top + 'px' }"
       >
         <div class="vw-head">
-          <h3>Video</h3>
+          <h3>{{ t("Video") }}</h3>
           <button
             v-if="status"
             type="button"
             class="btn btn-sm btn-icon btn-quiet vw-copy"
-            aria-label="Copy these figures"
-            title="Copy these figures"
+            :aria-label="t('Copy these figures')"
+            :title="t('Copy these figures')"
             @click="copyFacts"
           >
             <Icon name="copy" :size="15" />
@@ -213,21 +214,21 @@ function rate(kbps: number): string {
           <button
             type="button"
             class="btn btn-sm btn-icon btn-quiet"
-            aria-label="Close"
-            title="Close"
+            :aria-label="t('Close')"
+            :title="t('Close')"
             @click="open = false"
           >
             <Icon name="close" :size="15" />
           </button>
         </div>
 
-        <div class="vw-modes" role="group" aria-label="How the screen is shown">
+        <div class="vw-modes" role="group" :aria-label="t('How the screen is shown')">
           <button
             type="button"
             class="vw-mode"
             :class="{ 'vw-mode-on': showing === 'h264' }"
             :disabled="Boolean(h264Blocked)"
-            :title="h264Blocked ?? 'Video as H.264 - smooth, and the lightest on the network'"
+            :title="h264Blocked ? t(h264Blocked) : t('Video as H.264 - smooth, and the lightest on the network')"
             @click="pickCodec('h264')"
           >
             H.264
@@ -236,7 +237,7 @@ function rate(kbps: number): string {
             type="button"
             class="vw-mode"
             :class="{ 'vw-mode-on': showing === 'mjpeg' }"
-            title="Video as MJPEG - every frame a picture, which is what a dashboard or a still can read"
+            :title="t('Video as MJPEG - every frame a picture, which is what a dashboard or a still can read')"
             @click="pickCodec('mjpeg')"
           >
             MJPEG
@@ -254,16 +255,16 @@ function rate(kbps: number): string {
             @change="emit('prefer-text', ($event.target as HTMLInputElement).checked)"
           />
           <span>
-            Text when the screen is text
+            {{ t("Text when the screen is text") }}
             <small>
               {{
                 textPreferred
                   ? textView
-                    ? "Showing characters - a couple of kilobytes a screen, and the encoder is off"
+                    ? t("Showing characters - a couple of kilobytes a screen, and the encoder is off")
                     : textAvailable
-                      ? "This screen reads as text; switching over"
-                      : "This screen is a picture, so the video is running"
-                  : "Read a BIOS or a boot menu as characters over a link that will not carry video"
+                      ? t("This screen reads as text; switching over")
+                      : t("This screen is a picture, so the video is running")
+                  : t("Read a BIOS or a boot menu as characters over a link that will not carry video")
               }}
             </small>
           </span>
@@ -272,14 +273,14 @@ function rate(kbps: number): string {
         <div v-if="videoHistory.length > 1" class="vw-graphs">
           <Sparkline
             :samples="videoHistory"
-            label="Frames"
+            :label="t('Frames')"
             :value="(x) => x.fps"
             :format="(v) => `${v.toFixed(1)} fps`"
             :floor="10"
           />
           <Sparkline
             :samples="videoHistory"
-            label="Bitrate"
+            :label="t('Bitrate')"
             :value="(x) => x.kbps"
             :format="(v) => rate(Math.round(v))"
             :floor="1000"
@@ -288,100 +289,100 @@ function rate(kbps: number): string {
 
         <dl v-if="status" ref="facts" class="facts">
           <div class="fact">
-            <dt>Signal</dt>
-            <dd class="mono">{{ status.signal ? "locked" : "absent" }}</dd>
+            <dt>{{ t("Signal") }}</dt>
+            <dd class="mono">{{ status.signal ? t("locked") : t("absent") }}</dd>
           </div>
           <div class="fact">
-            <dt>Mode</dt>
+            <dt>{{ t("Mode") }}</dt>
             <dd class="mono">
               {{ status.width }}x{{ status.height }}{{ status.interlaced ? "i" : "p" }}
             </dd>
           </div>
           <div class="fact">
-            <dt title="Frames the device encoded each second">Published</dt>
+            <dt :title="t('Frames the device encoded each second')">{{ t("Published") }}</dt>
             <dd class="mono">{{ status.fps.toFixed(2) }} fps</dd>
           </div>
           <div class="fact">
-            <dt title="Frames this tab drew in the last second. Fewer than published means the link or the browser could not keep up">
-              Shown in this tab
+            <dt :title="t('Frames this tab drew in the last second. Fewer than published means the link or the browser could not keep up')">
+              {{ t("Shown in this tab") }}
             </dt>
             <dd class="mono">{{ shownFps.toFixed(1) }} fps</dd>
           </div>
           <div class="fact">
-            <dt>Skipped as unchanged</dt>
+            <dt>{{ t("Skipped as unchanged") }}</dt>
             <dd class="mono">{{ status.skippedFps.toFixed(2) }} fps</dd>
           </div>
           <div class="fact">
-            <dt>Bitrate</dt>
+            <dt>{{ t("Bitrate") }}</dt>
             <dd class="mono">{{ rate(status.kbps) }}</dd>
           </div>
           <div class="fact">
-            <dt title="Share of wall clock the encoder was busy">Encoder load</dt>
+            <dt :title="t('Share of wall clock the encoder was busy')">{{ t("Encoder load") }}</dt>
             <dd class="mono" :class="{ warn: status.encoderBusyPct >= 90 }">
               {{ status.encoderBusyPct }}%
             </dd>
           </div>
           <div v-if="status.linkPct && status.linkPct < 100" class="fact">
-            <dt title="A viewer's link could not keep up, so the device is sending less until it can">
-              Quality, for a slow link
+            <dt :title="t('A viewer\'s link could not keep up, so the device is sending less until it can')">
+              {{ t("Quality, for a slow link") }}
             </dt>
             <dd class="mono warn">{{ status.linkPct }}%</dd>
           </div>
           <div class="fact">
-            <dt title="Mean time one frame took to encode">Encode time</dt>
+            <dt :title="t('Mean time one frame took to encode')">{{ t("Encode time") }}</dt>
             <dd class="mono">{{ (status.encodeUs / 1000).toFixed(1) }} ms</dd>
           </div>
           <div v-if="status.lagMs && status.lagMs.total > 0" class="fact">
-            <dt title="From a frame landing in the device until it was sent, averaged over a second; the worst in brackets">
-              Through the device
+            <dt :title="t('From a frame landing in the device until it was sent, averaged over a second; the worst in brackets')">
+              {{ t("Through the device") }}
             </dt>
             <dd class="mono">{{ status.lagMs.total }} ms ({{ status.lagMs.totalMax }})</dd>
           </div>
           <div v-if="open && via" class="fact">
-            <dt title="WebRTC (UDP) when the device allows it and the codec is H.264, else the WebSocket">
-              Video over
+            <dt :title="t('WebRTC (UDP) when the device allows it and the codec is H.264, else the WebSocket')">
+              {{ t("Video over") }}
             </dt>
             <dd class="mono">{{ via }}</dd>
           </div>
           <div v-if="open && via === 'WebRTC'" class="fact">
-            <dt title="How long this browser holds a frame before showing it">Buffer</dt>
+            <dt :title="t('How long this browser holds a frame before showing it')">{{ t("Buffer") }}</dt>
             <dd class="mono">{{ rtcBufferMs }} ms</dd>
           </div>
           <div v-if="open && via === 'WebRTC'" class="fact">
-            <dt title="Packets lost on the way since WebRTC started, and how many times this browser asked for one again; most come back on the second try">
-              Lost, asked again
+            <dt :title="t('Packets lost on the way since WebRTC started, and how many times this browser asked for one again; most come back on the second try')">
+              {{ t("Lost, asked again") }}
             </dt>
             <dd class="mono">{{ rtcLost }}, {{ rtcNacks }}</dd>
           </div>
           <div v-if="open && via === 'WebRTC' && rtcRtt > 0" class="fact">
-            <dt title="Round trip from this browser to the device and back, over the path WebRTC chose">
-              Round trip
+            <dt :title="t('Round trip from this browser to the device and back, over the path WebRTC chose')">
+              {{ t("Round trip") }}
             </dt>
             <dd class="mono">{{ rtcRtt }} ms</dd>
           </div>
           <div v-if="open && inputMs > 0" class="fact">
-            <dt title="A ping from this browser to the device and back, on the socket the keys and the mouse take">
-              Input round trip
+            <dt :title="t('A ping from this browser to the device and back, on the socket the keys and the mouse take')">
+              {{ t("Input round trip") }}
             </dt>
             <dd class="mono">{{ inputMs }} ms</dd>
           </div>
           <div v-if="open && browserMs > 0" class="fact">
-            <dt title="From a frame arriving in this browser until it is ready to draw (decoding), smoothed">
-              In this browser
+            <dt :title="t('From a frame arriving in this browser until it is ready to draw (decoding), smoothed')">
+              {{ t("In this browser") }}
             </dt>
             <dd class="mono">{{ browserMs }} ms</dd>
           </div>
           <div class="fact">
-            <dt>Mode changes</dt>
+            <dt>{{ t("Mode changes") }}</dt>
             <dd class="mono">{{ status.modeChanges }}</dd>
           </div>
           <div class="fact">
-            <dt>Viewers</dt>
+            <dt>{{ t("Viewers") }}</dt>
             <dd class="mono">{{ status.viewers }}</dd>
           </div>
           <div v-if="(status.flatMs ?? 0) > 0" class="fact">
-            <dt title="Nearly every pixel is the same colour, and has been">
-              One flat colour for
+            <dt :title="t('Nearly every pixel is the same colour, and has been')">
+              {{ t("One flat colour for") }}
             </dt>
             <dd class="mono warn">{{ Math.round((status.flatMs ?? 0) / 1000) }} s</dd>
           </div>
@@ -390,7 +391,7 @@ function rate(kbps: number): string {
             <dd class="mono">0x{{ status.sysStatus.toString(16) }}</dd>
           </div>
         </dl>
-        <p v-else class="muted">No status from the device yet.</p>
+        <p v-else class="muted">{{ t("No status from the device yet.") }}</p>
 
         <!-- The delay a person feels: the pointer moved on the target until this
              page shows it. Needs a visible pointer and a still screen. -->
@@ -399,10 +400,10 @@ function rate(kbps: number): string {
             type="button"
             class="btn btn-sm"
             :disabled="measuring || !signal"
-            title="Moves the target's mouse pointer a few times and times how long until it shows here. Use a still screen with the pointer visible."
+            :title="t('Moves the target\'s mouse pointer a few times and times how long until it shows here. Use a still screen with the pointer visible.')"
             @click="emit('measure')"
           >
-            {{ measuring ? "Wait..." : "Measure the delay" }}
+            {{ measuring ? t("Wait...") : t("Measure the delay") }}
           </button>
           <span v-if="latency" class="vw-lat-out mono">{{ latency }}</span>
         </div>

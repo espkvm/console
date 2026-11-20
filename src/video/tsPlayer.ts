@@ -15,6 +15,7 @@
  */
 import { codecFromSps, inspectAnnexB } from "./stream";
 import { TS_PACKET, TsDemuxer, lastPts, opusPacket, type AccessUnit } from "./tsDemux";
+import { t } from "../i18n";
 
 /*
  * A sound unit, ready for the decoder: Opus as the recorder writes it now
@@ -123,14 +124,14 @@ export class TsPlayer {
 
   async open(): Promise<void> {
     if (typeof VideoDecoder === "undefined") {
-      this.#ev.onError("this browser has no WebCodecs; download the file and open it in VLC");
+      this.#ev.onError(t("this browser has no WebCodecs; download the file and open it in VLC"));
       return;
     }
     try {
       const head = await this.#range(0, 256 * 1024 - 1);
       const d = new TsDemuxer();
       const first = [...d.push(head), ...d.flush()].find((au) => !au.audio);
-      if (!first) throw new Error("no video in this file");
+      if (!first) throw new Error(t("no video in this file"));
       this.#firstUs = usOf(first.pts);
       let last = lastPts(await this.#range(-256 * 1024));
       if (last === null) last = lastPts(await this.#range(-2 * 1024 * 1024));
@@ -217,7 +218,7 @@ export class TsPlayer {
         await sleep(300);
         continue;
       }
-      if (!res.ok) throw new Error(`the device answered ${res.status}`);
+      if (!res.ok) throw new Error(t("the device answered {status}", { status: res.status }));
       return res;
     }
   }
@@ -241,7 +242,7 @@ export class TsPlayer {
       let reader: ReadableStreamDefaultReader<Uint8Array>;
       try {
         const res = await this.#fetch(`bytes=${pos}-`, abort.signal);
-        if (!res.body) throw new Error("no body");
+        if (!res.body) throw new Error(t("no body"));
         reader = res.body.getReader();
       } catch (err) {
         if (gen === this.#gen) this.#ev.onError(err instanceof Error ? err.message : String(err));
@@ -418,14 +419,14 @@ export class TsPlayer {
           this.#frames.push(frame);
         },
         error: (err) => {
-          if (gen === this.#gen) this.#ev.onError(`the H.264 decoder failed: ${err.message}`);
+          if (gen === this.#gen) this.#ev.onError(t("the H.264 decoder failed: {error}", { error: err.message }));
         },
       });
       decoder.configure({ codec, optimizeForLatency: true });
       this.#decoder = decoder;
       this.#codec = codec;
     } catch (err) {
-      this.#ev.onError(`this browser cannot decode ${codec}: ${(err as Error).message}`);
+      this.#ev.onError(t("this browser cannot decode {codec}: {error}", { codec, error: (err as Error).message }));
     }
   }
 

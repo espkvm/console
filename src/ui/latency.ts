@@ -13,6 +13,7 @@
 import type { Control } from "../input/control";
 import { ABS_MAX } from "../input/control";
 import type { Picture } from "./picture";
+import { t } from "../i18n";
 
 export interface LatencyResult {
   /** Milliseconds, one per try that saw the pointer arrive. */
@@ -71,7 +72,7 @@ export async function measureLatency(
 ): Promise<LatencyResult> {
   const ctx = canvas;
   if (canvas.width < 64 || canvas.height < 64) {
-    throw new Error("there is no picture to watch yet");
+    throw new Error(t("there is no picture to watch yet"));
   }
   /* Pairs of points the pointer goes back and forth between. The middle first;
      the corners for when the middle is busy - above all when the target is this
@@ -100,7 +101,7 @@ export async function measureLatency(
   }
   if (!points) {
     throw new Error(
-      "the picture keeps changing everywhere the pointer could go - a video playing, or this console seen on its own screen",
+      t("the picture keeps changing everywhere the pointer could go - a video playing, or this console seen on its own screen"),
     );
   }
 
@@ -127,7 +128,7 @@ export async function measureLatency(
   }
   if (samples.length < 2) {
     throw new Error(
-      "the pointer never showed up in the picture - is the mouse pointer visible on the target, on a still screen?",
+      t("the pointer never showed up in the picture - is the mouse pointer visible on the target, on a still screen?"),
     );
   }
   const sorted = [...samples].sort((a, b) => a - b);

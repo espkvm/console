@@ -68,7 +68,9 @@ import { useInput } from "./input/useInput";
 import { soundHeld } from "./video/sound";
 import { NO_ZOOM, useTouch, type Zoom } from "./input/useTouch";
 import { usePadMouse } from "./input/padMouse";
-import { DEFAULT_LAYOUT } from "./layouts";
+import { DEFAULT_LAYOUT, LAYOUTS } from "./layouts";
+import TranslationEditor from "./components/TranslationEditor.vue";
+import { layoutHintWanted, markLayoutHint, operatorLayout, startLayoutGuess } from "./input/layoutGuess";
 import {
   type Capability,
   type Setting,
@@ -122,16 +124,23 @@ import {
   type RegionRect,
 } from "./state/regions";
 import { copyToClipboard } from "./ui/clipboard";
+import { editorFromLink, t, tn } from "./i18n";
 import { PHONE_SIDEWAYS, useMedia } from "./ui/media";
 
 type PanelId = "input" | "media" | "automation" | "captures" | null;
 
-const PANEL_TITLES: Record<string, string> = {
-  input: "Input",
-  media: "Virtual media",
-  automation: "Automation",
-  captures: "Recordings and screenshots",
-};
+function panelTitle(id: Exclude<PanelId, null>): string {
+  switch (id) {
+    case "input":
+      return t("Input");
+    case "media":
+      return t("Virtual media");
+    case "automation":
+      return t("Automation");
+    case "captures":
+      return t("Recordings and screenshots");
+  }
+}
 
 /* Settings are a window, not a rail panel: a hundred of them in a 340 px column
    is a scroll with no shape, and a window has room for the sections beside the
@@ -158,7 +167,7 @@ async function enableCec() {
   try {
     values.value = await saveSettings({ cec_enable: true });
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : "the device would not take that");
+    toast.error(err instanceof Error ? t(err.message) : t("the device would not take that"));
   }
 }
 
@@ -186,13 +195,13 @@ const mustChange = computed(() => Boolean(session.value?.mustChange));
    click would throw the operator out mid-task. */
 const signingOut = ref(false);
 async function signOutFromRail() {
-  if (!confirm(`Sign out${session.value?.user ? ` ${session.value.user}` : ""}?`)) return;
+  if (!confirm(session.value?.user ? t("Sign out {user}?", { user: session.value.user }) : t("Sign out?"))) return;
   signingOut.value = true;
   try {
     await logout();
     location.reload();
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(err instanceof Error ? t(err.message) : String(err));
     signingOut.value = false;
   }
 }
@@ -218,7 +227,9 @@ function onAreaDone() {
    signal", which means the board is there and the target is quiet. */
 const videoBlocked = computed(() =>
   caps.value.video && !caps.value.video.available
-    ? (caps.value.video.reason ?? "The capture path did not start.")
+    ? caps.value.video.reason
+      ? t(caps.value.video.reason)
+      : t("The capture path did not start.")
     : null,
 );
 /* How the picture is sized. "fit" shrinks a picture too big for the stage and
@@ -279,7 +290,7 @@ function applyScreenText(text: ScreenText | null) {
     textMisses = 0;
   } else if (textView.value && ++textMisses >= TEXT_MISSES_BEFORE_GIVING_UP) {
     leaveTextView();
-    toast.info("The screen is a picture again - back to video");
+    toast.info(t("The screen is a picture again - back to video"));
   }
 }
 
@@ -293,15 +304,15 @@ async function refreshScreenText(): Promise<ScreenText | null> {
 }
 
 async function copyScreenText() {
-  const t = await refreshScreenText();
-  if (!t) {
-    toast.info("Nothing to copy: this screen is not made of text");
+  const text = await refreshScreenText();
+  if (!text) {
+    toast.info(t("Nothing to copy: this screen is not made of text"));
     return;
   }
-  if (await copyToClipboard(t.text)) {
-    toast.info(`Copied ${t.rows} lines from the screen`);
+  if (await copyToClipboard(text.text)) {
+    toast.info(tn("Copied {n} line from the screen", "Copied {n} lines from the screen", text.rows));
   } else {
-    toast.error("The browser would not give this page the clipboard");
+    toast.error(t("The browser would not give this page the clipboard"));
   }
 }
 
@@ -384,7 +395,7 @@ async function toggleSelectText() {
     return;
   }
   if (!(await refreshScreenText())) {
-    toast.info("Nothing to select: this screen is not made of text");
+    toast.info(t("Nothing to select: this screen is not made of text"));
     return;
   }
   /* Control goes back to the operator's mouse for as long as this lasts. */
@@ -446,7 +457,7 @@ async function enterTextView(auto = false): Promise<boolean> {
   if (textView.value) return true;
   if (auto && paused.value) return false;
   if (!(await refreshScreenText())) {
-    if (!auto) toast.info("Nothing to show: this screen is not made of text");
+    if (!auto) toast.info(t("Nothing to show: this screen is not made of text"));
     return false;
   }
   textMisses = 0;
@@ -716,8 +727,8 @@ const showTour = computed(
 );
 const tourStep = computed(() => {
   if (tourAgain.value) return "";
-  if (welcomeSeenHere.value) return "Step 2 of 2";
-  return tourFresh.value.length ? `New in ${firmwareVersion.value.replace(/^v\.?/, "")}` : "";
+  if (welcomeSeenHere.value) return t("Step 2 of 2");
+  return tourFresh.value.length ? t("New in {version}", { version: firmwareVersion.value.replace(/^v\.?/, "") }) : "";
 });
 const tourFoldedBy = ref<"" | "panel" | "select">("");
 function closeTour() {
@@ -791,13 +802,13 @@ async function makeSuggested() {
     values.value = await loadValues();
     if (
       list.reboot &&
-      confirm("Some settings of this profile apply after a restart (the gamepad, the EDID). Restart now?") &&
-      (await runRestart("Restarting the device", restartDevice, { kind: "manual" }))
+      confirm(t("Some settings of this profile apply after a restart (the gamepad, the EDID). Restart now?")) &&
+      (await runRestart(t("Restarting the device"), restartDevice, { kind: "manual" }))
     ) {
       location.reload();
     }
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(err instanceof Error ? t(err.message) : String(err));
   } finally {
     suggestBusy.value = false;
   }
@@ -808,7 +819,7 @@ async function declineSuggested() {
   try {
     await dismissAsk({ preset: p.id });
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(err instanceof Error ? t(err.message) : String(err));
   }
 }
 
@@ -884,6 +895,20 @@ watchEffect(() =>
   ),
 );
 const layout = computed(() => enumName(schema.value, values.value, "kbd_layout") ?? DEFAULT_LAYOUT);
+/* The operator's own keyboard differs from the paste layout: say so once per
+   layout. Input -> Paste text offers the switch; the setting never changes by
+   itself, because the target's layout is what counts. */
+watch([operatorLayout, layout], ([mine, paste]) => {
+  if (!mine || mine === paste || !schema.value.length || !layoutHintWanted(mine, "told")) return;
+  markLayoutHint(mine, "told");
+  toast.info(
+    t(
+      "Your keyboard looks like {mine}, paste types {paste}. " +
+        "If the target has the same layout as you, switch it under Input, Paste text.",
+      { mine: LAYOUTS[mine].label, paste: LAYOUTS[paste]?.label ?? paste },
+    ),
+  );
+});
 
 /* The medium the target sees now, for the dot on the disc button. */
 const mediumIn = computed(() =>
@@ -905,9 +930,9 @@ async function powerOnFromScreen() {
   powering.value = true;
   try {
     await powerClick();
-    toast.info("Power button pressed");
+    toast.info(t("Power button pressed"));
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(err instanceof Error ? t(err.message) : String(err));
   } finally {
     window.setTimeout(() => (powering.value = false), 5000);
   }
@@ -915,7 +940,8 @@ async function powerOnFromScreen() {
 
 /* Buttons pinned to the bar from the Input panel. */
 const quickItems = computed(() => (signedInToWatch.value ? [] : parseQuick(values.value.quick_json)));
-const quickOs = computed(() => {
+/* The target's OS: the setting, or what USB enumeration suggested. */
+const targetOs = computed(() => {
   const choice = enumName(schema.value, values.value, "target_os") ?? "auto";
   return choice === "auto" ? (usbProbe.value?.os ?? "unknown") : choice;
 });
@@ -928,13 +954,13 @@ async function pressQuick(q: QuickItem) {
       control: input.control,
       layout: layout.value,
       typeDelay: Math.max(1, Number(values.value.type_delay) || 8),
-      os: quickOs.value,
+      os: targetOs.value,
       macros: loadMacros(values.value.macros_json),
       runRunbook,
     });
-    if (q.t === "runbook") toast.info(`Runbook ${q.v} started`);
+    if (q.t === "runbook") toast.info(t("Runbook {name} started", { name: q.v }));
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(err instanceof Error ? t(err.message) : String(err));
   } finally {
     quickBusy.value = null;
   }
@@ -995,6 +1021,7 @@ const touchSide = useMedia(PHONE_SIDEWAYS);
 const remoteProps = computed(() => ({
   control: input.control,
   layout: layout.value,
+  os: targetOs.value,
   stick: stickOn.value,
   consoleKeyboard: values.value.ui_touch_kbd !== 1,
   consoleKeyboardOpen: oskOpen.value,
@@ -1034,8 +1061,8 @@ const viewOnly = computed(
 const heldByOther = computed(() => input.controlState.value === "held" || viewOnly.value);
 const NO_CONTROL_TEXT = computed(() =>
   viewOnly.value
-    ? "This sign-in can only watch"
-    : "Another session is in control; take control first",
+    ? t("This sign-in can only watch")
+    : t("Another session is in control; take control first"),
 );
 
 /* A real controller as a mouse; it gives way to the gamepad window, which
@@ -1070,20 +1097,21 @@ watch([locked, mustChange], ([lock, change]) => {
   if (lock || change) engaged.value = false;
 });
 /* The whole-way delay, from the Video readout: see ui/latency.ts. */
-const latencyText = ref<string | null>(null);
+const latencyMsg = ref<(() => string) | null>(null);
+const latencyText = computed(() => latencyMsg.value?.() ?? null);
 const measuringLatency = ref(false);
 async function measureDelay() {
   const canvas = pictureOf(surface.value);
   if (!canvas) {
-    latencyText.value = "There is no picture to watch yet";
+    latencyMsg.value = () => t("There is no picture to watch yet");
     return;
   }
   if (padAlone.value) {
-    latencyText.value = `The target sees ${padAloneLabel.value} only - no mouse to move`;
+    latencyMsg.value = () => t("The target sees {pad} only - no mouse to move", { pad: padAloneLabel.value });
     return;
   }
   if (heldByOther.value) {
-    latencyText.value = NO_CONTROL_TEXT.value;
+    latencyMsg.value = () => NO_CONTROL_TEXT.value;
     return;
   }
   /* Always: the console assumes control is its own until told otherwise, and
@@ -1093,16 +1121,22 @@ async function measureDelay() {
   try {
     /* A moment to let go of the mouse: a hand on it moves the pointer too. */
     for (let s = 5; s > 0; s--) {
-      latencyText.value = `Starting in ${s} - hands off the mouse`;
+      latencyMsg.value = () => t("Starting in {n} - hands off the mouse", { n: s });
       await new Promise((r) => setTimeout(r, 1000));
     }
     const r = await measureLatency(input.control, canvas, (n, of) => {
-      latencyText.value = `Measuring ${n} of ${of}...`;
+      latencyMsg.value = () => t("Measuring {n} of {total}...", { n, total: of });
     });
-    latencyText.value = `${r.median} ms (${r.min}-${r.max}; each: ${r.samples.join(", ")})`;
+    latencyMsg.value = () =>
+      t("{median} ms ({min}-{max}; each: {samples})", {
+        median: r.median,
+        min: r.min,
+        max: r.max,
+        samples: r.samples.join(", "),
+      });
   } catch (err) {
-    latencyText.value =
-      err instanceof Error ? err.message.charAt(0).toUpperCase() + err.message.slice(1) : "Could not measure";
+    latencyMsg.value = () =>
+      err instanceof Error ? err.message.charAt(0).toUpperCase() + err.message.slice(1) : t("Could not measure");
   } finally {
     measuringLatency.value = false;
   }
@@ -1120,10 +1154,10 @@ const padAlone = computed(() => {
 });
 const padAloneLabel = computed(() =>
   padAlone.value === "xinput"
-    ? "an Xbox 360 gamepad"
+    ? t("an Xbox 360 gamepad")
     : padAlone.value === "xbox"
-      ? "an original Xbox gamepad"
-      : "a Switch gamepad",
+      ? t("an original Xbox gamepad")
+      : t("a Switch gamepad"),
 );
 /* A device profile that set it meant it: no banner then. Otherwise it can be
    closed for this visit. */
@@ -1139,9 +1173,9 @@ async function bringBackKeyboard() {
   bringingBack.value = true;
   try {
     values.value = await saveSettings({ usb_pad: index });
-    await runRestart("Restarting with the keyboard and mouse", restartDevice, { kind: "manual" });
+    await runRestart(t("Restarting with the keyboard and mouse"), restartDevice, { kind: "manual" });
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : "the device would not take that");
+    toast.error(err instanceof Error ? t(err.message) : t("the device would not take that"));
   } finally {
     bringingBack.value = false;
   }
@@ -1156,12 +1190,12 @@ async function bringBackKeyboard() {
 function wakeTarget(auto: boolean) {
   if (padAlone.value) return;
   if (heldByOther.value) {
-    if (!auto) toast.info(viewOnly.value ? NO_CONTROL_TEXT.value : "Another session is in control; take control to wake the target");
+    if (!auto) toast.info(viewOnly.value ? NO_CONTROL_TEXT.value : t("Another session is in control; take control to wake the target"));
     return;
   }
   input.control.mouseRelative(0, 1, 0);
   setTimeout(() => input.control.mouseRelative(0, -1, 0), 60);
-  if (!auto) toast.info("Nudged the mouse - a dark screen should wake in a few seconds");
+  if (!auto) toast.info(t("Nudged the mouse - a dark screen should wake in a few seconds"));
 }
 /* The USB wake signal, for a target that is off or asleep. Asks the device, not
    the input channel: it has to go out while the target's USB is not running. */
@@ -1171,9 +1205,9 @@ async function usbPowerOn() {
     return;
   }
   try {
-    toast.info(USB_POWER_TEXT[await powerOnUsb()]);
+    toast.info(t(USB_POWER_TEXT[await powerOnUsb()]));
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(err instanceof Error ? t(err.message) : String(err));
   }
 }
 let wokeOnOpen = false;
@@ -1213,8 +1247,8 @@ async function openWithoutCopy() {
 /* Several screens: find where the captured one sits, and save it. */
 async function findThisScreen(progress: (t: string) => void): Promise<string> {
   const canvas = pictureOf(surface.value);
-  if (!canvas) return "There is no picture to watch yet";
-  if (padAlone.value) return `The target sees ${padAloneLabel.value} only - no mouse to move`;
+  if (!canvas) return t("There is no picture to watch yet");
+  if (padAlone.value) return t("The target sees {pad} only - no mouse to move", { pad: padAloneLabel.value });
   if (heldByOther.value) return NO_CONTROL_TEXT.value;
   /* Always: the console assumes control is its own until told otherwise, and
      the device drops input from a session that is not in control. */
@@ -1223,19 +1257,19 @@ async function findThisScreen(progress: (t: string) => void): Promise<string> {
   findingScreen.value = true;
   try {
     for (let s = 5; s > 0; s--) {
-      progress(`Starting in ${s} - hands off the mouse`);
+      progress(t("Starting in {n} - hands off the mouse", { n: s }));
       await new Promise((r) => setTimeout(r, 1000));
     }
-    const win = await findScreen(input.control, canvas, (n, of) => progress(`Looking ${n} of ${of}...`));
+    const win = await findScreen(input.control, canvas, (n, of) => progress(t("Looking {n} of {total}...", { n, total: of })));
     const next = win
       ? { ptr_desk_w: win.deskW, ptr_desk_h: win.deskH, ptr_scr_x: win.x, ptr_scr_y: win.y }
       : { ptr_desk_w: 0, ptr_desk_h: 0, ptr_scr_x: 0, ptr_scr_y: 0 };
     values.value = await saveSettings(next);
     return win
-      ? `Found: desktop ${win.deskW}x${win.deskH}, this screen at ${win.x}, ${win.y}. Saved.`
-      : "This is the target's only screen - nothing to correct.";
+      ? t("Found: desktop {w}x{h}, this screen at {x}, {y}. Saved.", { w: win.deskW, h: win.deskH, x: win.x, y: win.y })
+      : t("This is the target's only screen - nothing to correct.");
   } catch (err) {
-    const m = err instanceof Error ? err.message : "could not find the screen";
+    const m = err instanceof Error ? err.message : t("could not find the screen");
     return m.charAt(0).toUpperCase() + m.slice(1);
   } finally {
     /* The watch puts the saved window back. */
@@ -1264,12 +1298,18 @@ function onLiveness(l: Liveness) {
 watch(online, (on) => {
   if (!on) liveness.value = "unknown";
 });
-const ONLINE_TITLE: Record<Liveness, string> = {
-  live: "The device answers, and frames are arriving",
-  still: "The device answers. The target's screen is not changing, so it sends next to nothing",
-  stalled: "The device answers and sends frames, but none reach this tab. It reconnects by itself, or reload the page.",
-  unknown: "The device answers",
-};
+function onlineTitle(l: Liveness): string {
+  switch (l) {
+    case "live":
+      return t("The device answers, and frames are arriving");
+    case "still":
+      return t("The device answers. The target's screen is not changing, so it sends next to nothing");
+    case "stalled":
+      return t("The device answers and sends frames, but none reach this tab. It reconnects by itself, or reload the page.");
+    default:
+      return t("The device answers");
+  }
+}
 
 /* The tab says which device this is, and when it is unreachable or has no picture. */
 watchEffect(() => {
@@ -1286,10 +1326,10 @@ watchEffect(() => {
  */
 const h264Blocked = computed(() => {
   const setting = schema.value.find((entry) => entry.key === "vid_codec");
-  if (!setting) return "this firmware does not offer a codec choice";
+  if (!setting) return t("this firmware does not offer a codec choice");
   const blocked = settingBlockedReason(setting, caps.value);
-  if (blocked) return blocked;
-  return setting.choices?.includes("h264") ? null : "this board has no H.264 encoder";
+  if (blocked) return t(blocked);
+  return setting.choices?.includes("h264") ? null : t("this board has no H.264 encoder");
 });
 
 /*
@@ -1315,13 +1355,13 @@ async function toggleRecording() {
   try {
     if (record.value?.on) {
       const r = await stopRecording();
-      toast.info(`${r.timelapse ? "Timelapse" : "Recording"} saved to ${r.file}`);
+      toast.info(r.timelapse ? t("Timelapse saved to {file}", { file: r.file }) : t("Recording saved to {file}", { file: r.file }));
     } else {
       await startRecording();
     }
     status.value = await loadVideoStatus();
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(err instanceof Error ? t(err.message) : String(err));
   } finally {
     recordBusy.value = false;
   }
@@ -1336,7 +1376,7 @@ watch(
     if (was && !on) capturesChanged.value++;
     if (was && !on && r && r.stopped && r.stopped !== "stopped by the operator" &&
         r.stopped !== "the clip is complete") {
-      toast.error(`Recording stopped: ${r.stopped}. Saved to ${r.file}`);
+      toast.error(t("Recording stopped: {reason}. Saved to {file}", { reason: t(r.stopped), file: r.file }));
     }
   },
 );
@@ -1379,17 +1419,17 @@ const othersUpdate = computed(() => {
   if (!u || restartWatch.active) return null;
   if (session.value?.required && !session.value.authenticated) return null;
   if (u.phase === "failed") {
-    return { title: "The update failed", line: "The device kept the firmware it was running.", percent: null };
+    return { title: t("The update failed"), line: t("The device kept the firmware it was running."), percent: null };
   }
   if (u.phase === "restarting") {
-    return { title: "The device is restarting", line: "It was updated from another session. This page comes back on its own.", percent: null };
+    return { title: t("The device is restarting"), line: t("It was updated from another session. This page comes back on its own."), percent: null };
   }
   if (u.phase === "verifying") {
-    return { title: "Updating the device", line: "The image has arrived and is being checked.", percent: 100 };
+    return { title: t("Updating the device"), line: t("The image has arrived and is being checked."), percent: 100 };
   }
   return {
-    title: "Updating the device",
-    line: "Someone is installing firmware from another session.",
+    title: t("Updating the device"),
+    line: t("Someone is installing firmware from another session."),
     percent: u.percent,
   };
 });
@@ -1421,21 +1461,27 @@ const clipState = computed(() => {
   if (!r?.dashcam) return null;
   if (r.event) {
     return {
-      label: `Saving ${clock(r.clipSecondsLeft ?? 0)}`,
-      title: `Saving a clip: recording ${r.clipSecondsLeft ?? 0} s more of the screen. Press again if something else happens - the clip gets longer and a chapter marks the moment.`,
+      label: t("Saving {time}", { time: clock(r.clipSecondsLeft ?? 0) }),
+      title: t(
+        "Saving a clip: recording {n} s more of the screen. Press again if something else happens - the clip gets longer and a chapter marks the moment.",
+        { n: r.clipSecondsLeft ?? 0 },
+      ),
       on: true,
     };
   }
   if (r.clipsConverting) {
     return {
-      label: "Preparing",
-      title: "The clip is recorded and is being turned into an MP4. It appears in Recordings when ready.",
+      label: t("Preparing"),
+      title: t("The clip is recorded and is being turned into an MP4. It appears in Recordings when ready."),
       on: true,
     };
   }
   return {
-    label: "Save clip",
-    title: `Dashcam: the device keeps the last ${span(r.prerollSeconds ?? 0)} of the screen. Press to save them, and a little of what comes next, as a video in Recordings.`,
+    label: t("Save clip"),
+    title: t(
+      "Dashcam: the device keeps the last {span} of the screen. Press to save them, and a little of what comes next, as a video in Recordings.",
+      { span: span(r.prerollSeconds ?? 0) },
+    ),
     on: false,
   };
 });
@@ -1445,7 +1491,7 @@ watch(
   () => record.value?.lastClip,
   (now, before) => {
     if (now && before !== undefined && now !== before) {
-      toast.info(`Clip saved: ${now.slice(now.lastIndexOf("/") + 1)} - open it in Recordings`);
+      toast.info(t("Clip saved: {file} - open it in Recordings", { file: now.slice(now.lastIndexOf("/") + 1) }));
       capturesChanged.value++;
     }
   },
@@ -1459,12 +1505,15 @@ async function clip() {
     const r = await saveClip();
     toast.info(
       was
-        ? "Marked in the clip being saved; it will run a little longer"
-        : `Saving a clip: the last ${span(r.prerollSeconds ?? 0)} and the next ${span(r.clipSecondsLeft ?? 0)}. It appears in Recordings when ready.`,
+        ? t("Marked in the clip being saved; it will run a little longer")
+        : t("Saving a clip: the last {before} and the next {after}. It appears in Recordings when ready.", {
+            before: span(r.prerollSeconds ?? 0),
+            after: span(r.clipSecondsLeft ?? 0),
+          }),
     );
     status.value = await loadVideoStatus();
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(err instanceof Error ? t(err.message) : String(err));
   } finally {
     clipBusy.value = false;
   }
@@ -1474,10 +1523,10 @@ async function screenshot() {
   if (shotBusy.value) return;
   shotBusy.value = true;
   try {
-    toast.info(`Screenshot saved to ${await takeScreenshot()}`);
+    toast.info(t("Screenshot saved to {file}", { file: await takeScreenshot() }));
     capturesChanged.value++;
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : String(err));
+    toast.error(err instanceof Error ? t(err.message) : String(err));
   } finally {
     shotBusy.value = false;
   }
@@ -1500,7 +1549,7 @@ async function setCodec(name: "mjpeg" | "h264") {
   try {
     values.value = await saveSettings({ vid_codec: index });
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : "the device would not take that codec");
+    toast.error(err instanceof Error ? t(err.message) : t("the device would not take that codec"));
   }
 }
 
@@ -1523,26 +1572,30 @@ function netPill(): Conn {
     if (net?.active === "wifi") {
       return {
         id: "wifi",
-        title: `WiFi - ${net?.ssid || "connected"}, standing in for the cable`,
+        title: t("WiFi - {ssid}, standing in for the cable", { ssid: net?.ssid || t("connected") }),
         state: "on",
       };
     }
-    const backup = net?.wifiUp ? "WiFi ready as the backup" : "WiFi backup not connected";
+    const backup = net?.wifiUp ? t("WiFi ready as the backup") : t("WiFi backup not connected");
     return {
       id: "ethernet",
       title: net?.up
-        ? `Ethernet - link up${net?.mbps ? ` (${net.mbps} Mbps)` : ""}; ${backup}`
-        : `Ethernet - link down; ${backup}`,
+        ? net?.mbps
+          ? t("Ethernet - link up ({mbps} Mbps); {backup}", { mbps: net.mbps, backup })
+          : t("Ethernet - link up; {backup}", { backup })
+        : t("Ethernet - link down; {backup}", { backup }),
       state: net?.up ? "on" : "off",
     };
   }
   if (mode === "wifi") {
-    const rssi = net?.rssi ? ` (${net.rssi} dBm)` : "";
+    const ssid = net?.ssid || t("connected");
     return {
       id: "wifi",
       title: net?.wifiUp
-        ? `WiFi - ${net?.ssid || "connected"}${rssi}`
-        : "WiFi - connecting",
+        ? net?.rssi
+          ? t("WiFi - {ssid} ({rssi} dBm)", { ssid, rssi: net.rssi })
+          : t("WiFi - {ssid}", { ssid })
+        : t("WiFi - connecting"),
       state: net?.wifiUp ? "on" : "idle",
     };
   }
@@ -1550,15 +1603,17 @@ function netPill(): Conn {
     const n = net?.apClients ?? 0;
     return {
       id: "ap",
-      title: `Hotspot ${net?.ssid ?? ""} - ${n} client${n === 1 ? "" : "s"}`,
+      title: tn("Hotspot {ssid} - {n} client", "Hotspot {ssid} - {n} clients", n, { ssid: net?.ssid ?? "" }),
       state: "on",
     };
   }
   return {
     id: "ethernet",
     title: net?.up
-      ? `Ethernet - link up${net?.mbps ? ` (${net.mbps} Mbps)` : ""}`
-      : "Ethernet - link down",
+      ? net?.mbps
+        ? t("Ethernet - link up ({mbps} Mbps)", { mbps: net.mbps })
+        : t("Ethernet - link up")
+      : t("Ethernet - link down"),
     state: net?.up ? "on" : "off",
   };
 }
@@ -1568,12 +1623,12 @@ function netPill(): Conn {
 async function switchNet(mode: "ethernet" | "wifi" | "ap" | "auto") {
   connDetail.value = null;
   if (mode === system.value?.net?.mode) return;
-  const name = { ethernet: "Ethernet", wifi: "WiFi", ap: "the hotspot", auto: "Ethernet with WiFi as the backup" }[mode];
-  if (!confirm(`Switch the connection to ${name}? The device restarts and may change address.`))
+  const name = { ethernet: "Ethernet", wifi: "WiFi", ap: t("the hotspot"), auto: t("Ethernet with WiFi as the backup") }[mode];
+  if (!confirm(t("Switch the connection to {name}? The device restarts and may change address.", { name })))
     return;
   try {
     await saveSettings({ net_mode: { ethernet: 0, wifi: 1, ap: 2, auto: 3 }[mode] });
-    const label = `Switching to ${name}`;
+    const label = t("Switching to {name}", { name });
     /* A new network usually means a new address. By name it can still be found,
        unless the page is already open by name. */
     const host = system.value?.net?.hostname;
@@ -1583,7 +1638,7 @@ async function switchNet(mode: "ethernet" | "wifi" | "ap" | "auto") {
       location.reload();
     }
   } catch {
-    toast.error("Could not switch the network");
+    toast.error(t("Could not switch the network"));
   }
 }
 
@@ -1599,7 +1654,10 @@ async function installCoproc() {
   if (!cp) return;
   if (
     !confirm(
-      `Install esp-hosted ${cp.bundled} into the Wi-Fi chip?\n\nThis is a test feature. It takes about a minute, then the device restarts. If it is cut off halfway, the chip keeps its old firmware. But if the new firmware does not start, Wi-Fi stops working and the chip has to be flashed by hand, over its own UART pins.\n\nYou do this at your own risk.`,
+      t(
+        "Install esp-hosted {version} into the Wi-Fi chip?\n\nThis is a test feature. It takes about a minute, then the device restarts. If it is cut off halfway, the chip keeps its old firmware. But if the new firmware does not start, Wi-Fi stops working and the chip has to be flashed by hand, over its own UART pins.\n\nYou do this at your own risk.",
+        { version: cp.bundled },
+      ),
     )
   )
     return;
@@ -1615,23 +1673,23 @@ async function installCoproc() {
       } catch {
         /* Gone after the last write: that is the restart, not a failure. */
         if (written) return;
-        if (++misses > 20) throw new Error("the device stopped answering");
+        if (++misses > 20) throw new Error(t("the device stopped answering"));
         continue;
       }
       if (!st || st.state === "done") return;
       if (st.percent >= 100) written = true;
-      if (st.state === "failed") throw new Error(st.msg);
-      watchStep("", `${st.msg} ${st.percent}%`, { pct: st.percent });
+      if (st.state === "failed") throw new Error(t(st.msg));
+      watchStep("", `${t(st.msg)} ${st.percent}%`, { pct: st.percent });
     }
   };
   try {
     if (
-      await runRestart("Updating the Wi-Fi chip", kick, { kind: "coproc", to: cp.bundled })
+      await runRestart(t("Updating the Wi-Fi chip"), kick, { kind: "coproc", to: cp.bundled })
     ) {
       location.reload();
     }
   } catch (e) {
-    toast.error(`Wi-Fi chip update: ${(e as Error).message}`);
+    toast.error(t("Wi-Fi chip update: {error}", { error: (e as Error).message }));
   }
 }
 
@@ -1665,9 +1723,9 @@ async function replug() {
   replugging.value = true;
   try {
     await replugUsb();
-    toast.info("Re-plugged - the target should pick the keyboard up in a moment");
+    toast.info(t("Re-plugged - the target should pick the keyboard up in a moment"));
   } catch {
-    toast.error("Could not re-plug USB");
+    toast.error(t("Could not re-plug USB"));
   } finally {
     replugging.value = false;
   }
@@ -1698,9 +1756,9 @@ const netAddrs = computed<Addr[]>(() => {
   const rows: Addr[] = [];
   if (net?.hostname) {
     rows.push({
-      label: "Name",
+      label: t("Name"),
       value: `${net.hostname}.local`,
-      note: "on this network",
+      note: t("on this network"),
       url: addrUrl(`${net.hostname}.local`),
     });
   }
@@ -1711,7 +1769,7 @@ const netAddrs = computed<Addr[]>(() => {
     rows.push({
       label: "IPv4",
       value: net.ip4Backup,
-      note: "WiFi backup",
+      note: t("WiFi backup"),
       url: addrUrl(net.ip4Backup),
     });
   }
@@ -1723,12 +1781,12 @@ const netAddrs = computed<Addr[]>(() => {
     rows.push({
       label: "IPv6",
       value: addr,
-      note: linkLocal ? "link-local" : uniqueLocal ? "this site only" : "global",
+      note: linkLocal ? t("link-local") : uniqueLocal ? t("this site only") : t("global"),
       url: linkLocal ? null : addrUrl(`[${addr}]`),
     });
   }
   if (net?.mac) {
-    rows.push({ label: "MAC", value: net.mac, note: "for a DHCP reservation", url: null });
+    rows.push({ label: "MAC", value: net.mac, note: t("for a DHCP reservation"), url: null });
   }
   return rows;
 });
@@ -1738,11 +1796,11 @@ const netAddrs = computed<Addr[]>(() => {
 async function copyAddr(value: string) {
   try {
     await navigator.clipboard.writeText(value);
-    toast.info("Copied");
+    toast.info(t("Copied"));
   } catch {
     /* The clipboard API is only available in a secure context, so this is what
        an operator on plain HTTP meets. */
-    toast.error("Could not copy - select and copy it manually");
+    toast.error(t("Could not copy - select and copy it manually"));
   }
 }
 
@@ -1752,9 +1810,9 @@ const conns = computed<Conn[]>(() => {
       id: "hdmi",
       title: online.value
         ? status.value?.signal
-          ? `HDMI in - ${status.value.width}x${status.value.height}`
-          : "HDMI in - no signal"
-        : "HDMI in",
+          ? t("HDMI in - {w}x{h}", { w: status.value.width, h: status.value.height })
+          : t("HDMI in - no signal")
+        : t("HDMI in"),
       state: online.value ? (status.value?.signal ? "on" : "idle") : "off",
     },
     {
@@ -1764,17 +1822,17 @@ const conns = computed<Conn[]>(() => {
          re-plug fixes; a dead one means its port has no power, which nothing on
          this end can reach. */
       title: !input.target.value.known
-        ? "USB - control channel down"
+        ? t("USB - control channel down")
         : input.target.value.attached
-          ? "USB - the target sees the keyboard and mouse"
+          ? t("USB - the target sees the keyboard and mouse")
           : input.target.value.busAlive
-            ? "USB - the target is not taking the keyboard"
-            : "USB - no power on the target's port",
+            ? t("USB - the target is not taking the keyboard")
+            : t("USB - no power on the target's port"),
       state: input.target.value.attached ? "on" : "off",
     },
     {
       id: "sd",
-      title: storage.value?.mounted ? "microSD card inserted" : "no microSD card",
+      title: storage.value?.mounted ? t("microSD card inserted") : t("no microSD card"),
       state: storage.value?.mounted ? "on" : "off",
     },
     netPill(),
@@ -1782,21 +1840,21 @@ const conns = computed<Conn[]>(() => {
   /* One VPN pill, for whichever backend is active (they are mutually exclusive).
      Shown only when a VPN is on - a persistent grey icon would be noise. */
   const w = system.value?.wg;
-  const t = system.value?.ts;
+  const ts = system.value?.ts;
   if (w?.enabled) {
     const where = w.address ? ` - ${w.address}` : "";
     list.push({
       id: "vpn",
-      title: w.up ? `WireGuard${where}` : "WireGuard - connecting to the peer",
+      title: w.up ? `WireGuard${where}` : t("WireGuard - connecting to the peer"),
       state: w.up ? "on" : "idle",
     });
-  } else if (t?.enabled) {
-    const where = t.address ? ` - ${t.address}` : "";
-    const peers = t.peers ? ` (${t.peers} peer${t.peers === 1 ? "" : "s"})` : "";
+  } else if (ts?.enabled) {
+    const where = ts.address ? ` - ${ts.address}` : "";
+    const peers = ts.peers ? ` (${tn("{n} peer", "{n} peers", ts.peers)})` : "";
     list.push({
       id: "vpn",
-      title: t.up ? `Tailscale${where}${peers}` : "Tailscale - joining the tailnet",
-      state: t.up ? "on" : "idle",
+      title: ts.up ? `Tailscale${where}${peers}` : t("Tailscale - joining the tailnet"),
+      state: ts.up ? "on" : "idle",
     });
   }
   /* Shown only when MQTT is turned on - a persistent grey icon would be noise
@@ -1805,7 +1863,7 @@ const conns = computed<Conn[]>(() => {
   if (m?.enabled) {
     list.push({
       id: "mqtt",
-      title: m.connected ? "MQTT - connected to the broker" : "MQTT - connecting to the broker",
+      title: m.connected ? t("MQTT - connected to the broker") : t("MQTT - connecting to the broker"),
       state: m.connected ? "on" : "idle",
     });
   }
@@ -1819,16 +1877,20 @@ const conns = computed<Conn[]>(() => {
 
 function memLowText(m: MemLow): string {
   const closed = m.closed
-    ? ` It closed ${m.closed} connection${m.closed === 1 ? "" : "s"} that only carried requests, so a button may need a second press.`
+    ? ` ${tn(
+        "It closed {n} connection that only carried requests, so a button may need a second press.",
+        "It closed {n} connections that only carried requests, so a button may need a second press.",
+        m.closed,
+      )}`
     : "";
-  return `The device is low on memory (${m.freeKb} KB free).${closed} The picture keeps going.`;
+  return `${t("The device is low on memory ({kb} KB free).", { kb: m.freeKb })}${closed} ${t("The picture keeps going.")}`;
 }
 
 /* Say it once a time it happens, not on every poll. */
 watch(
   () => Boolean(status.value?.memLow),
   (low) => {
-    if (low) toast.error("The device is low on memory and gave up some connections. The picture keeps going.");
+    if (low) toast.error(t("The device is low on memory and gave up some connections. The picture keeps going."));
   },
 );
 
@@ -1843,7 +1905,7 @@ let systemPollId = 0;
  * went wrong: an update that rolled back leaves the device running perfectly,
  * on the old firmware, and looks exactly like one that worked (issue #22).
  */
-const restartOutcome = ref<{ bad: boolean; text: string } | null>(null);
+const restartOutcome = ref<{ bad: boolean; text: () => string } | null>(null);
 
 /*
  * Update checks are off by default - a KVM may sit where nothing should reach
@@ -1867,10 +1929,10 @@ try {
   /* no storage: it can be dismissed for this visit */
 }
 const nameTaken = computed(() => {
-  const t = system.value?.net?.nameTaken;
-  const got = t?.tailnet || t?.lan || "";
+  const taken = system.value?.net?.nameTaken;
+  const got = taken?.tailnet || taken?.lan || "";
   if (!got || got === nameTakenDismissed.value) return null;
-  return { got, where: t?.tailnet ? "your tailnet" : "this network" };
+  return { got, where: taken?.tailnet ? t("your tailnet") : t("this network") };
 });
 function dismissNameTaken() {
   const got = nameTaken.value?.got ?? "";
@@ -1933,9 +1995,9 @@ async function enableUpdateChecks() {
   try {
     values.value = await saveSettings({ upd_check: true });
     dismissUpdAsk();
-    toast.info("Update checks are on");
+    toast.info(t("Update checks are on"));
   } catch {
-    toast.error("Could not turn update checks on");
+    toast.error(t("Could not turn update checks on"));
   }
 }
 
@@ -1954,7 +2016,7 @@ async function keepOwnUpdate(version: string) {
     trialKept();
     restartOutcome.value = {
       bad: false,
-      text: `The device is running ${version}. This console reached it again, so the update is kept.`,
+      text: () => t("The device is running {version}. This console reached it again, so the update is kept.", { version }),
     };
   } catch {
     /* The banner still offers it by hand. */
@@ -1967,10 +2029,14 @@ function reportRestart(version: string, coprocFw?: string, trialSeconds = 0) {
   if (note.kind === "coproc") {
     restartOutcome.value =
       coprocFw === note.to
-        ? { bad: false, text: `The Wi-Fi chip runs esp-hosted ${coprocFw}.` }
+        ? { bad: false, text: () => t("The Wi-Fi chip runs esp-hosted {version}.", { version: coprocFw ?? "" }) }
         : {
             bad: true,
-            text: `The Wi-Fi chip reports ${coprocFw || "no version"}, not ${note.to}. It kept its old firmware.`,
+            text: () =>
+              t("The Wi-Fi chip reports {got}, not {want}. It kept its old firmware.", {
+                got: coprocFw || t("no version"),
+                want: note.to ?? "",
+              }),
           };
     return;
   }
@@ -1978,15 +2044,19 @@ function reportRestart(version: string, coprocFw?: string, trialSeconds = 0) {
     if (note.to && version && note.to !== version) {
       restartOutcome.value = {
         bad: true,
-        text: `The device came back on ${version}, not ${note.to}. The new image did not start, so it went back to the one that works.`,
+        text: () =>
+          t("The device came back on {version}, not {want}. The new image did not start, so it went back to the one that works.", {
+            version,
+            want: note.to ?? "",
+          }),
       };
       return;
     }
-    restartOutcome.value = { bad: false, text: `The device is running ${version}.` };
+    restartOutcome.value = { bad: false, text: () => t("The device is running {version}.", { version }) };
     if (note.trial === "auto" && trialSeconds > 0) void keepOwnUpdate(version);
     return;
   }
-  restartOutcome.value = { bad: false, text: "The device restarted and is back." };
+  restartOutcome.value = { bad: false, text: () => t("The device restarted and is back.") };
 }
 
 function reloadConsole() {
@@ -2070,7 +2140,7 @@ async function startConsole() {
       const s = await loadVideoStatus();
       if (!reachable) {
         reachable = true;
-        toast.info("Device is back");
+        toast.info(t("Device is back"));
       }
       interval = 1000;
       status.value = s;
@@ -2094,7 +2164,7 @@ async function startConsole() {
          an operator ends up typing into a machine that is not listening. */
       if (reachable) {
         reachable = false;
-        toast.error("Lost contact with the device");
+        toast.error(t("Lost contact with the device"));
       }
     }
     pollId = window.setTimeout(tick, interval);
@@ -2168,6 +2238,7 @@ onMounted(async () => {
   installPagePin();
   installKeyboardInset();
   installTouchLabels();
+  startLayoutGuess();
   document.documentElement.dataset.theme = theme.value;
   /* Start in touch mode on a device whose primary pointer is a finger. */
   if (window.matchMedia?.("(pointer: coarse)").matches) touchMode.value = true;
@@ -2197,14 +2268,14 @@ async function onAuthenticated() {
      cookie never came back. Say that instead of showing the same empty form,
      which reads as "the password is wrong". */
   if (locked.value) {
-    toast.error("Signed in, but the device did not get the session cookie back");
+    toast.error(t("Signed in, but the device did not get the session cookie back"));
     return;
   }
   if (!mustChange.value) await startConsole();
 }
 
 async function onPasswordChanged() {
-  toast.info("Password changed - sign in again");
+  toast.info(t("Password changed - sign in again"));
   panel.value = null;
   try {
     session.value = await loadSession();
@@ -2257,8 +2328,8 @@ function onGlobalKey(e: KeyboardEvent) {
   // Don't hijack the key while the user is typing in a field (e.g. the login
   // password) or when a modifier is held - Cmd/Ctrl+F belongs to the browser.
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  const t = e.target as HTMLElement | null;
-  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  const el = e.target as HTMLElement | null;
+  if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
   if (e.key === "?") {
     shortcutsOpen.value = !shortcutsOpen.value;
     return;
@@ -2306,80 +2377,80 @@ const paletteCommands = computed<Command[]>(() => {
     what().catch((err) => toast.error(err instanceof Error ? err.message : String(err)));
 
   /* Panels and windows */
-  if (ctl) add({ id: "panel:input", title: "Input", group: "Panels", hint: "I", keywords: "keys combinations macros paste", run: () => togglePanel("input") });
+  if (ctl) add({ id: "panel:input", title: t("Input"), group: t("Panels"), hint: "I", keywords: "keys combinations macros paste", run: () => togglePanel("input") });
   if (ctl && caps.value.msc?.available)
-    add({ id: "panel:media", title: "Virtual media", group: "Panels", hint: "M", keywords: "iso image usb drive disc boot", run: () => togglePanel("media") });
+    add({ id: "panel:media", title: t("Virtual media"), group: t("Panels"), hint: "M", keywords: "iso image usb drive disc boot", run: () => togglePanel("media") });
   if (ctl && caps.value.runbooks?.available)
-    add({ id: "panel:automation", title: "Automation", group: "Panels", hint: "A", keywords: "runbooks schedules notifications areas", run: () => togglePanel("automation") });
-  if (record.value) add({ id: "panel:captures", title: "Recordings and screenshots", group: "Panels", hint: "R", run: () => togglePanel("captures") });
-  if (serialReady.value) add({ id: "win:serial", title: serialOpen.value ? "Hide the serial console" : "Serial console", group: "Windows", keywords: "uart terminal", run: () => (serialOpen.value = !serialOpen.value) });
-  if (toolsReady.value) add({ id: "win:tools", title: toolsOpen.value ? "Hide ESP-KVM Tools" : "ESP-KVM Tools", group: "Windows", run: () => (toolsOpen.value = !toolsOpen.value) });
-  if (netlogReady.value) add({ id: "win:netlog", title: netlogOpen.value ? "Hide the target log" : "Target log", group: "Windows", keywords: "netconsole kernel", run: () => (netlogOpen.value = !netlogOpen.value) });
+    add({ id: "panel:automation", title: t("Automation"), group: t("Panels"), hint: "A", keywords: "runbooks schedules notifications areas", run: () => togglePanel("automation") });
+  if (record.value) add({ id: "panel:captures", title: t("Recordings and screenshots"), group: t("Panels"), hint: "R", run: () => togglePanel("captures") });
+  if (serialReady.value) add({ id: "win:serial", title: serialOpen.value ? t("Hide the serial console") : t("Serial console"), group: t("Windows"), keywords: "uart terminal", run: () => (serialOpen.value = !serialOpen.value) });
+  if (toolsReady.value) add({ id: "win:tools", title: toolsOpen.value ? t("Hide ESP-KVM Tools") : t("ESP-KVM Tools"), group: t("Windows"), run: () => (toolsOpen.value = !toolsOpen.value) });
+  if (netlogReady.value) add({ id: "win:netlog", title: netlogOpen.value ? t("Hide the target log") : t("Target log"), group: t("Windows"), keywords: "netconsole kernel", run: () => (netlogOpen.value = !netlogOpen.value) });
   if (ctl && (cecSource.value || (caps.value.cec?.available && !caps.value.cec.enabled)))
-    add({ id: "win:cec", title: remoteOpen.value ? "Hide the TV remote" : "TV remote", group: "Windows", keywords: "cec hdmi", run: () => (remoteOpen.value = !remoteOpen.value) });
-  if (ctl && usbPad.value) add({ id: "win:pad", title: gamepadOpen.value ? "Hide the gamepad" : "Gamepad", group: "Windows", keywords: "controller xbox switch", run: () => (gamepadOpen.value = !gamepadOpen.value) });
+    add({ id: "win:cec", title: remoteOpen.value ? t("Hide the TV remote") : t("TV remote"), group: t("Windows"), keywords: "cec hdmi", run: () => (remoteOpen.value = !remoteOpen.value) });
+  if (ctl && usbPad.value) add({ id: "win:pad", title: gamepadOpen.value ? t("Hide the gamepad") : t("Gamepad"), group: t("Windows"), keywords: "controller xbox switch", run: () => (gamepadOpen.value = !gamepadOpen.value) });
 
   /* Capture and text */
   const cap = captureItems.value;
-  if (cap.shot) add({ id: "cap:shot", title: "Screenshot", group: "Capture", keywords: "photo picture save", run: () => screenshot() });
-  if (cap.clip && clipState.value) add({ id: "cap:clip", title: "Save clip", group: "Capture", keywords: "dashcam", run: () => clip() });
-  if (cap.rec && record.value) add({ id: "cap:rec", title: record.value.on ? "Stop recording" : "Start recording", group: "Capture", keywords: "video record", run: () => toggleRecording() });
-  if (uiShown("select")) add({ id: "text:select", title: selectingText.value ? "Stop selecting text" : "Select text on the screen", group: "Screen text", run: () => toggleSelectText() });
-  if (uiShown("copy")) add({ id: "text:copy", title: "Copy the screen as text", group: "Screen text", keywords: "clipboard ocr", run: () => copyScreenText() });
+  if (cap.shot) add({ id: "cap:shot", title: t("Screenshot"), group: t("Capture"), keywords: "photo picture save", run: () => screenshot() });
+  if (cap.clip && clipState.value) add({ id: "cap:clip", title: t("Save clip"), group: t("Capture"), keywords: "dashcam", run: () => clip() });
+  if (cap.rec && record.value) add({ id: "cap:rec", title: record.value.on ? t("Stop recording") : t("Start recording"), group: t("Capture"), keywords: "video record", run: () => toggleRecording() });
+  if (uiShown("select")) add({ id: "text:select", title: selectingText.value ? t("Stop selecting text") : t("Select text on the screen"), group: t("Screen text"), run: () => toggleSelectText() });
+  if (uiShown("copy")) add({ id: "text:copy", title: t("Copy the screen as text"), group: t("Screen text"), keywords: "clipboard ocr", run: () => copyScreenText() });
 
   /* Keys, macros, runbooks */
   if (ctl) {
-    const os = quickOs.value;
+    const os = targetOs.value;
     for (const m of macrosForOs(os)) {
       const label = macroLabel(m, os);
       const title = m.id.startsWith("tty_") && !label.startsWith("TTY") ? `TTY ${label}` : label;
-      add({ id: `combo:${m.id}`, title: `Send ${title}`, group: "Keys", keywords: m.hint, run: tryRun(() => sendBuiltin(input.control, m, os)) });
+      add({ id: `combo:${m.id}`, title: t("Send {name}", { name: title }), group: t("Keys"), keywords: m.hint, run: tryRun(() => sendBuiltin(input.control, m, os)) });
     }
     for (const m of loadMacros(values.value.macros_json))
-      add({ id: `macro:${m.name}`, title: `Macro: ${m.name}`, group: "Keys", run: tryRun(() => runMacroScript(m.script, input.control, layout.value, typeDelay)) });
+      add({ id: `macro:${m.name}`, title: t("Macro: {name}", { name: m.name }), group: t("Keys"), run: tryRun(() => runMacroScript(m.script, input.control, layout.value, typeDelay, targetOs.value)) });
     if (caps.value.runbooks?.available)
       for (const r of loadRunbooks(values.value.runbooks_json))
         add({
           id: `runbook:${r.name}`,
-          title: `Run runbook: ${r.name}`,
-          group: "Automation",
+          title: t("Run runbook: {name}", { name: r.name }),
+          group: t("Automation"),
           run: tryRun(async () => {
             await runRunbook(r.name);
-            toast.info(`Runbook ${r.name} started`);
+            toast.info(t("Runbook {name} started", { name: r.name }));
           }),
         });
     if (values.value.atx_enable)
       add({
         id: "power:click",
-        title: "Press the power button",
-        group: "Power",
+        title: t("Press the power button"),
+        group: t("Power"),
         keywords: "atx turn on off",
         run: tryRun(async () => {
-          if (!confirm("Press the target's power button?")) return;
+          if (!confirm(t("Press the target's power button?"))) return;
           await powerClick();
-          toast.info("Power button pressed");
+          toast.info(t("Power button pressed"));
         }),
       });
   }
 
   /* View */
-  add({ id: "view:full", title: "Full screen", group: "View", hint: "F", run: () => toggleFullscreen() });
-  if (pipSupported) add({ id: "view:pip", title: "Picture in a small window", group: "View", hint: "P", keywords: "pip float", run: () => openPip() });
-  add({ id: "view:fit", title: "Scale: fit", group: "View", run: () => (fit.value = "fit") });
-  add({ id: "view:stretch", title: "Scale: stretch", group: "View", run: () => (fit.value = "stretch") });
-  add({ id: "view:actual", title: "Scale: 1:1", group: "View", keywords: "actual size pixels", run: () => (fit.value = "actual") });
+  add({ id: "view:full", title: t("Full screen"), group: t("View"), hint: "F", run: () => toggleFullscreen() });
+  if (pipSupported) add({ id: "view:pip", title: t("Picture in a small window"), group: t("View"), hint: "P", keywords: "pip float", run: () => openPip() });
+  add({ id: "view:fit", title: t("Scale: fit"), group: t("View"), run: () => (fit.value = "fit") });
+  add({ id: "view:stretch", title: t("Scale: stretch"), group: t("View"), run: () => (fit.value = "stretch") });
+  add({ id: "view:actual", title: t("Scale: 1:1"), group: t("View"), keywords: "actual size pixels", run: () => (fit.value = "actual") });
   if (!updateHoldsStream.value)
-    add({ id: "view:pause", title: paused.value ? "Resume the video" : "Pause the video", group: "View", keywords: "stream bandwidth", run: () => (paused.value = !paused.value) });
-  if (ctl) add({ id: "view:osk", title: oskOpen.value ? "Hide the on-screen keyboard" : "On-screen keyboard", group: "View", run: () => (oskOpen.value = !oskOpen.value) });
-  add({ id: "view:touch", title: touchMode.value ? "Touch mode off" : "Touch mode on", group: "View", run: () => (touchMode.value = !touchMode.value) });
+    add({ id: "view:pause", title: paused.value ? t("Resume the video") : t("Pause the video"), group: t("View"), keywords: "stream bandwidth", run: () => (paused.value = !paused.value) });
+  if (ctl) add({ id: "view:osk", title: oskOpen.value ? t("Hide the on-screen keyboard") : t("On-screen keyboard"), group: t("View"), run: () => (oskOpen.value = !oskOpen.value) });
+  add({ id: "view:touch", title: touchMode.value ? t("Touch mode off") : t("Touch mode on"), group: t("View"), run: () => (touchMode.value = !touchMode.value) });
   if (keyLockSupported && ctl)
-    add({ id: "view:keylock", title: keyLockWanted.value ? "Shortcuts to the target: off" : "Shortcuts to the target: on", group: "View", keywords: "keyboard lock all keys alt tab win esc", run: () => (keyLockWanted.value = !keyLockWanted.value) });
-  add({ id: "view:theme", title: theme.value === "dark" ? "Light theme" : "Dark theme", group: "View", run: () => toggleTheme() });
+    add({ id: "view:keylock", title: keyLockWanted.value ? t("Shortcuts to the target: off") : t("Shortcuts to the target: on"), group: t("View"), keywords: "keyboard lock all keys alt tab win esc", run: () => (keyLockWanted.value = !keyLockWanted.value) });
+  add({ id: "view:theme", title: theme.value === "dark" ? t("Light theme") : t("Dark theme"), group: t("View"), run: () => toggleTheme() });
 
   /* Settings */
-  add({ id: "settings", title: "Settings", group: "Settings", run: () => (settingsOpen.value = true) });
+  add({ id: "settings", title: t("Settings"), group: t("Settings"), run: () => (settingsOpen.value = true) });
   for (const sec of sections.value)
-    add({ id: `settings:${sec.id}`, title: `Settings: ${sec.title}`, group: "Settings", keywords: sec.blurb, run: () => openSettingsAt(sec.id, "") });
+    add({ id: `settings:${sec.id}`, title: t("Settings: {section}", { section: t(sec.title) }), group: t("Settings"), keywords: sec.blurb, run: () => openSettingsAt(sec.id, "") });
   /* Each setting by its name, only once something is typed: a hundred of them
      would bury the rest of the list. Not one this board lacks or one hidden
      because the setting it depends on is off. */
@@ -2387,14 +2458,14 @@ const paletteCommands = computed<Command[]>(() => {
   for (const s of schema.value) {
     if (!secTitle.has(s.section) || settingBlockedReason(s, caps.value) || !settingShown(schema.value, values.value, s)) continue;
     const firstSentence = (s.help ?? "").split(/(?<=\.)\s/)[0];
-    add({ id: `setting:${s.key}`, title: s.title, group: `${secTitle.get(s.section)} setting`, keywords: `setting ${s.key} ${firstSentence}`, searchOnly: true, run: () => openSettingsAt(s.section, "", s.key) });
+    add({ id: `setting:${s.key}`, title: t(s.title), group: t("{section} setting", { section: t(secTitle.get(s.section) ?? "") }), keywords: `setting ${s.key} ${firstSentence}`, searchOnly: true, run: () => openSettingsAt(s.section, "", s.key) });
   }
 
   /* Help and the rest */
-  add({ id: "help:keys", title: "Keyboard shortcuts", group: "Help", hint: "?", run: () => (shortcutsOpen.value = true) });
-  add({ id: "help:tour", title: "What this device can do", group: "Help", keywords: "tour features overview", run: () => openTour() });
-  add({ id: "console:reload", title: "Reload the console", group: "Console", run: () => reload() });
-  add({ id: "console:signout", title: "Sign out", group: "Console", keywords: "log out logout", run: () => signOutFromRail() });
+  add({ id: "help:keys", title: t("Keyboard shortcuts"), group: t("Help"), hint: "?", run: () => (shortcutsOpen.value = true) });
+  add({ id: "help:tour", title: t("What this device can do"), group: t("Help"), keywords: "tour features overview", run: () => openTour() });
+  add({ id: "console:reload", title: t("Reload the console"), group: t("Console"), run: () => reload() });
+  add({ id: "console:signout", title: t("Sign out"), group: t("Console"), keywords: "log out logout", run: () => signOutFromRail() });
   return out;
 });
 
@@ -2462,9 +2533,9 @@ function nudgeEngage(e: PointerEvent) {
   if (engaged.value || (paused.value && !textView.value) || touchMode.value) return;
   if (heldByOther.value) return;
   if (selectingText.value) return;
-  const t = e.target as HTMLElement | null;
+  const el = e.target as HTMLElement | null;
   /* Only the picture: not the panels, and not the invitation itself. */
-  if (t?.closest(".panel, .screen-engage, .screen-notice, .touch-controls")) return;
+  if (el?.closest(".panel, .screen-engage, .screen-notice, .touch-controls")) return;
   clearTimeout(engageNudgeId);
   /* Off and on again so a second click restarts the animation. Through nextTick
      rather than a frame: a browser that is not painting this tab would hold a
@@ -2591,6 +2662,12 @@ async function toggleFullscreen() {
   }
 }
 
+/* A translated sentence with {name} slots where a key is drawn: text at even
+   places, slot names at odd ones. */
+function keySlots(text: string): string[] {
+  return text.split(/\{(\w+)\}/);
+}
+
 const LED_BITS: Array<[number, string]> = [
   [0x01, "Num"],
   [0x02, "Caps"],
@@ -2600,7 +2677,7 @@ const LED_BITS: Array<[number, string]> = [
 
 <template>
   <div v-if="loadError" class="fatal">
-    <h2>Cannot reach the device</h2>
+    <h2>{{ t("Cannot reach the device") }}</h2>
     <p class="muted">{{ loadError }}</p>
     <!-- After a certificate change the browser refuses the device, and to the
          service worker that is just a failed fetch: it serves its saved copy of
@@ -2609,14 +2686,16 @@ const LED_BITS: Array<[number, string]> = [
          the worker outlives both. Dropping the worker lets the next load reach
          the device, and the warning appear. -->
     <p v-if="/fetch|network|load failed/i.test(loadError)" class="muted">
-      If the device's certificate just changed, the browser may be refusing it
-      without showing why: this page is a copy the browser kept. Open it without
-      the saved copy to see the browser's certificate warning.
+      {{
+        t(
+          "If the device's certificate just changed, the browser may be refusing it without showing why: this page is a copy the browser kept. Open it without the saved copy to see the browser's certificate warning.",
+        )
+      }}
     </p>
     <div class="fatal-actions">
-      <button type="button" class="btn btn-primary" @click="reload">Retry</button>
+      <button type="button" class="btn btn-primary" @click="reload">{{ t("Retry") }}</button>
       <button v-if="hasWorker" type="button" class="btn" @click="openWithoutCopy">
-        Open without the saved copy
+        {{ t("Open without the saved copy") }}
       </button>
     </div>
   </div>
@@ -2635,8 +2714,8 @@ const LED_BITS: Array<[number, string]> = [
       v-if="immersive && !barsShown"
       type="button"
       class="immersive-handle"
-      aria-label="Show the console's bars"
-      title="Show the bars (or the mouse at an edge, or a tap of the right Ctrl key)"
+      :aria-label="t('Show the console\'s bars')"
+      :title="t('Show the bars (or the mouse at an edge, or a tap of the right Ctrl key)')"
       @click="showBars"
     >
       <Icon name="chevron-down" :size="14" />
@@ -2647,15 +2726,15 @@ const LED_BITS: Array<[number, string]> = [
       v-if="immersive && !barsShown"
       type="button"
       class="immersive-exit"
-      aria-label="Leave full screen"
-      title="Leave full screen"
+      :aria-label="t('Leave full screen')"
+      :title="t('Leave full screen')"
       @click="toggleFullscreen"
     >
       <Icon name="minimize" :size="18" />
     </button>
     <div v-if="firmwareChanged" class="update-banner" role="alert">
-      <span>The device was updated. Reload to get the matching console.</span>
-      <button type="button" class="btn btn-sm" @click="reloadConsole()">Reload</button>
+      <span>{{ t("The device was updated. Reload to get the matching console.") }}</span>
+      <button type="button" class="btn btn-sm" @click="reloadConsole()">{{ t("Reload") }}</button>
     </div>
     <div
       v-if="restartOutcome"
@@ -2663,67 +2742,83 @@ const LED_BITS: Array<[number, string]> = [
       :class="{ 'update-banner-bad': restartOutcome.bad }"
       role="status"
     >
-      <span>{{ restartOutcome.text }}</span>
-      <button type="button" class="btn btn-sm" @click="restartOutcome = null">Dismiss</button>
+      <span>{{ restartOutcome.text() }}</span>
+      <button type="button" class="btn btn-sm" @click="restartOutcome = null">{{ t("Dismiss") }}</button>
     </div>
     <TrialBanner :system="system" @kept="trialKept" />
     <BrowserMediaBanner />
     <div v-if="suggested" class="update-banner" role="status">
       <span>
-        This is a {{ suggested.name }}. Make a profile for it? Settings that suit it, used whenever
-        it is attached.
+        {{
+          t("This is a {name}. Make a profile for it? Settings that suit it, used whenever it is attached.", {
+            name: suggested.name,
+          })
+        }}
       </span>
       <button type="button" class="btn btn-sm btn-primary" :disabled="suggestBusy" @click="makeSuggested">
-        Make a profile
+        {{ t("Make a profile") }}
       </button>
       <button type="button" class="btn btn-sm" :disabled="suggestBusy" @click="suggestLater = suggested.id">
-        Not now
+        {{ t("Not now") }}
       </button>
       <button type="button" class="btn btn-sm" :disabled="suggestBusy" @click="declineSuggested">
-        Never for it
+        {{ t("Never for it") }}
       </button>
     </div>
     <div v-if="showPadAlone" class="update-banner" role="status">
       <span>
-        Keyboard and mouse are off: the target sees {{ padAloneLabel }} only (Settings - Input -
-        Gamepad). Right for a console, not for a computer.
+        {{
+          t(
+            "Keyboard and mouse are off: the target sees {pad} only (Settings - Input - Gamepad). Right for a console, not for a computer.",
+            { pad: padAloneLabel },
+          )
+        }}
       </span>
       <button type="button" class="btn btn-sm btn-primary" :disabled="bringingBack" @click="bringBackKeyboard">
-        Bring them back
+        {{ t("Bring them back") }}
       </button>
-      <button type="button" class="btn btn-sm" @click="padAloneDismissed = true">Dismiss</button>
+      <button type="button" class="btn btn-sm" @click="padAloneDismissed = true">{{ t("Dismiss") }}</button>
     </div>
     <div v-if="showSlowH264" class="update-banner" role="status">
       <span>
-        H.264 at {{ status?.width }}x{{ status?.height }} runs at only a few fps on this board.
-        MJPEG is faster here. So is H.264 at 720p, or at 30 Hz instead of 60 - set that in the
-        target's display settings.
+        {{
+          t(
+            "H.264 at {w}x{h} runs at only a few fps on this board. MJPEG is faster here. So is H.264 at 720p, or at 30 Hz instead of 60 - set that in the target's display settings.",
+            { w: status?.width ?? 0, h: status?.height ?? 0 },
+          )
+        }}
       </span>
       <button type="button" class="btn btn-sm btn-primary" @click="setCodec('mjpeg')">
-        Use MJPEG
+        {{ t("Use MJPEG") }}
       </button>
-      <button type="button" class="btn btn-sm" @click="dismissSlowH264">Dismiss</button>
+      <button type="button" class="btn btn-sm" @click="dismissSlowH264">{{ t("Dismiss") }}</button>
     </div>
     <div v-if="nameTaken" class="update-banner" role="status">
       <span>
-        Another device on {{ nameTaken.where }} already has this name, so this one shows up as
-        "{{ nameTaken.got }}". Give it a name of its own to tell them apart.
+        {{
+          t(
+            "Another device on {where} already has this name, so this one shows up as \"{name}\". Give it a name of its own to tell them apart.",
+            { where: nameTaken.where, name: nameTaken.got },
+          )
+        }}
       </span>
       <button type="button" class="btn btn-sm btn-primary" @click="openSettingsAt('network', 'Address', 'net_hostname')">
-        Rename
+        {{ t("Rename") }}
       </button>
-      <button type="button" class="btn btn-sm" @click="dismissNameTaken">Dismiss</button>
+      <button type="button" class="btn btn-sm" @click="dismissNameTaken">{{ t("Dismiss") }}</button>
     </div>
     <div v-if="showUpdAsk" class="update-banner" role="status">
       <span>
-        Get told when a new version is out? The browser checks whether a newer ESP-KVM is
-        published and offers it, and counts this device for the project: a random id, the board
-        and the version, once a day. The device itself never reaches out.
+        {{
+          t(
+            "Get told when a new version is out? The browser checks whether a newer ESP-KVM is published and offers it, and counts this device for the project: a random id, the board and the version, once a day. The device itself never reaches out.",
+          )
+        }}
       </span>
       <button type="button" class="btn btn-sm btn-primary" @click="enableUpdateChecks">
-        Turn on
+        {{ t("Turn on") }}
       </button>
-      <button type="button" class="btn btn-sm" @click="dismissUpdAsk">Not now</button>
+      <button type="button" class="btn btn-sm" @click="dismissUpdAsk">{{ t("Not now") }}</button>
     </div>
     <header class="statusbar">
       <svg
@@ -2820,7 +2915,7 @@ const LED_BITS: Array<[number, string]> = [
       </svg>
 
       <!-- Whether the device answers at all, then what its picture is doing. -->
-      <span class="stat" :title="online ? ONLINE_TITLE[liveness] : undefined">
+      <span class="stat" :title="online ? onlineTitle(liveness) : undefined">
         <span
           :key="liveness === 'live' ? livePulse : liveness"
           :class="[
@@ -2829,7 +2924,7 @@ const LED_BITS: Array<[number, string]> = [
             { 'dot-pulse': online && liveness === 'live' },
           ]"
         />
-        {{ online ? "Online" : "Unreachable" }}
+        {{ online ? t("Online") : t("Unreachable") }}
       </span>
       <ViewersWidget v-if="online" :view-only="viewOnly" />
       <VideoWidget
@@ -2856,8 +2951,8 @@ const LED_BITS: Array<[number, string]> = [
       <button
         type="button"
         class="btn btn-sm btn-icon wide-only"
-        aria-label="Commands"
-        title="Commands (Ctrl+K or Ctrl+Shift+P)"
+        :aria-label="t('Commands')"
+        :title="t('Commands (Ctrl+K or Ctrl+Shift+P)')"
         @click="paletteOpen = true"
       >
         <Icon name="search" :size="15" />
@@ -2865,7 +2960,7 @@ const LED_BITS: Array<[number, string]> = [
       <button
         type="button"
         class="btn btn-sm btn-icon"
-        :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
+        :aria-label="theme === 'dark' ? t('Switch to light theme') : t('Switch to dark theme')"
         @click="toggleTheme"
       >
         <Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="15" />
@@ -2873,13 +2968,13 @@ const LED_BITS: Array<[number, string]> = [
     </header>
 
     <div :class="['body', { 'layout-right': uiRight }]">
-      <nav class="rail" aria-label="Panels">
+      <nav class="rail" :aria-label="t('Panels')">
         <!-- A view-only sign-in gets no controls: the device refuses them anyway. -->
         <button
           v-if="!signedInToWatch"
           type="button"
           :class="['rail-btn', { 'rail-btn-active': panel === 'input' }]"
-          aria-label="Input"
+          :aria-label="t('Input')"
           @click="togglePanel('input')"
         >
           <Icon name="keyboard" :size="18" />
@@ -2888,9 +2983,22 @@ const LED_BITS: Array<[number, string]> = [
           v-if="!signedInToWatch"
           type="button"
           :class="['rail-btn', { 'rail-btn-active': panel === 'media', asking: askingMedia, 'rail-btn-dot': mediumIn }]"
-          aria-label="Virtual media"
+          :aria-label="t('Virtual media')"
           :disabled="!caps.msc?.available"
-          :title="caps.msc?.reason ?? (mediumIn ? `Virtual media: ${mediumIn === '@rescue' ? 'the rescue image' : mediumIn === '@wholesd' ? 'the whole microSD card' : mediumIn} is in` : 'Virtual media')"
+          :title="
+            caps.msc?.reason
+              ? t(caps.msc.reason)
+              : mediumIn
+                ? t('Virtual media: {medium} is in', {
+                    medium:
+                      mediumIn === '@rescue'
+                        ? t('the rescue image')
+                        : mediumIn === '@wholesd'
+                          ? t('the whole microSD card')
+                          : mediumIn,
+                  })
+                : t('Virtual media')
+          "
           @click="togglePanel('media')"
         >
           <Icon name="disc" :size="18" />
@@ -2899,9 +3007,9 @@ const LED_BITS: Array<[number, string]> = [
           v-if="!signedInToWatch"
           type="button"
           :class="['rail-btn', { 'rail-btn-active': panel === 'automation' }]"
-          aria-label="Automation"
+          :aria-label="t('Automation')"
           :disabled="!caps.runbooks?.available"
-          :title="caps.runbooks?.reason ?? 'Automation'"
+          :title="caps.runbooks?.reason ? t(caps.runbooks.reason) : t('Automation')"
           @click="togglePanel('automation')"
         >
           <Icon name="play" :size="18" />
@@ -2911,8 +3019,8 @@ const LED_BITS: Array<[number, string]> = [
           v-if="record"
           type="button"
           :class="['rail-btn', { 'rail-btn-active': panel === 'captures' }]"
-          aria-label="Recordings and screenshots"
-          title="Recordings and screenshots"
+          :aria-label="t('Recordings and screenshots')"
+          :title="t('Recordings and screenshots')"
           @click="togglePanel('captures')"
         >
           <Icon name="film" :size="18" />
@@ -2926,8 +3034,8 @@ const LED_BITS: Array<[number, string]> = [
             type="button"
             :class="['rail-btn', 'rail-win', { 'rail-btn-active': serialOpen }]"
             data-ui="serial"
-            aria-label="Serial console"
-            :title="serialOpen ? 'Hide the serial console' : 'The target\'s serial console'"
+            :aria-label="t('Serial console')"
+            :title="serialOpen ? t('Hide the serial console') : t('The target\'s serial console')"
             @click="serialOpen = !serialOpen"
           >
             <Icon name="terminal" :size="18" />
@@ -2941,8 +3049,8 @@ const LED_BITS: Array<[number, string]> = [
               { 'rail-btn-active': toolsOpen, 'rail-btn-idle': !system?.tools?.connected },
             ]"
             data-ui="tools"
-            aria-label="ESP-KVM Tools"
-            :title="toolsOpen ? 'Hide ESP-KVM Tools' : system?.tools?.connected ? 'ESP-KVM Tools on the target' : 'ESP-KVM Tools is not on the target yet'"
+            :aria-label="t('ESP-KVM Tools')"
+            :title="toolsOpen ? t('Hide ESP-KVM Tools') : system?.tools?.connected ? t('ESP-KVM Tools on the target') : t('ESP-KVM Tools is not on the target yet')"
             @click="toolsOpen = !toolsOpen"
           >
             <Icon name="tools" :size="18" />
@@ -2952,8 +3060,8 @@ const LED_BITS: Array<[number, string]> = [
             type="button"
             :class="['rail-btn', 'rail-win', { 'rail-btn-active': netlogOpen }]"
             data-ui="netlog"
-            aria-label="Target log (netconsole)"
-            :title="netlogOpen ? 'Hide the target log' : 'The target\'s log, received over the network (netconsole)'"
+            :aria-label="t('Target log (netconsole)')"
+            :title="netlogOpen ? t('Hide the target log') : t('The target\'s log, received over the network (netconsole)')"
             @click="netlogOpen = !netlogOpen"
           >
             <Icon name="logs" :size="18" />
@@ -2963,8 +3071,8 @@ const LED_BITS: Array<[number, string]> = [
             type="button"
             :class="['rail-btn', 'rail-win', { 'rail-btn-active': remoteOpen }]"
             data-ui="cec"
-            aria-label="Remote control (HDMI-CEC)"
-            :title="remoteOpen ? 'Hide the remote' : `A remote for ${cecSource.name || 'the HDMI source'}, over HDMI-CEC`"
+            :aria-label="t('Remote control (HDMI-CEC)')"
+            :title="remoteOpen ? t('Hide the remote') : t('A remote for {name}, over HDMI-CEC', { name: cecSource.name || t('the HDMI source') })"
             @click="remoteOpen = !remoteOpen"
           >
             <Icon name="remote" :size="18" />
@@ -2974,8 +3082,8 @@ const LED_BITS: Array<[number, string]> = [
             type="button"
             :class="['rail-btn', 'rail-win', { 'rail-btn-active': gamepadOpen }]"
             data-ui="gamepad"
-            aria-label="Gamepad"
-            :title="gamepadOpen ? 'Hide the gamepad' : 'A gamepad for a console (Switch, Steam Deck)'"
+            :aria-label="t('Gamepad')"
+            :title="gamepadOpen ? t('Hide the gamepad') : t('A gamepad for a console (Switch, Steam Deck)')"
             @click="gamepadOpen = !gamepadOpen"
           >
             <Icon name="gamepad" :size="18" />
@@ -3004,8 +3112,8 @@ const LED_BITS: Array<[number, string]> = [
           v-if="!signedInToWatch"
           type="button"
           :class="['rail-btn', { 'rail-btn-active': settingsOpen }]"
-          aria-label="Settings"
-          title="Settings"
+          :aria-label="t('Settings')"
+          :title="t('Settings')"
           @click="settingsOpen = !settingsOpen"
         >
           <Icon name="settings" :size="18" />
@@ -3014,8 +3122,8 @@ const LED_BITS: Array<[number, string]> = [
           v-if="session?.required && session.authenticated"
           type="button"
           class="rail-btn"
-          aria-label="Sign out"
-          title="Sign out"
+          :aria-label="t('Sign out')"
+          :title="t('Sign out')"
           :disabled="signingOut"
           @click="signOutFromRail"
         >
@@ -3045,7 +3153,7 @@ const LED_BITS: Array<[number, string]> = [
             :zoom="zoom"
             :pause-note="
               updateHoldsStream
-                ? 'The picture is back the moment the update is done - it gives up its connection so the image gets the device to itself.'
+                ? t('The picture is back the moment the update is done - it gives up its connection so the image gets the device to itself.')
                 : ''
             "
             @surface="surface = $event"
@@ -3062,9 +3170,9 @@ const LED_BITS: Array<[number, string]> = [
           />
 
           <div v-if="targetOff" class="power-off-card">
-            <span>The target is off.</span>
+            <span>{{ t("The target is off.") }}</span>
             <button type="button" class="btn" :disabled="powering" @click="powerOnFromScreen">
-              <Icon name="power" :size="15" /> {{ powering ? "Pressed" : "Press power" }}
+              <Icon name="power" :size="15" /> {{ powering ? t("Pressed") : t("Press power") }}
             </button>
           </div>
 
@@ -3078,16 +3186,22 @@ const LED_BITS: Array<[number, string]> = [
           >
             {{
               engageMode === "hover"
-                ? "Pointer follows the mouse. Click to send keystrokes."
-                : "Click to control the target"
+                ? t("Pointer follows the mouse. Click to send keystrokes.")
+                : t("Click to control the target")
             }}
-            <span class="screen-engage-hint"><Keys combo="Esc" /> gives control back. <Keys combo="?" /> lists the shortcuts.</span>
+            <span class="screen-engage-hint"
+              ><template v-for="(part, i) in keySlots(t('{esc} gives control back. {help} lists the shortcuts.'))" :key="i"
+                ><Keys v-if="i % 2" :combo="part === 'help' ? '?' : 'Esc'" /><template v-else>{{ part }}</template></template
+              ></span
+            >
           </button>
 
           <!-- While the keys are ours, say so and say the way out: a captured
                Alt+Tab that does nothing locally reads as a hung browser. -->
           <div v-if="keyLockOn" class="screen-keylock">
-            Shortcuts and <Keys combo="Esc" /> go to the target &mdash; hold <Keys combo="Esc" /> to give them back
+            <template v-for="(part, i) in keySlots(t('Shortcuts and {esc} go to the target \u2014 hold {esc} to give them back'))" :key="i"
+              ><Keys v-if="i % 2" combo="Esc" /><template v-else>{{ part }}</template></template
+            >
           </div>
 
           <!-- Text mode sets `paused` to stop the video, but the keyboard still
@@ -3096,15 +3210,15 @@ const LED_BITS: Array<[number, string]> = [
                touch pad above do, or a text-mode operator whose keys are being
                dropped is told nothing and has no way to take control back. -->
           <div v-if="heldByOther && !viewOnly && (!paused || textView)" class="screen-notice">
-            <p>Another session is in control of this target.</p>
-            <button type="button" class="btn" @click="takeControl">Take control</button>
+            <p>{{ t("Another session is in control of this target.") }}</p>
+            <button type="button" class="btn" @click="takeControl">{{ t("Take control") }}</button>
           </div>
 
           <button
             v-if="touchMode && zoom.z > 1"
             type="button"
             class="screen-zoom-chip"
-            title="Show the whole screen"
+            :title="t('Show the whole screen')"
             @click="zoom = NO_ZOOM"
           >
             {{ zoom.z.toFixed(1) }}&times;
@@ -3121,9 +3235,14 @@ const LED_BITS: Array<[number, string]> = [
           <WelcomeProfiles
             v-if="showWelcome && !areaDrawing"
             :values="values"
-            :step="tourDueNow ? 'Step 1 of 2' : ''"
+            :step="tourDueNow ? t('Step 1 of 2') : ''"
             @values="values = $event"
             @done="welcomeClosed = true"
+          />
+          <TranslationEditor
+            v-if="editorFromLink"
+            :fresh="editorFromLink === 'new'"
+            @close="editorFromLink = null"
           />
           <FeatureTour
             v-if="showTour && !areaDrawing"
@@ -3154,25 +3273,25 @@ const LED_BITS: Array<[number, string]> = [
         </div>
 
 
-        <aside v-if="panel" class="panel" :aria-label="PANEL_TITLES[panel]">
+        <aside v-if="panel" class="panel" :aria-label="panelTitle(panel)">
           <header class="panel-head">
-            <h2>{{ PANEL_TITLES[panel] }}</h2>
+            <h2>{{ panelTitle(panel) }}</h2>
             <button
               type="button"
               class="btn btn-sm btn-icon hide-narrow"
               :class="{ 'btn-on': panelPinned }"
               :title="
                 panelPinned
-                  ? 'Let the panel float over the picture again'
-                  : 'Keep the panel open beside the picture instead of over it'
+                  ? t('Let the panel float over the picture again')
+                  : t('Keep the panel open beside the picture instead of over it')
               "
-              :aria-label="panelPinned ? 'Unpin the panel' : 'Pin the panel'"
+              :aria-label="panelPinned ? t('Unpin the panel') : t('Pin the panel')"
               :aria-pressed="panelPinned"
               @click="panelPinned = !panelPinned"
             >
               <Icon name="pin" :size="15" />
             </button>
-            <button type="button" class="btn btn-sm" @click="panel = null">Close</button>
+            <button type="button" class="btn btn-sm" @click="panel = null">{{ t("Close") }}</button>
           </header>
           <div class="panel-body">
             <InputPanel
@@ -3257,7 +3376,7 @@ const LED_BITS: Array<[number, string]> = [
 
     <footer class="actionbar">
       <div class="actionbar-left" :class="{ 'actionbar-left-grow': keysShown }">
-        <span class="conns" aria-label="Connections">
+        <span class="conns" :aria-label="t('Connections')">
           <button
             v-for="c in conns"
             :key="c.id"
@@ -3287,7 +3406,7 @@ const LED_BITS: Array<[number, string]> = [
 
               <template v-if="isNetPill">
                 <template v-if="netAddrs.length">
-                  <span class="conn-switch-title">Reachable at</span>
+                  <span class="conn-switch-title">{{ t("Reachable at") }}</span>
                   <div v-for="a in netAddrs" :key="a.label + a.value" class="conn-addr">
                     <span class="conn-addr-label">
                       {{ a.label }}<template v-if="a.note"> &middot; {{ a.note }}</template>
@@ -3297,47 +3416,49 @@ const LED_BITS: Array<[number, string]> = [
                     <button
                       type="button"
                       class="btn btn-sm conn-addr-copy"
-                      :title="`Copy ${a.value}`"
-                      :aria-label="`Copy ${a.value}`"
+                      :title="t('Copy {value}', { value: a.value })"
+                      :aria-label="t('Copy {value}', { value: a.value })"
                       @click="copyAddr(a.value)"
                     >
-                      Copy
+                      {{ t("Copy") }}
                     </button>
                   </div>
                 </template>
 
                 <template v-if="caps.wifi?.available">
-                  <span class="conn-switch-title">Connection</span>
+                  <span class="conn-switch-title">{{ t("Connection") }}</span>
                   <button
                     v-for="m in netModes"
                     :key="m"
                     type="button"
                     class="conn-switch-btn"
                     :class="{ 'conn-switch-active': (system?.net?.mode ?? 'ethernet') === m }"
-                    :title="m === 'auto' ? 'Ethernet, and WiFi when the cable is out' : undefined"
+                    :title="m === 'auto' ? t('Ethernet, and WiFi when the cable is out') : undefined"
                     @click="switchNet(m)"
                   >
                     <Icon :name="m === 'auto' ? 'ethernet' : m" :size="15" />
                     {{
-                      m === "ethernet" ? "Ethernet" : m === "wifi" ? "WiFi" : m === "ap" ? "Hotspot" : "Auto"
+                      m === "ethernet" ? "Ethernet" : m === "wifi" ? "WiFi" : m === "ap" ? t("Hotspot") : t("Auto")
                     }}
                   </button>
                 </template>
 
                 <template v-if="system?.coproc?.running">
-                  <span class="conn-switch-title">Wi-Fi chip</span>
+                  <span class="conn-switch-title">{{ t("Wi-Fi chip") }}</span>
                   <p class="conn-note">
-                    esp-hosted {{ system.coproc.fw || "(an early build that reports no version)" }}
+                    esp-hosted {{ system.coproc.fw || t("(an early build that reports no version)") }}
                   </p>
                   <template v-if="system.coproc.update">
                     <p class="conn-note">
-                      This firmware carries {{ system.coproc.bundled }}. A newer one
-                      moves data faster and matches this side. A test feature, at
-                      your own risk: if it goes wrong, the chip has to be flashed
-                      by hand.
+                      {{
+                        t(
+                          "This firmware carries {version}. A newer one moves data faster and matches this side. A test feature, at your own risk: if it goes wrong, the chip has to be flashed by hand.",
+                          { version: system.coproc.bundled },
+                        )
+                      }}
                     </p>
                     <button type="button" class="btn btn-sm conn-action" @click="installCoproc">
-                      Update the Wi-Fi chip
+                      {{ t("Update the Wi-Fi chip") }}
                     </button>
                   </template>
                 </template>
@@ -3347,16 +3468,16 @@ const LED_BITS: Array<[number, string]> = [
                 <span class="conn-switch-title">HDMI-CEC</span>
                 <template v-if="cecSource">
                   <p class="conn-note">
-                    <strong>{{ cecSource.name || "A device with no name" }}</strong>
+                    <strong>{{ cecSource.name || t("A device with no name") }}</strong>
                     <template v-if="cecSource.type"> &middot; {{ cecSource.type }}</template>
                   </p>
                   <p class="conn-note mono">
                     {{
                       [
                         cecSource.version && `CEC ${cecSource.version}`,
-                        cecSource.physAddr && `address ${cecSource.physAddr}`,
-                        cecSource.vendor && `vendor ${cecSource.vendor}`,
-                        `power ${cecSource.power}`,
+                        cecSource.physAddr && t("address {addr}", { addr: cecSource.physAddr }),
+                        cecSource.vendor && t("vendor {vendor}", { vendor: cecSource.vendor }),
+                        t("power {state}", { state: cecSource.power }),
                       ]
                         .filter(Boolean)
                         .join(" · ")
@@ -3364,22 +3485,26 @@ const LED_BITS: Array<[number, string]> = [
                   </p>
                 </template>
                 <p v-else class="conn-note">
-                  The source does not answer over HDMI-CEC. TV boxes, consoles and a Raspberry Pi
-                  do; most PCs do not.
+                  {{
+                    t("The source does not answer over HDMI-CEC. TV boxes, consoles and a Raspberry Pi do; most PCs do not.")
+                  }}
                 </p>
               </template>
 
               <template v-if="isUsbPill">
                 <p v-if="input.target.value.known && !input.target.value.busAlive" class="conn-note">
-                  There is no live USB bus on the target's side: its port has no
-                  power, or the cable is out. Re-plugging from here cannot reach
-                  that - check the cable, and note that on some boards this same
-                  port powers the device.
+                  {{
+                    t(
+                      "There is no live USB bus on the target's side: its port has no power, or the cable is out. Re-plugging from here cannot reach that - check the cable, and note that on some boards this same port powers the device.",
+                    )
+                  }}
                 </p>
                 <p v-else class="conn-note">
-                  If the target has stopped taking the keyboard - after an update
-                  or a sleep, usually - re-plugging presents it as a new device.
-                  Nothing restarts.
+                  {{
+                    t(
+                      "If the target has stopped taking the keyboard - after an update or a sleep, usually - re-plugging presents it as a new device. Nothing restarts.",
+                    )
+                  }}
                 </p>
                 <button
                   type="button"
@@ -3387,7 +3512,7 @@ const LED_BITS: Array<[number, string]> = [
                   :disabled="replugging"
                   @click="replug"
                 >
-                  {{ replugging ? "Re-plugging..." : "Re-plug USB" }}
+                  {{ replugging ? t("Re-plugging...") : t("Re-plug USB") }}
                 </button>
               </template>
             </div>
@@ -3408,13 +3533,13 @@ const LED_BITS: Array<[number, string]> = [
           v-if="!signedInToWatch"
           class="ctrl-status"
           :class="{ 'ctrl-status-on': engaged }"
-          :title="engaged ? 'Controlling - Esc releases' : 'Not controlling'"
-          :aria-label="engaged ? 'Controlling' : 'Not controlling'"
+          :title="engaged ? t('Controlling - Esc releases') : t('Not controlling')"
+          :aria-label="engaged ? t('Controlling') : t('Not controlling')"
         >
           <Icon name="pointer" :size="15" />
         </span>
         <!-- The last keys that went to the target (Settings -> Console). -->
-        <span v-if="keysShown" class="key-echo mono hide-narrow" aria-live="off" title="Keys sent to the target">
+        <span v-if="keysShown" class="key-echo mono hide-narrow" aria-live="off" :title="t('Keys sent to the target')">
           <span v-for="k in keyEcho" :key="k.id" class="key-echo-key">{{ k.label }}</span>
         </span>
       </div>
@@ -3426,10 +3551,10 @@ const LED_BITS: Array<[number, string]> = [
           class="btn btn-sm quick-btn wide-only"
           :class="{ 'btn-on': quickBusy === q.t + q.v }"
           :disabled="!!quickBusy"
-          :title="q.t === 'runbook' ? `Run the runbook ${q.v}` : q.t === 'macro' ? `Run the macro ${q.v}` : `Send ${quickLabel(q, quickOs)}`"
+          :title="q.t === 'runbook' ? t('Run the runbook {name}', { name: q.v }) : q.t === 'macro' ? t('Run the macro {name}', { name: q.v }) : t('Send {name}', { name: quickLabel(q, targetOs) })"
           @click="pressQuick(q)"
         >
-          {{ quickLabel(q, quickOs) }}
+          {{ quickLabel(q, targetOs) }}
         </button>
         <span v-if="quickItems.length" class="quick-sep wide-only" />
         <button
@@ -3438,8 +3563,8 @@ const LED_BITS: Array<[number, string]> = [
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': oskOpen }"
           data-ui="keyboard"
-          aria-label="On-screen keyboard"
-          :title="oskOpen ? 'Hide the on-screen keyboard' : 'Show a keyboard on the page - for keys this computer cannot send'"
+          :aria-label="t('On-screen keyboard')"
+          :title="oskOpen ? t('Hide the on-screen keyboard') : t('Show a keyboard on the page - for keys this computer cannot send')"
           @click="oskOpen = !oskOpen"
         >
           <Icon name="keyboard" :size="15" />
@@ -3451,12 +3576,12 @@ const LED_BITS: Array<[number, string]> = [
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': padMouseOn }"
           data-ui="padmouse"
-          aria-label="Controller as mouse"
+          :aria-label="t('Controller as mouse')"
           :aria-pressed="padMouseOn"
           :title="
             padMouseOn
-              ? 'The controller moves the mouse: left stick moves, the bottom button clicks, the right stick scrolls'
-              : 'Move the mouse with the controller'
+              ? t('The controller moves the mouse: left stick moves, the bottom button clicks, the right stick scrolls')
+              : t('Move the mouse with the controller')
           "
           @click="padMouseOn = !padMouseOn"
         >
@@ -3468,9 +3593,9 @@ const LED_BITS: Array<[number, string]> = [
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': touchMode }"
           data-ui="touch"
-          aria-label="Touch mode"
+          :aria-label="t('Touch mode')"
           :aria-pressed="touchMode"
-          :title="touchMode ? 'Touch mode: screen is a trackpad' : 'Use the screen as a trackpad'"
+          :title="touchMode ? t('Touch mode: screen is a trackpad') : t('Use the screen as a trackpad')"
           @click="touchMode = !touchMode"
         >
           <Icon name="touch" :size="15" />
@@ -3479,13 +3604,13 @@ const LED_BITS: Array<[number, string]> = [
           type="button"
           class="btn btn-sm btn-icon"
           data-ui="pause"
-          :aria-label="paused ? 'Resume the video stream' : 'Pause the video stream'"
+          :aria-label="paused ? t('Resume the video stream') : t('Pause the video stream')"
           :title="
             updateHoldsStream
-              ? 'Paused until the firmware update finishes'
+              ? t('Paused until the firmware update finishes')
               : paused
-                ? 'Resume the video stream'
-                : 'Disconnect the stream to save bandwidth'
+                ? t('Resume the video stream')
+                : t('Disconnect the stream to save bandwidth')
           "
           :disabled="updateHoldsStream"
           @click="paused = !paused"
@@ -3497,9 +3622,9 @@ const LED_BITS: Array<[number, string]> = [
         <button
           type="button"
           :class="['btn', 'btn-sm', 'btn-icon', 'ab-more-btn', { 'btn-on': moreOpen, 'rec-on': record?.on }]"
-          aria-label="More controls"
+          :aria-label="t('More controls')"
           :aria-expanded="moreOpen"
-          title="More"
+          :title="t('More')"
           @click="moreOpen = !moreOpen"
         >
           <Icon name="more" :size="15" />
@@ -3509,8 +3634,8 @@ const LED_BITS: Array<[number, string]> = [
         <button
           type="button"
           class="btn btn-sm btn-icon narrow-only"
-          data-label="Commands"
-          aria-label="Commands"
+          :data-label="t('Commands')"
+          :aria-label="t('Commands')"
           @click="paletteOpen = true"
         >
           <Icon name="search" :size="15" />
@@ -3522,8 +3647,8 @@ const LED_BITS: Array<[number, string]> = [
           class="btn btn-sm btn-icon narrow-only"
           :class="{ 'btn-on': serialOpen }"
           data-ui="serial"
-          data-label="Serial console"
-          aria-label="Serial console"
+          :data-label="t('Serial console')"
+          :aria-label="t('Serial console')"
           @click="serialOpen = !serialOpen"
         >
           <Icon name="terminal" :size="15" />
@@ -3534,8 +3659,8 @@ const LED_BITS: Array<[number, string]> = [
           class="btn btn-sm btn-icon narrow-only"
           :class="{ 'btn-on': toolsOpen }"
           data-ui="tools"
-          data-label="Tools"
-          aria-label="ESP-KVM Tools"
+          :data-label="t('Tools')"
+          :aria-label="t('ESP-KVM Tools')"
           @click="toolsOpen = !toolsOpen"
         >
           <Icon name="tools" :size="15" />
@@ -3546,8 +3671,8 @@ const LED_BITS: Array<[number, string]> = [
           class="btn btn-sm btn-icon narrow-only"
           :class="{ 'btn-on': netlogOpen }"
           data-ui="netlog"
-          data-label="Target log"
-          aria-label="Target log (netconsole)"
+          :data-label="t('Target log')"
+          :aria-label="t('Target log (netconsole)')"
           @click="netlogOpen = !netlogOpen"
         >
           <Icon name="logs" :size="15" />
@@ -3558,8 +3683,8 @@ const LED_BITS: Array<[number, string]> = [
           class="btn btn-sm btn-icon narrow-only"
           :class="{ 'btn-on': remoteOpen }"
           data-ui="cec"
-          data-label="TV remote"
-          aria-label="Remote control (HDMI-CEC)"
+          :data-label="t('TV remote')"
+          :aria-label="t('Remote control (HDMI-CEC)')"
           @click="remoteOpen = !remoteOpen"
         >
           <Icon name="remote" :size="15" />
@@ -3570,8 +3695,8 @@ const LED_BITS: Array<[number, string]> = [
           class="btn btn-sm btn-icon narrow-only"
           :class="{ 'btn-on': gamepadOpen }"
           data-ui="gamepad"
-          data-label="Gamepad"
-          aria-label="Gamepad"
+          :data-label="t('Gamepad')"
+          :aria-label="t('Gamepad')"
           @click="gamepadOpen = !gamepadOpen"
         >
           <Icon name="gamepad" :size="15" />
@@ -3581,8 +3706,8 @@ const LED_BITS: Array<[number, string]> = [
           :key="'qm' + q.t + q.v"
           type="button"
           class="btn btn-sm menu-only"
-          :data-label="quickLabel(q, quickOs)"
-          :aria-label="quickLabel(q, quickOs)"
+          :data-label="quickLabel(q, targetOs)"
+          :aria-label="quickLabel(q, targetOs)"
           :disabled="!!quickBusy"
           @click="pressQuick(q)"
         >
@@ -3595,28 +3720,28 @@ const LED_BITS: Array<[number, string]> = [
           v-if="captureAny"
           class="wide-only"
           icon="camera"
-          label="Capture"
+          :label="t('Capture')"
           :badge="record?.on ? clock(record.seconds) : clipState?.on ? clipState.label : undefined"
           :alert="record?.on || clipState?.on"
-          title="Screenshot, clip, recording"
+          :title="t('Screenshot, clip, recording')"
         >
           <button
             v-if="captureItems.shot && status"
             type="button"
             class="am-item"
             role="menuitem"
-            :title="status.screenshotBlocked ?? 'Save a screenshot to the microSD card (SCREENSHOTS)'"
+            :title="status.screenshotBlocked ? t(status.screenshotBlocked) : t('Save a screenshot to the microSD card (SCREENSHOTS)')"
             :disabled="!!status.screenshotBlocked || shotBusy"
             @click="screenshot"
           >
-            <Icon name="camera" :size="15" /> Screenshot
+            <Icon name="camera" :size="15" /> {{ t("Screenshot") }}
           </button>
           <button
             v-if="captureItems.clip && clipState"
             type="button"
             :class="['am-item', { 'rec-on': clipState.on }]"
             role="menuitem"
-            :title="record?.on && !record.event ? 'The dashcam waits while a recording runs' : clipState.title"
+            :title="record?.on && !record.event ? t('The dashcam waits while a recording runs') : clipState.title"
             :disabled="clipBusy || (!!record?.on && !record.event)"
             @click="clip"
           >
@@ -3627,22 +3752,30 @@ const LED_BITS: Array<[number, string]> = [
             type="button"
             :class="['am-item', { 'rec-on': record.on }]"
             role="menuitem"
-            :title="record.on ? `${record.timelapse ? 'Timelapse' : 'Recording'} to ${record.file}` : (record.blocked ?? 'Record the screen to the microSD card (VIDEO)')"
+            :title="
+              record.on
+                ? record.timelapse
+                  ? t('Timelapse to {file}', { file: record.file })
+                  : t('Recording to {file}', { file: record.file })
+                : record.blocked
+                  ? t(record.blocked)
+                  : t('Record the screen to the microSD card (VIDEO)')
+            "
             :disabled="(!record.on && !!record.blocked) || recordBusy"
             @click="toggleRecording"
           >
             <Icon :name="record.on ? 'stop' : 'record'" :size="15" />
-            {{ record.on ? `Stop recording (${clock(record.seconds)})` : "Record" }}
+            {{ record.on ? t("Stop recording ({time})", { time: clock(record.seconds) }) : t("Record") }}
           </button>
         </ActionMenu>
         <ActionMenu
           v-if="textAny"
           class="wide-only"
           icon="text-select"
-          label="Screen text"
+          :label="t('Screen text')"
           :on="selectingText"
           :disabled="!textModeLikely"
-          :title="textModeLikely ? 'Select or copy the text on the screen' : 'The target is not showing a text screen'"
+          :title="textModeLikely ? t('Select or copy the text on the screen') : t('The target is not showing a text screen')"
         >
           <button
             v-if="uiShown('select')"
@@ -3651,10 +3784,10 @@ const LED_BITS: Array<[number, string]> = [
             role="menuitem"
             @click="toggleSelectText()"
           >
-            <Icon name="text-select" :size="15" /> {{ selectingText ? "Stop selecting" : "Select text" }}
+            <Icon name="text-select" :size="15" /> {{ selectingText ? t("Stop selecting") : t("Select text") }}
           </button>
           <button v-if="uiShown('copy')" type="button" class="am-item" role="menuitem" @click="copyScreenText()">
-            <Icon name="copy" :size="15" /> Copy the screen as text
+            <Icon name="copy" :size="15" /> {{ t("Copy the screen as text") }}
           </button>
         </ActionMenu>
         <!-- Absent on firmware with no recorder. -->
@@ -3663,9 +3796,9 @@ const LED_BITS: Array<[number, string]> = [
           type="button"
           class="btn btn-sm btn-icon menu-only"
           data-ui="screenshot"
-          data-label="Screenshot"
-          aria-label="Save a screenshot to the microSD card"
-          :title="status.screenshotBlocked ?? 'Save a screenshot to the microSD card (SCREENSHOTS)'"
+          :data-label="t('Screenshot')"
+          :aria-label="t('Save a screenshot to the microSD card')"
+          :title="status.screenshotBlocked ? t(status.screenshotBlocked) : t('Save a screenshot to the microSD card (SCREENSHOTS)')"
           :disabled="!!status.screenshotBlocked || shotBusy"
           @click="screenshot"
         >
@@ -3678,7 +3811,7 @@ const LED_BITS: Array<[number, string]> = [
           :class="['btn', 'btn-sm', 'rec-btn', 'menu-only', { 'rec-on': clipState.on }]"
           data-ui="clip"
           :aria-label="clipState.title"
-          :title="record.on && !record.event ? 'The dashcam waits while a recording runs' : clipState.title"
+          :title="record.on && !record.event ? t('The dashcam waits while a recording runs') : clipState.title"
           :disabled="clipBusy || (record.on && !record.event)"
           @click="clip"
         >
@@ -3690,12 +3823,16 @@ const LED_BITS: Array<[number, string]> = [
           type="button"
           :class="['btn', 'btn-sm', 'rec-btn', 'menu-only', { 'rec-on': record.on }]"
           data-ui="record"
-          :data-label="record.on ? 'Stop recording' : 'Record'"
-          :aria-label="record.on ? 'Stop recording' : 'Record to the microSD card'"
+          :data-label="record.on ? t('Stop recording') : t('Record')"
+          :aria-label="record.on ? t('Stop recording') : t('Record to the microSD card')"
           :title="
             record.on
-              ? `${record.timelapse ? 'Timelapse' : 'Recording'} to ${record.file} - click to stop`
-              : (record.blocked ?? 'Record the screen to the microSD card (VIDEO)')
+              ? record.timelapse
+                ? t('Timelapse to {file} - click to stop', { file: record.file })
+                : t('Recording to {file} - click to stop', { file: record.file })
+              : record.blocked
+                ? t(record.blocked)
+                : t('Record the screen to the microSD card (VIDEO)')
           "
           :disabled="(!record.on && !!record.blocked) || recordBusy"
           @click="toggleRecording"
@@ -3710,12 +3847,12 @@ const LED_BITS: Array<[number, string]> = [
           :disabled="!textModeLikely"
           :title="
             textModeLikely
-              ? 'Select text on the screen with the mouse, as on a page'
-              : 'The target is not showing a text screen'
+              ? t('Select text on the screen with the mouse, as on a page')
+              : t('The target is not showing a text screen')
           "
           data-ui="select"
-          data-label="Select text"
-          aria-label="Select text on the screen"
+          :data-label="t('Select text')"
+          :aria-label="t('Select text on the screen')"
           :aria-pressed="selectingText"
           @click="toggleSelectText()"
         >
@@ -3727,12 +3864,12 @@ const LED_BITS: Array<[number, string]> = [
           :disabled="!textModeLikely"
           :title="
             textModeLikely
-              ? 'Copy everything on the screen as text'
-              : 'The target is not showing a text screen'
+              ? t('Copy everything on the screen as text')
+              : t('The target is not showing a text screen')
           "
           data-ui="copy"
-          data-label="Copy as text"
-          aria-label="Copy the screen as text"
+          :data-label="t('Copy as text')"
+          :aria-label="t('Copy the screen as text')"
           @click="copyScreenText()"
         >
           <Icon name="copy" :size="15" />
@@ -3741,14 +3878,14 @@ const LED_BITS: Array<[number, string]> = [
           type="button"
           class="btn btn-sm btn-icon"
           data-ui="scale"
-          :data-label="`Scale: ${fit === 'fit' ? 'fit' : fit === 'stretch' ? 'stretch' : '1:1'}`"
-          :aria-label="`Scale: ${fit === 'fit' ? 'fit' : fit === 'stretch' ? 'stretch' : '1:1'}`"
+          :data-label="fit === 'fit' ? t('Scale: fit') : fit === 'stretch' ? t('Scale: stretch') : t('Scale: 1:1')"
+          :aria-label="fit === 'fit' ? t('Scale: fit') : fit === 'stretch' ? t('Scale: stretch') : t('Scale: 1:1')"
           :title="
             fit === 'fit'
-              ? 'Fit: shrink a picture bigger than the window, leave a smaller one alone'
+              ? t('Fit: shrink a picture bigger than the window, leave a smaller one alone')
               : fit === 'stretch'
-                ? 'Stretch: fill the window, whatever the picture measures'
-                : '1:1: one screen pixel per browser pixel'
+                ? t('Stretch: fill the window, whatever the picture measures')
+                : t('1:1: one screen pixel per browser pixel')
           "
           @click="fit = fit === 'fit' ? 'stretch' : fit === 'stretch' ? 'actual' : 'fit'"
         >
@@ -3765,10 +3902,10 @@ const LED_BITS: Array<[number, string]> = [
           :class="{ 'btn-on': keyLockWanted }"
           :title="
             keyLockWanted
-              ? 'Shortcuts go to the target in full screen: Alt+Tab, Win, Ctrl+W and Esc. Hold Esc to leave full screen.'
-              : 'Shortcuts stay with this computer'
+              ? t('Shortcuts go to the target in full screen: Alt+Tab, Win, Ctrl+W and Esc. Hold Esc to leave full screen.')
+              : t('Shortcuts stay with this computer')
           "
-          aria-label="Send shortcuts to the target"
+          :aria-label="t('Send shortcuts to the target')"
           :aria-pressed="keyLockWanted"
           @click="keyLockWanted = !keyLockWanted"
         >
@@ -3781,14 +3918,14 @@ const LED_BITS: Array<[number, string]> = [
           class="btn btn-sm btn-icon"
           :class="{ 'btn-on': soundOn, asking: soundOn && soundHeld }"
           data-ui="sound"
-          :aria-label="soundOn ? 'Sound on' : 'Sound off'"
+          :aria-label="soundOn ? t('Sound on') : t('Sound off')"
           :aria-pressed="soundOn"
           :title="
             soundOn && soundHeld
-              ? 'The browser plays the sound after a click on the page'
+              ? t('The browser plays the sound after a click on the page')
               : soundOn
-                ? 'The target\'s sound is on'
-                : 'Hear the target\'s sound'
+                ? t('The target\'s sound is on')
+                : t('Hear the target\'s sound')
           "
           @pointerdown="soundPress"
           @keydown.enter.space="soundPress"
@@ -3802,8 +3939,8 @@ const LED_BITS: Array<[number, string]> = [
           class="btn btn-sm btn-icon"
           :class="{ active: pipWindow }"
           data-ui="pip"
-          aria-label="Picture in a small window"
-          title="Picture in a small window (P)"
+          :aria-label="t('Picture in a small window')"
+          :title="t('Picture in a small window (P)')"
           @click="openPip()"
         >
           <Icon name="pip" :size="15" />
@@ -3812,7 +3949,7 @@ const LED_BITS: Array<[number, string]> = [
           type="button"
           class="btn btn-sm btn-icon"
           data-ui="fullscreen"
-          aria-label="Fullscreen"
+          :aria-label="t('Fullscreen')"
           @click="toggleFullscreen()"
         >
           <Icon name="fullscreen" :size="15" />
@@ -3837,25 +3974,25 @@ const LED_BITS: Array<[number, string]> = [
     class="settings-veil"
     role="dialog"
     aria-modal="true"
-    aria-label="Settings"
+    :aria-label="t('Settings')"
     @click.self="settingsOpen = false"
   >
     <div class="settings-window">
       <header class="settings-window-head">
-        <h2>Settings</h2>
+        <h2>{{ t("Settings") }}</h2>
         <button
           v-if="showTour && !tourFoldedBy"
           type="button"
           class="btn btn-sm settings-back"
           @click="settingsOpen = false"
         >
-          &larr; Back to the overview
+          &larr; {{ t("Back to the overview") }}
         </button>
         <button
           type="button"
           class="icon-btn"
-          aria-label="Close settings"
-          title="Close"
+          :aria-label="t('Close settings')"
+          :title="t('Close')"
           @click="settingsOpen = false"
         >
           <Icon name="close" :size="15" />
