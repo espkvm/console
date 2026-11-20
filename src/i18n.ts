@@ -16,11 +16,11 @@
  * browser's storage, so it is each viewer's own choice and the device stores
  * nothing. A device with no internet can be given the file by hand.
  *
- *   { "@language": "ru", "@name": "Русский",
- *     "@offer": "Консоль есть на русском: Settings, UI, Language.",
+ *   { "@language": "lt", "@name": "Lietuvių",
+ *     "@offer": "Konsolė yra ir lietuvių kalba: Nustatymai, Sąsaja, Kalba.",
  *     "@translators": ["Name", "Another name"],
- *     "Paste from clipboard": "Вставить из буфера обмена",
- *     "{n} viewer": { "one": "{n} зритель", "few": "{n} зрителя", "many": "{n} зрителей" } }
+ *     "Paste from clipboard": "Įklijuoti iš iškarpinės",
+ *     "{n} viewer": { "one": "{n} žiūrovas", "few": "{n} žiūrovai", "many": "{n} žiūrovo", "other": "{n} žiūrovų" } }
  *
  * Placeholders are {name}. A plural is an object keyed by the language's
  * plural categories (Intl.PluralRules), under the English singular.
@@ -38,7 +38,7 @@ const keyFor = (code: string) => `espkvm.lang.${code}`;
 
 /** The active language code, "en" when none is loaded. */
 export const locale = ref("en");
-/** The active language's name in itself, from its file ("Русский"). */
+/** The active language's name in itself, from its file ("Lietuvių"). */
 export const localeName = ref("English");
 /** Who translated the active language, from its file's "@translators". */
 export const localeTranslators = ref<string[]>([]);
