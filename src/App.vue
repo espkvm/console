@@ -2811,7 +2811,7 @@ const LED_BITS: Array<[number, string]> = [
       <span>
         {{
           t(
-            "Get told when a new version is out? The browser checks whether a newer ESP-KVM is published and offers it, and counts this device for the project: a random id, the board and the version, once a day. The device itself never reaches out.",
+            "Get told when a new version is out? The browser checks whether a newer ESP-KVM is published and offers it, and counts this device for the project: a random id, the board and the version, once a day and again after an update. The device itself never reaches out.",
           )
         }}
       </span>

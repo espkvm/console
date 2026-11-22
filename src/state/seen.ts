@@ -3,7 +3,8 @@
  * check is on and asks the project's own address, the browser also tells
  * check.espkvm.io this device's random id (installId, made on the device, not
  * taken from the hardware), its board, its version and the chip revision - at
- * most once a day.
+ * most once a day, and once more right after the device moves to another
+ * version, so an update shows the same day.
  * The device itself still never reaches out. A failed report changes nothing.
  */
 
@@ -32,14 +33,21 @@ export function seenUrl(
   return `${SEEN_URL}?${q}`;
 }
 
-/** Send the report unless this device was reported today from this browser. */
+/** What the report for @p url is remembered by: the day and the version. */
+export function seenMark(url: string, today: Date): string {
+  const ver = new URL(url).searchParams.get("ver") ?? "";
+  return `${today.toISOString().slice(0, 10)} ${ver}`;
+}
+
+/** Send the report unless this device was reported today, on this version,
+ *  from this browser. */
 export function reportSeen(url: string | null, id: string | undefined, today = new Date()) {
   if (!url || !id) return;
-  const day = today.toISOString().slice(0, 10);
+  const mark = seenMark(url, today);
   const key = `${SEEN_KEY}.${id}`;
   try {
-    if (localStorage.getItem(key) === day) return;
-    localStorage.setItem(key, day);
+    if (localStorage.getItem(key) === mark) return;
+    localStorage.setItem(key, mark);
   } catch {
     /* no storage: the server counts a device once a month anyway */
   }

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { seenUrl, SEEN_URL } from "../src/state/seen.ts";
+import { seenMark, seenUrl, SEEN_URL } from "../src/state/seen.ts";
 
 const ID = "0123456789abcdef0123456789abcdef";
 
@@ -22,4 +22,13 @@ test("the chip revision goes as major.minor", () => {
   assert.equal(u, `${SEEN_URL}?id=${ID}&board=funcev&ver=v.0.76.0&rev=3.2`);
   const old = seenUrl("https://fw.espkvm.io/firmware/p4-eth/manifest.json", ID, "p4-eth", "v.0.76.0", 1);
   assert.equal(old, `${SEEN_URL}?id=${ID}&board=p4-eth&ver=v.0.76.0&rev=0.1`);
+});
+
+test("a new version is reported the same day, the same one is not", () => {
+  const day = new Date("2026-11-22T10:00:00Z");
+  const before = seenMark(`${SEEN_URL}?id=${ID}&board=funcev&ver=v.0.89.0`, day);
+  const after = seenMark(`${SEEN_URL}?id=${ID}&board=funcev&ver=v.0.90.0`, day);
+  assert.notEqual(before, after);
+  assert.equal(after, seenMark(`${SEEN_URL}?id=${ID}&board=funcev&ver=v.0.90.0`, new Date("2026-11-22T23:00:00Z")));
+  assert.notEqual(after, seenMark(`${SEEN_URL}?id=${ID}&board=funcev&ver=v.0.90.0`, new Date("2026-11-23T01:00:00Z")));
 });
