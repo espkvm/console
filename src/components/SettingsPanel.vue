@@ -756,15 +756,15 @@ async function toggle(key: string, e: Event) {
   box.checked = Boolean(props.values[key]);
 }
 
-async function writeSecret(key: string, el: HTMLInputElement) {
+async function writeSecret(s: Setting, el: HTMLInputElement) {
   const value = el.value;
   if (!value) return;
-  if (key === "vnc_pass" && !/^[\x20-\x7e]{1,8}$/.test(value)) {
-    toast.error("VNC password must be 1 to 8 printable ASCII characters");
+  if (s.ascii && !/^[\x20-\x7e]+$/.test(value)) {
+    toast.error(t("Latin letters, digits and symbols only."));
     return;
   }
   el.value = "";
-  await write(key, value);
+  await write(s.key, value);
 }
 
 /*
@@ -1493,7 +1493,7 @@ async function doRevertCert() {
                   :maxlength="s.maxLength"
                   :placeholder="t('Blank keeps the saved one')"
                   :disabled="busy || !!sectionBlocked || !!blockedFor(s)"
-                  @change="writeSecret(s.key, $event.target as HTMLInputElement)"
+                  @change="writeSecret(s, $event.target as HTMLInputElement)"
                 />
 
                 <!-- Which of the console's controls are shown: a tick per entry in

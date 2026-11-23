@@ -45,6 +45,8 @@ export interface Setting {
   reboot?: boolean;
   /** Write-only secret (e.g. a VPN key): never read back, submitted only when set. */
   secret?: boolean;
+  /** A string of printable ASCII only (0x20-0x7e), e.g. the VNC password. */
+  ascii?: boolean;
   /** An INT that is a GPIO number: render a pin picker (free GPIOs + None). */
   pin?: boolean;
   /** A device profile may hold its own value (see state/profiles.ts). */

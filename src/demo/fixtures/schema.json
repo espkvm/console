@@ -105,11 +105,12 @@
       "section": "video",
       "group": "VNC server",
       "title": "VNC password",
-      "help": "Up to 8 characters, a limit of VNC itself, so use all 8. It is never shown again. Changing it disconnects the client.",
+      "help": "Up to 8 characters, a limit of VNC itself, so use all 8. Latin letters, digits and symbols only. It is never shown again. Changing it disconnects the client.",
       "type": "string",
       "maxLength": 8,
       "default": "",
-      "secret": true
+      "secret": true,
+      "ascii": true
     },
     {
       "key": "vnc_hotspot",
