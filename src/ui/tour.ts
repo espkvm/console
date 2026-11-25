@@ -193,6 +193,15 @@ export const TOUR_FEATURES: TourFeature[] = [
     state: (c) => (c.values.kvmsw_mode === undefined ? undefined : Number(c.values.kvmsw_mode) ? tm("On") : tm("Off")),
   },
   {
+    icon: "power",
+    title: tm("Redfish"),
+    line: tm("Server tools such as redfishtool and OpenStack Ironic can power the target on and off and boot it from an image at a URL. It has a password of its own."),
+    since: "0.92.0",
+    actions: [{ label: tm("Set up"), section: "security", group: "Redfish" }],
+    docs: DOCS + "API.md#redfish",
+    state: (c) => settingOn(c, "redfish_enable"),
+  },
+  {
     icon: "remote",
     title: tm("TV remote"),
     line: tm("HDMI-CEC: turn a TV or a media box on and off, use its remote."),
@@ -215,6 +224,14 @@ export const TOUR_FEATURES: TourFeature[] = [
       if (v === undefined) return undefined;
       return v && v !== "0" && v !== "off" ? tm("On") : tm("Off");
     },
+  },
+  {
+    icon: "screen",
+    title: tm("USB screen sharing"),
+    line: tm("The target sends its screen over USB instead of HDMI, from OS Services running on it."),
+    caps: ["usb_video"],
+    since: "0.92.0",
+    actions: [{ label: tm("Video"), section: "video" }],
   },
   {
     icon: "usb",

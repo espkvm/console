@@ -2269,5 +2269,18 @@
   "Redfish": "Redfish",
   "Redfish password": "Redfish slaptažodis",
   "Its own password, not the console's: it opens power and virtual media only. Use a long random one. It is never shown again.": "Atskiras slaptažodis, ne konsolės: jis atveria tik maitinimą ir virtualią laikmeną. Naudokite ilgą atsitiktinį. Jis daugiau nerodomas.",
-  "The server-management API of iDRAC and iLO, at /redfish/v1, for tools such as redfishtool and OpenStack Ironic. It can power the target on and off through the ATX wiring (without it, only wake it) and boot it from an image at a URL. Tools sign in with any user name and the Redfish password below.": "Serverių valdymo API, kaip iDRAC ir iLO, adresu /redfish/v1, skirtas tokiems įrankiams kaip redfishtool ir OpenStack Ironic. Per jį galima įjungti ir išjungti tikslinį kompiuterį per ATX laidus (be jų tik pažadinti) ir paleisti jį iš atvaizdo pagal URL. Įrankiai prisijungia su bet kokiu naudotojo vardu ir žemiau nurodytu Redfish slaptažodžiu."
+  "The server-management API of iDRAC and iLO, at /redfish/v1, for tools such as redfishtool and OpenStack Ironic. It can power the target on and off through the ATX wiring (without it, only wake it) and boot it from an image at a URL. Tools sign in with any user name and the Redfish password below.": "Serverių valdymo API, kaip iDRAC ir iLO, adresu /redfish/v1, skirtas tokiems įrankiams kaip redfishtool ir OpenStack Ironic. Per jį galima įjungti ir išjungti tikslinį kompiuterį per ATX laidus (be jų tik pažadinti) ir paleisti jį iš atvaizdo pagal URL. Įrankiai prisijungia su bet kokiu naudotojo vardu ir žemiau nurodytu Redfish slaptažodžiu.",
+  "Screenshots are unavailable during USB screen sharing.": "Ekrano nuotraukos negalimos, kol ekranas bendrinamas per USB.",
+  "Changing this setting briefly reconnects the target's USB devices. Your computer may ask you to allow them again.": "Pakeitus šį nustatymą, tikslinio kompiuterio USB įrenginiai trumpam atsijungia ir vėl prisijungia. Kompiuteris gali vėl paprašyti juos leisti.",
+  "Screen analysis and MJPEG are unavailable during USB screen sharing.": "Ekrano analizė ir MJPEG negalimi, kol ekranas bendrinamas per USB.",
+  "USB screen sharing": "Ekrano bendrinimas per USB",
+  "Allow USB video": "Leisti vaizdą per USB",
+  "USB sharing turns off after restart. HDMI returns when sharing stops.": "Bendrinimas per USB išsijungia po paleidimo iš naujo. Sustabdžius bendrinimą, vėl rodomas HDMI vaizdas.",
+  "Start OS Services on the connected computer.": "Paleiskite OS Services prijungtame kompiuteryje.",
+  "Choose a display mode up to 1920 × 1200 on the computer.": "Kompiuteryje pasirinkite ekrano režimą iki 1920 × 1200.",
+  "Let the sender choose": "Tegul pasirenka siuntėjas",
+  "Pairing fingerprint": "Susiejimo kontrolinis kodas",
+  "Compare this fingerprint before approving the device on your computer.": "Prieš patvirtindami įrenginį kompiuteryje, palyginkite šį kontrolinį kodą.",
+  "Server tools such as redfishtool and OpenStack Ironic can power the target on and off and boot it from an image at a URL. It has a password of its own.": "Serverių įrankiai, tokie kaip redfishtool ir OpenStack Ironic, gali įjungti ir išjungti tikslinį kompiuterį ir paleisti jį iš atvaizdo pagal URL. Jis turi atskirą slaptažodį.",
+  "The target sends its screen over USB instead of HDMI, from OS Services running on it.": "Tikslinis kompiuteris siunčia savo ekraną per USB vietoj HDMI, iš jame veikiančių OS Services."
 }
