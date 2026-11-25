@@ -25,6 +25,8 @@ import {
 import { toast } from "../state/toasts";
 import { t } from "../i18n";
 
+defineProps<{ localFramesBlocked?: string | null }>();
+
 const regions = ref<Region[]>([]);
 const loaded = ref(false);
 const busy = ref(false);
@@ -140,10 +142,11 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
     {{ t("It looks for a change, for a picture that stops moving, for one it has seen before, or for a colour.") }}
     {{ t("An area can send a notification, keep a dashcam clip, show in Home Assistant, and a runbook can wait for it with {command}.", { command: "wait area Name" }) }}
   </FoldNote>
+  <p v-if="localFramesBlocked" class="setting-note setting-note-blocked">{{ localFramesBlocked }}</p>
 
   <ul v-if="regions.length" class="image-list">
     <li v-for="(r, i) in regions" :key="r.id ?? i" class="image-row rg-row">
-      <span
+      <span v-if="!localFramesBlocked"
         class="rg-dot"
         :class="{ 'rg-dot-on': r.live?.active }"
         :style="r.mode === 'colour' && r.live?.seen ? { background: r.live.rgb } : undefined"
@@ -151,7 +154,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
       />
       <span class="rg-name">
         <span class="image-name">{{ r.name }}</span>
-        <small class="muted">{{ describe(r) }} &middot; <span class="mono">{{ state(r) }}</span></small>
+        <small class="muted">{{ describe(r) }}<template v-if="!localFramesBlocked"> &middot; <span class="mono">{{ state(r) }}</span></template></small>
       </span>
       <span class="macro-actions">
         <button type="button" class="btn btn-sm btn-quiet" @click="edit(i)">{{ t("Edit") }}</button>
@@ -170,7 +173,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
       <span class="mono">
         {{ pct(draft.x) }}, {{ pct(draft.y) }} &middot; {{ pct(draft.w) }} &times; {{ pct(draft.h) }}
       </span>
-      <button type="button" class="btn btn-sm" @click="startDraw(draftIndex)">{{ t("Draw again") }}</button>
+      <button type="button" class="btn btn-sm" :disabled="!!localFramesBlocked" @click="startDraw(draftIndex)">{{ t("Draw again") }}</button>
     </div>
     <label>
       {{ t("Fires when it") }}
@@ -202,8 +205,8 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
       <button
         type="button"
         class="btn btn-sm"
-        :disabled="busy || !draft.id"
-        :title="draft.id ? t('Save what this area shows now') : t('Save the area first')"
+        :disabled="busy || !draft.id || !!localFramesBlocked"
+        :title="localFramesBlocked || (draft.id ? t('Save what this area shows now') : t('Save the area first'))"
         @click="remember(draft)"
       >
         {{ t("Save what it shows now") }}
@@ -224,7 +227,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
       <button type="button" class="btn btn-sm btn-quiet" @click="cancel">{{ t("Cancel") }}</button>
     </div>
   </div>
-  <button v-else type="button" class="btn btn-sm" :disabled="full" @click="startDraw(-1)">
+  <button v-else type="button" class="btn btn-sm" :disabled="full || !!localFramesBlocked" @click="startDraw(-1)">
     {{ full ? t("{n} areas at most", { n: REGIONS_MAX }) : t("New area: draw it on the screen") }}
   </button>
 </template>

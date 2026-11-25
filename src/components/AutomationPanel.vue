@@ -51,6 +51,7 @@ const props = defineProps<{
   values: Values;
   /** Whether the target has a keyboard to send to. */
   attached: boolean;
+  localFramesBlocked?: string | null;
 }>();
 
 const emit = defineEmits<{ (e: "values", v: Values): void }>();
@@ -492,7 +493,7 @@ async function sendTest() {
 
     <hr class="panel-rule" />
 
-    <RegionsSection />
+    <RegionsSection :local-frames-blocked="localFramesBlocked" />
 
     <hr class="panel-rule" />
 
