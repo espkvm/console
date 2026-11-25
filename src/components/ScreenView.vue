@@ -30,7 +30,7 @@ const props = defineProps<{
   /** The serial console is on: with no picture, it may be the way in. */
   serial?: boolean;
   engaged: boolean;
-  engageMode: "click" | "hover";
+  engageMode: "click" | "hover" | "anywhere";
   fit: "fit" | "stretch" | "actual";
   /** Why there is no video at all (no capture board, pipeline did not start). */
   videoBlocked?: string | null;

@@ -595,7 +595,7 @@ const theme = ref<"dark" | "light">("dark");
 const surface = ref<HTMLElement | null>(null);
 
 const engageMode = computed(
-  () => (enumName(schema.value, values.value, "ptr_engage") as "click" | "hover") ?? "click",
+  () => (enumName(schema.value, values.value, "ptr_engage") as "click" | "hover" | "anywhere") ?? "click",
 );
 const pointerMode = computed(
   () =>
@@ -2544,10 +2544,10 @@ function onEngage(e: PointerEvent) {
   input.engageFromPointer(e);
 }
 
-/* Clicking the picture does not take control - the first click would land on
-   the target before you had it - so the invitation is a button. People click the
-   picture anyway and nothing happens, which reads as broken; wave the button at
-   them instead. */
+/* In "Click" mode a click on the picture does not take control - the invitation
+   is the button - so wave the button instead of doing nothing. "Click anywhere"
+   takes the click on the picture itself: the engaging click only moves the
+   pointer (engageFromPointer), so nothing is clicked on the target by it. */
 /*
  * A pinned panel takes its space from the picture instead of covering it. Off by
  * default, because a picture that resizes whenever a panel opens makes you find
@@ -2581,6 +2581,10 @@ function nudgeEngage(e: PointerEvent) {
   const el = e.target as HTMLElement | null;
   /* Only the picture: not the panels, and not the invitation itself. */
   if (el?.closest(".panel, .screen-engage, .screen-notice, .touch-controls")) return;
+  if (engageMode.value === "anywhere" && el?.closest(".stage-view")) {
+    onEngage(e);
+    return;
+  }
   clearTimeout(engageNudgeId);
   /* Off and on again so a second click restarts the animation. Through nextTick
      rather than a frame: a browser that is not painting this tab would hold a
@@ -3223,9 +3227,12 @@ const LED_BITS: Array<[number, string]> = [
             </button>
           </div>
 
+          <!-- No button in "Click anywhere": whoever picked it clicks the picture,
+               and a watch-only screen stays clean. -->
           <button
             v-if="
-              !engaged && (!paused || textView) && !touchMode && !heldByOther && !selectingText && !padOverlay
+              !engaged && (!paused || textView) && !touchMode && !heldByOther && !selectingText && !padOverlay &&
+              engageMode !== 'anywhere'
             "
             type="button"
             :class="['screen-engage', { 'screen-engage-nudge': engageNudge }]"

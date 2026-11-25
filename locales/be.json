@@ -2274,5 +2274,11 @@
   "Choose a display mode up to 1920 × 1200 on the computer.": "Выберыце на камп’ютары рэжым экрана да 1920 × 1200.",
   "Let the sender choose": "Аўтаматычны выбар на камп’ютары",
   "Pairing fingerprint": "Адбітак для спалучэння",
-  "Compare this fingerprint before approving the device on your computer.": "Параўнайце гэты адбітак, перш чым пацвердзіць прыладу на камп’ютары."
+  "Compare this fingerprint before approving the device on your computer.": "Параўнайце гэты адбітак, перш чым пацвердзіць прыладу на камп’ютары.",
+  "\"Click\" waits for a click on the button over the picture before input reaches the target. \"Click anywhere\" takes any click on the picture. Either way the first click only moves the pointer there, and Esc or a click outside the picture stops. \"Hover\" follows the pointer as soon as it is over the picture, the way a remote desktop does, and the keyboard still needs one click.": "«Пстрычка» чакае пстрычкі па кнопцы над выявай, перш чым увод пойдзе на камп’ютар. «Пстрычка ў любым месцы» прымае любую пстрычку па выяве. У абодвух выпадках першая пстрычка толькі пераносіць туды паказальнік, а Esc або пстрычка па-за выявай спыняе кіраванне. «Навядзенне» вядзе паказальнік, як толькі ён над выявай, як у аддаленым працоўным стале, а для клавіятуры ўсё роўна патрэбна адна пстрычка.",
+  "Click anywhere": "Пстрычка ў любым месцы",
+  "Redfish": "Redfish",
+  "Redfish password": "Пароль Redfish",
+  "Its own password, not the console's: it opens power and virtual media only. Use a long random one. It is never shown again.": "Асобны пароль, не пароль кансолі: ён адкрывае толькі сілкаванне і віртуальны носьбіт. Выбірайце доўгі выпадковы. Пасля захавання ён больш не паказваецца.",
+  "The server-management API of iDRAC and iLO, at /redfish/v1, for tools such as redfishtool and OpenStack Ironic. It can power the target on and off through the ATX wiring (without it, only wake it) and boot it from an image at a URL. Tools sign in with any user name and the Redfish password below.": "API кіравання серверамі, як у iDRAC і iLO, па адрасе /redfish/v1, для інструментаў накшталт redfishtool і OpenStack Ironic. Праз яго можна ўключаць і выключаць мэтавы камп’ютар праз праводку ATX (без яе толькі абуджаць) і загружаць яго з вобраза па URL. Інструменты ўваходзяць з любым імем карыстальніка і паролем Redfish ніжэй."
 }

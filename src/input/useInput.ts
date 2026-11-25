@@ -26,7 +26,7 @@ import { createWheel } from "./wheel";
 export interface InputOptions {
   engaged: Ref<boolean>;
   /** From the device's ptr_engage setting. */
-  engageMode: Ref<"click" | "hover">;
+  engageMode: Ref<"click" | "hover" | "anywhere">;
   /** From the device's mouse_mode setting. */
   pointerMode: Ref<"absolute" | "relative">;
   invertScroll: Ref<boolean>;

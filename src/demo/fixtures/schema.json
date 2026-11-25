@@ -456,11 +456,17 @@
       "section": "input",
       "group": "Pointer",
       "title": "Start controlling on",
-      "help": "\"Click\" waits for a click on the video before input reaches the target, and stops again on Esc or a click outside; the engaging click is still delivered. \"Hover\" tracks the pointer as soon as it is over the video, the way a remote desktop behaves. Keyboard input always requires a click first.",
+      "help": "\"Click\" waits for a click on the button over the picture before input reaches the target. \"Click anywhere\" takes any click on the picture. Either way the first click only moves the pointer there, and Esc or a click outside the picture stops. \"Hover\" follows the pointer as soon as it is over the picture, the way a remote desktop does, and the keyboard still needs one click.",
       "type": "enum",
       "choices": [
         "click",
-        "hover"
+        "hover",
+        "anywhere"
+      ],
+      "labels": [
+        "Click",
+        "Hover",
+        "Click anywhere"
       ],
       "default": 0,
       "requires": "hid",
@@ -2742,6 +2748,31 @@
       "help": "Enables the plain-REST snapshot and keyboard/mouse endpoints (/api/v1/video/frame.jpg, /api/v1/hid/*) used to drive the target from an AI agent or a script. Off by default: it grants the same control the console already has, over a simpler interface, so turn it on only when you mean to hand that control to a program.",
       "type": "bool",
       "default": 0
+    },
+    {
+      "key": "redfish_enable",
+      "section": "security",
+      "group": "Redfish",
+      "title": "Redfish",
+      "help": "The server-management API of iDRAC and iLO, at /redfish/v1, for tools such as redfishtool and OpenStack Ironic. It can power the target on and off through the ATX wiring (without it, only wake it) and boot it from an image at a URL. Tools sign in with any user name and the Redfish password below.",
+      "type": "bool",
+      "default": 0
+    },
+    {
+      "key": "redfish_pass",
+      "section": "security",
+      "group": "Redfish",
+      "title": "Redfish password",
+      "help": "Its own password, not the console's: it opens power and virtual media only. Use a long random one. It is never shown again.",
+      "type": "string",
+      "maxLength": 64,
+      "default": "",
+      "secret": true,
+      "ascii": true,
+      "showIf": {
+        "key": "redfish_enable",
+        "eq": 1
+      }
     },
     {
       "key": "upd_check",
