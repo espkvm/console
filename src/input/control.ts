@@ -12,7 +12,7 @@
  *     0x07 take control
  *     0x08 gamepad     buttons:u16, hat:u8 (8 none), lx, ly, rx, ry:u8 (128 centre)
  *   device -> client
- *     0x81 status      flags:u8 (bit0 target attached, bit1 bus alive), leds:u8
+ *     0x81 status      flags:u8 (bit0 target attached, bit1 bus alive, bit2 USB video), leds:u8
  *     0x82 pong
  *     0x83 control      state:u8 (0 held by another, 1 you hold it, 2 free, 3 view-only sign-in)
  *
@@ -32,10 +32,12 @@ const MSG_RELEASE_ALL = 0x05;
 const MSG_PING = 0x06;
 const MSG_TAKEOVER = 0x07;
 const MSG_PAD = 0x08;
+const MSG_USB_VIDEO_QUERY = 0x0a;
 const MSG_PONG = 0x82;
 const MSG_STATUS = 0x81;
 const MSG_CONTROL = 0x83;
 const MSG_UPDATE = 0x84;
+const MSG_USB_VIDEO_STATE = 0x86;
 
 /* How often to poll control/target state, so a viewer notices the session was
    freed or taken without needing to interact. */
@@ -60,6 +62,7 @@ export interface TargetState {
   /** False while the control channel is down: the device has not said either
    *  way, and reporting "no target" then blames the wrong thing. */
   known: boolean;
+  usbVideo?: boolean;
   /** Lock-key LEDs as the target reports them: bit0 num, bit1 caps, bit2 scroll. */
   leds: number;
 }
@@ -76,11 +79,48 @@ export interface UpdateState {
   percent: number;
 }
 
+export interface UsbVideoState {
+  revision: number;
+  enabled: boolean;
+  connected: boolean;
+  oversized: boolean;
+  fingerprint: string;
+  selected: string;
+  displays: string[];
+}
+
+const usbText = new TextDecoder();
+
+function decodeUsbVideo(bytes: Uint8Array): UsbVideoState | null {
+  if (bytes.length < 31) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const selectedEnd = 31 + view.getUint16(29, true);
+  if (selectedEnd > bytes.length) return null;
+  const displays: string[] = [];
+  for (let p = selectedEnd; p < bytes.length;) {
+    if (p + 2 > bytes.length) return null;
+    const end = p + 2 + view.getUint16(p, true);
+    if (end > bytes.length) return null;
+    displays.push(usbText.decode(bytes.subarray(p + 2, end)));
+    p = end;
+  }
+  return {
+    revision: view.getUint32(1, true),
+    enabled: Boolean(bytes[5] & 1),
+    connected: Boolean(bytes[5] & 2),
+    oversized: Boolean(bytes[5] & 4),
+    fingerprint: usbText.decode(bytes.subarray(6, 29)),
+    selected: usbText.decode(bytes.subarray(31, selectedEnd)),
+    displays,
+  };
+}
+
 interface Handlers {
   onTarget(state: TargetState): void;
   onConnection(state: ConnectionState): void;
   onControl(state: ControlState): void;
   onUpdate(state: UpdateState): void;
+  onUsbVideo(state: UsbVideoState): void;
 }
 
 export class Control {
@@ -147,6 +187,7 @@ export class Control {
     this.#ws = ws;
 
     ws.onopen = () => {
+      if (this.#ws !== ws) return;
       this.#backoff = 500;
       this.#handlers.onConnection("open");
       /* The device cannot push during the handshake, so ask for the current
@@ -158,7 +199,7 @@ export class Control {
     };
 
     ws.onmessage = (ev) => {
-      if (!(ev.data instanceof ArrayBuffer)) return;
+      if (this.#ws !== ws || !(ev.data instanceof ArrayBuffer)) return;
       const b = new Uint8Array(ev.data);
       if (b[0] === MSG_PONG) {
         if (this.#pingAt) {
@@ -170,6 +211,7 @@ export class Control {
         this.#handlers.onTarget({
           attached: (b[1] & 1) !== 0,
           busAlive: (b[1] & 2) !== 0,
+          usbVideo: (b[1] & 4) !== 0,
           leds: b[2],
           known: true,
         });
@@ -182,6 +224,9 @@ export class Control {
         const phases = ["receiving", "verifying", "restarting", "failed"] as const;
         const phase = phases[b[1]] ?? "receiving";
         this.#handlers.onUpdate({ phase, percent: b[2] });
+      } else if (b[0] === MSG_USB_VIDEO_STATE) {
+        const state = decodeUsbVideo(b);
+        if (state) this.#handlers.onUsbVideo(state);
       }
     };
 
@@ -218,6 +263,22 @@ export class Control {
   /** Ask the device to make this client the controlling one, demoting any other. */
   takeControl() {
     this.#send(new Uint8Array([MSG_TAKEOVER]));
+  }
+
+  queryUsbVideo(revision: number) {
+    const bytes = new Uint8Array(5);
+    bytes[0] = MSG_USB_VIDEO_QUERY;
+    new DataView(bytes.buffer).setUint32(1, revision, true);
+    this.#send(bytes);
+  }
+
+  setUsbVideo(revision: number, enabled: boolean, display = 255) {
+    const bytes = new Uint8Array(7);
+    bytes[0] = MSG_USB_VIDEO_QUERY;
+    new DataView(bytes.buffer).setUint32(1, revision, true);
+    bytes[5] = Number(enabled);
+    bytes[6] = display;
+    this.#send(bytes);
   }
 
   /* performance.now() of the ping waiting for its pong; 0 when none is. */

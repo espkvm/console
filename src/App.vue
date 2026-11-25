@@ -153,6 +153,7 @@ const schema = ref<Setting[]>([]);
 const sections = ref<SettingSection[]>([]);
 const values = ref<Values>({});
 const caps = ref<Record<string, Capability>>({});
+const usbCaptureActive = ref(false);
 const status = ref<VideoStatus | null>(null);
 const system = ref<SystemInfo | null>(null);
 /* Set once the running firmware version stops matching the one this page loaded
@@ -226,7 +227,7 @@ function onAreaDone() {
    that never answered, or a pipeline that could not start. Different from "no
    signal", which means the board is there and the target is quiet. */
 const videoBlocked = computed(() =>
-  caps.value.video && !caps.value.video.available
+  !usbCaptureActive.value && caps.value.video && !caps.value.video.available
     ? caps.value.video.reason
       ? t(caps.value.video.reason)
       : t("The capture path did not start.")
@@ -267,7 +268,12 @@ let textStreamPushes = true;
  * at 99% - arrived with Select and Copy greyed out. Firmware without the field
  * says nothing, and nothing means no.
  */
-const textModeLikely = computed(() => status.value?.textMode === true);
+const localFramesBlocked = computed(() => {
+  if (!usbCaptureActive.value) return null;
+  const reason = caps.value.local_frames?.reason;
+  return reason ? t(reason) : t("Screen analysis and MJPEG are unavailable during USB screen sharing.");
+});
+const textModeLikely = computed(() => !localFramesBlocked.value && status.value?.textMode === true);
 
 /*
  * Two ways a text screen stops being one, and both have to hand the picture
@@ -296,7 +302,8 @@ function applyScreenText(text: ScreenText | null) {
 
 async function refreshScreenText(): Promise<ScreenText | null> {
   try {
-    applyScreenText(await loadScreenText());
+    const reading = await loadScreenText();
+    applyScreenText(localFramesBlocked.value ? null : reading);
   } catch {
     applyScreenText(null);
   }
@@ -304,6 +311,10 @@ async function refreshScreenText(): Promise<ScreenText | null> {
 }
 
 async function copyScreenText() {
+  if (localFramesBlocked.value) {
+    toast.info(localFramesBlocked.value);
+    return;
+  }
   const text = await refreshScreenText();
   if (!text) {
     toast.info(t("Nothing to copy: this screen is not made of text"));
@@ -389,6 +400,10 @@ function keepScreenTextFresh() {
 }
 
 async function toggleSelectText() {
+  if (localFramesBlocked.value) {
+    toast.info(localFramesBlocked.value);
+    return;
+  }
   if (selectingText.value) {
     selectingText.value = false;
     keepScreenTextFresh();
@@ -454,6 +469,10 @@ function leaveTextView() {
  *   answer on a desktop, not a thing worth a toast every few seconds.
  */
 async function enterTextView(auto = false): Promise<boolean> {
+  if (localFramesBlocked.value) {
+    if (!auto) toast.info(localFramesBlocked.value);
+    return false;
+  }
   if (textView.value) return true;
   if (auto && paused.value) return false;
   if (!(await refreshScreenText())) {
@@ -979,6 +998,18 @@ const input = useInput({
   onDisengage: () => (engaged.value = false),
 });
 
+watch(() => input.target.value.usbVideo, (usingUsb) => {
+  usbCaptureActive.value = Boolean(usingUsb);
+  if (ready.value) void loadCapabilities().then((c) => (caps.value = c)).catch(() => {});
+  if (usingUsb) {
+    selectingText.value = false;
+    leaveTextView();
+    keepScreenTextFresh();
+    applyScreenText(null);
+    areaDrawing.value = false;
+  }
+}, { immediate: true });
+
 /* Several screens on the target: see ptr_desk_w in the settings. The capture
    size is the screen's own size. */
 const findingScreen = ref(false);
@@ -1454,6 +1485,11 @@ const captureItems = computed(() => {
   };
 });
 const captureAny = computed(() => captureItems.value.shot || captureItems.value.clip || captureItems.value.rec);
+const screenshotBlocked = computed(() =>
+  input.target.value.usbVideo
+    ? t("Screenshots are unavailable during USB screen sharing.")
+    : status.value?.screenshotBlocked ? t(status.value.screenshotBlocked) : null,
+);
 const textAny = computed(() => uiShown("select") || uiShown("copy"));
 
 const clipState = computed(() => {
@@ -1521,6 +1557,10 @@ async function clip() {
 
 async function screenshot() {
   if (shotBusy.value) return;
+  if (screenshotBlocked.value) {
+    toast.error(screenshotBlocked.value);
+    return;
+  }
   shotBusy.value = true;
   try {
     toast.info(t("Screenshot saved to {file}", { file: await takeScreenshot() }));
@@ -1557,7 +1597,7 @@ async function setCodec(name: "mjpeg" | "h264") {
    lit, "idle" is present-but-inactive (HDMI cable up, no picture), "off" is
    nothing. */
 type Conn = {
-  id: "hdmi" | "usb" | "sd" | "ethernet" | "wifi" | "ap" | "vpn" | "mqtt" | "mem";
+  id: "hdmi" | "usb-video" | "usb" | "sd" | "ethernet" | "wifi" | "ap" | "vpn" | "mqtt" | "mem";
   title: string;
   state: "on" | "idle" | "off";
 };
@@ -1805,8 +1845,13 @@ async function copyAddr(value: string) {
 }
 
 const conns = computed<Conn[]>(() => {
+  const usbVideoActive = online.value && Boolean(input.target.value.usbVideo);
   const list: Conn[] = [
-    {
+    usbVideoActive ? {
+      id: "usb-video",
+      title: t("USB screen sharing"),
+      state: status.value?.signal ? "on" : "idle",
+    } : {
       id: "hdmi",
       title: online.value
         ? status.value?.signal
@@ -2936,6 +2981,7 @@ const LED_BITS: Array<[number, string]> = [
         :text-available="textModeLikely"
         :video-blocked="videoBlocked"
         :h264-blocked="h264Blocked"
+        :local-frames-blocked="localFramesBlocked"
         :latency="latencyText"
         :measuring="measuringLatency"
         @set-codec="setCodec"
@@ -3144,6 +3190,7 @@ const LED_BITS: Array<[number, string]> = [
             :engage-mode="engageMode"
             :fit="fit"
             :video-blocked="videoBlocked"
+            :local-frames-blocked="localFramesBlocked"
             :paused="paused || updateHoldsStream"
             :text-layer="selectingText || textView ? screenText : null"
             :text-view="textView"
@@ -3318,6 +3365,7 @@ const LED_BITS: Array<[number, string]> = [
               v-else-if="panel === 'automation'"
               :values="values"
               :attached="input.target.value.attached"
+              :local-frames-blocked="localFramesBlocked"
               @values="values = $event"
             />
             <CaptureList
@@ -3386,7 +3434,7 @@ const LED_BITS: Array<[number, string]> = [
             :aria-label="c.title"
             @click="connDetail = connDetail === c.id ? null : c.id"
           >
-            <Icon :name="c.id === 'mem' ? 'warning' : c.id" :size="16" />
+            <Icon :name="c.id === 'mem' ? 'warning' : c.id === 'usb-video' ? 'screen' : c.id" :size="16" />
           </button>
 
           <!-- Tap detail popover: touch has no hover, so show the pill's
@@ -3730,8 +3778,8 @@ const LED_BITS: Array<[number, string]> = [
             type="button"
             class="am-item"
             role="menuitem"
-            :title="status.screenshotBlocked ? t(status.screenshotBlocked) : t('Save a screenshot to the microSD card (SCREENSHOTS)')"
-            :disabled="!!status.screenshotBlocked || shotBusy"
+            :title="screenshotBlocked || t('Save a screenshot to the microSD card (SCREENSHOTS)')"
+            :disabled="!!screenshotBlocked || shotBusy"
             @click="screenshot"
           >
             <Icon name="camera" :size="15" /> {{ t("Screenshot") }}
@@ -3775,7 +3823,7 @@ const LED_BITS: Array<[number, string]> = [
           :label="t('Screen text')"
           :on="selectingText"
           :disabled="!textModeLikely"
-          :title="textModeLikely ? t('Select or copy the text on the screen') : t('The target is not showing a text screen')"
+          :title="localFramesBlocked || (textModeLikely ? t('Select or copy the text on the screen') : t('The target is not showing a text screen'))"
         >
           <button
             v-if="uiShown('select')"
@@ -3798,8 +3846,8 @@ const LED_BITS: Array<[number, string]> = [
           data-ui="screenshot"
           :data-label="t('Screenshot')"
           :aria-label="t('Save a screenshot to the microSD card')"
-          :title="status.screenshotBlocked ? t(status.screenshotBlocked) : t('Save a screenshot to the microSD card (SCREENSHOTS)')"
-          :disabled="!!status.screenshotBlocked || shotBusy"
+          :title="screenshotBlocked || t('Save a screenshot to the microSD card (SCREENSHOTS)')"
+          :disabled="!!screenshotBlocked || shotBusy"
           @click="screenshot"
         >
           <Icon name="camera" :size="15" />
@@ -3846,9 +3894,9 @@ const LED_BITS: Array<[number, string]> = [
           :class="{ 'btn-on': selectingText, asking: askingSelect }"
           :disabled="!textModeLikely"
           :title="
-            textModeLikely
+            localFramesBlocked || (textModeLikely
               ? t('Select text on the screen with the mouse, as on a page')
-              : t('The target is not showing a text screen')
+              : t('The target is not showing a text screen'))
           "
           data-ui="select"
           :data-label="t('Select text')"
@@ -3863,9 +3911,9 @@ const LED_BITS: Array<[number, string]> = [
           class="btn btn-sm btn-icon menu-only"
           :disabled="!textModeLikely"
           :title="
-            textModeLikely
+            localFramesBlocked || (textModeLikely
               ? t('Copy everything on the screen as text')
-              : t('The target is not showing a text screen')
+              : t('The target is not showing a text screen'))
           "
           data-ui="copy"
           :data-label="t('Copy as text')"
@@ -4009,6 +4057,8 @@ const LED_BITS: Array<[number, string]> = [
         :find-screen="findThisScreen"
         :screen-w="status?.width ?? 0"
         :screen-h="status?.height ?? 0"
+        :usb-video="viewOnly ? null : input.usbVideo.value"
+        :usb-video-control="caps.usb_video?.available && !viewOnly && input.connection.value === 'open' ? input.control : undefined"
         :start-section="settingsSection"
         :start-group="settingsGroup"
         :start-setting="settingsKey"

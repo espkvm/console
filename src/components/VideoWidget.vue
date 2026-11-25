@@ -42,6 +42,7 @@ const props = defineProps<{
   textAvailable: boolean;
   /** Why H.264 cannot be chosen here, or null when it can. */
   h264Blocked: string | null;
+  localFramesBlocked?: string | null;
   /** Why there is no video at all - a capture board that never answered. */
   videoBlocked?: string | null;
   /** The last whole-way measurement, or what went wrong; null before one. */
@@ -237,7 +238,8 @@ function rate(kbps: number): string {
             type="button"
             class="vw-mode"
             :class="{ 'vw-mode-on': showing === 'mjpeg' }"
-            :title="t('Video as MJPEG - every frame a picture, which is what a dashboard or a still can read')"
+            :disabled="!!localFramesBlocked"
+            :title="localFramesBlocked || t('Video as MJPEG - every frame a picture, which is what a dashboard or a still can read')"
             @click="pickCodec('mjpeg')"
           >
             MJPEG

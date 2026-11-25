@@ -3,6 +3,7 @@ import UiFeatureList from "./UiFeatureList.vue";
 import { hapticTry } from "../ui/haptic";
 import Icon from "./Icon.vue";
 import { t, tn } from "../i18n";
+import type { Control, UsbVideoState } from "../input/control";
 /*
  * The settings panel renders itself from the schema the device serves, so a
  * setting added to the firmware table appears here with its title, range and
@@ -101,6 +102,8 @@ const props = defineProps<{
       the whole panel and put the saved value back into a field being typed in. */
   screenW?: number;
   screenH?: number;
+  usbVideo?: UsbVideoState | null;
+  usbVideoControl?: Control;
   /** The section to show, when Settings is opened at one (from the overview). */
   startSection?: string;
   /** A group in it to scroll to and mark for a moment. */
@@ -452,6 +455,35 @@ onMounted(() => {
 /* The first tab until one is picked - by its id: the list holds whole sections,
    and handing one over as the id matched no setting and drew an empty pane. */
 const currentSection = computed(() => active.value || sections.value[0]?.id || "video");
+const showUsbVideo = computed(
+  () => currentSection.value === "video" && !query.value.trim() && props.usbVideoControl,
+);
+const usbDisplayIndex = computed(() => {
+  const state = props.usbVideo;
+  if (!state?.selected) return 0;
+  const index = state.displays.indexOf(state.selected);
+  return index < 0 ? -1 : index + 1;
+});
+
+watch(showUsbVideo, (control, _previous, onCleanup) => {
+  if (!control) return;
+  const refresh = () => control.queryUsbVideo(props.usbVideo?.revision ?? 0);
+  refresh();
+  const timer = window.setInterval(refresh, 2500);
+  onCleanup(() => window.clearInterval(timer));
+}, { immediate: true });
+
+function setUsbVideo(enabled: boolean, display?: number) {
+  const state = props.usbVideo;
+  if (state) props.usbVideoControl?.setUsbVideo(state.revision, enabled, display);
+}
+
+function selectUsbDisplay(event: Event) {
+  const select = event.target as HTMLSelectElement;
+  const choice = Number(select.value);
+  select.value = String(usbDisplayIndex.value);
+  if (props.usbVideo) setUsbVideo(props.usbVideo.enabled, choice);
+}
 const busy = ref(false);
 
 /* "Changed" is a section of its own: everything that differs from the factory
@@ -1272,6 +1304,52 @@ async function doRevertCert() {
 
         <div class="settings-list">
           <LanguagePicker v-if="currentSection === 'ui' && !query.trim()" />
+          <template v-if="showUsbVideo && usbVideo">
+            <h3 class="settings-group">{{ t("USB screen sharing") }}</h3>
+            <div class="setting setting-bool">
+              <div class="setting-text">
+                <label class="setting-title" for="usb-video-enabled">{{ t("Allow USB video") }}</label>
+                <p class="setting-note">{{ t("USB sharing turns off after restart. HDMI returns when sharing stops.") }}</p>
+                <p class="setting-note">{{ t("Changing this setting briefly reconnects the target's USB devices. Your computer may ask you to allow them again.") }}</p>
+              </div>
+              <div class="setting-control">
+                <input
+                  id="usb-video-enabled"
+                  type="checkbox"
+                  :checked="usbVideo.enabled"
+                  @click.prevent="setUsbVideo(!usbVideo.enabled)"
+                />
+              </div>
+            </div>
+            <div class="setting">
+              <div class="setting-text">
+                <label class="setting-title" for="usb-video-display">{{ t("Display") }}</label>
+                <p v-if="!usbVideo.connected" class="setting-note">{{ t("Start OS Services on the connected computer.") }}</p>
+                <p v-else-if="usbVideo.oversized" class="setting-note" role="status">
+                  {{ t("Choose a display mode up to 1920 × 1200 on the computer.") }}
+                </p>
+              </div>
+              <div class="setting-control">
+                <select
+                  id="usb-video-display"
+                  :value="usbDisplayIndex"
+                  :disabled="!usbVideo.displays.length && usbDisplayIndex === 0"
+                  @change="selectUsbDisplay"
+                >
+                  <option v-if="usbDisplayIndex === -1" value="-1" disabled>{{ usbVideo.selected }}</option>
+                  <option value="0">{{ t("Let the sender choose") }}</option>
+                  <option v-for="(name, index) in usbVideo.displays" :key="index" :value="index + 1">{{ name }}</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting">
+              <div class="setting-text">
+                <p class="setting-title">{{ t("Pairing fingerprint") }}</p>
+                <p class="setting-note">{{ t("Compare this fingerprint before approving the device on your computer.") }}</p>
+              </div>
+              <div class="setting-control"><code>{{ usbVideo.fingerprint }}</code></div>
+            </div>
+          </template>
           <div v-if="currentSection === 'vpn'" class="setting">
             <div class="setting-head">
               <label class="setting-title" for="vpn-mode">{{ t("VPN backend") }}</label>

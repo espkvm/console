@@ -34,6 +34,7 @@ const props = defineProps<{
   fit: "fit" | "stretch" | "actual";
   /** Why there is no video at all (no capture board, pipeline did not start). */
   videoBlocked?: string | null;
+  localFramesBlocked?: string | null;
   /** Paused: nothing is read, so the device stops encoding entirely. */
   paused: boolean;
   /** Shown instead of the usual pause text when something other than the
@@ -1590,7 +1591,7 @@ const fitClass = computed(() =>
           {{ t("Set it to 30 Hz or a smaller mode, or pick the 1080p30 or 720p EDID profile in Settings > Video.") }}
         </p>
         <p v-else-if="codecError" class="muted">
-          {{ t(codecError) }}. {{ t("Picking MJPEG in the video readout gives a picture this page can always show.") }}
+          {{ t(codecError) }}. {{ localFramesBlocked || t("Picking MJPEG in the video readout gives a picture this page can always show.") }}
         </p>
         <p v-else-if="failed" class="muted">{{ t("Reconnecting...") }}</p>
       </div>

@@ -16,6 +16,7 @@ import {
   type ControlState,
   type TargetState,
   type UpdateState,
+  type UsbVideoState,
 } from "./control";
 import { isModifierCode, modifierMask, usageForCode } from "./keymap";
 import { mediaUsage } from "./mediaKeys";
@@ -61,6 +62,7 @@ export function useInput(opts: InputOptions) {
   const controlState = ref<ControlState>("you");
   /* What the device is doing to itself, as told to every console at once. */
   const updateState = ref<UpdateState | null>(null);
+  const usbVideo = ref<UsbVideoState | null>(null);
   const held = new Set<number>();
   const lastPos = { x: 0, y: 0 };
   /* Mouse buttons currently pressed on the target, so a lost up can be undone. */
@@ -74,8 +76,10 @@ export function useInput(opts: InputOptions) {
          saying about updating itself is over. Without this the restart notice
          outlived the restart and sat over the sign-in page for good. */
       if (c === "open") updateState.value = null;
+      else usbVideo.value = null;
     },
     onControl: (s) => (controlState.value = s),
+    onUsbVideo: (s) => (usbVideo.value = s),
     onUpdate: (u) => {
       updateState.value = u;
       /* A failure is news, not a state: say it, then let the page go back to
@@ -436,5 +440,5 @@ export function useInput(opts: InputOptions) {
     control.mouseAbsolute(0, p.x, p.y);
   }
 
-  return { target, connection, controlState, updateState, control, engageFromPointer };
+  return { target, connection, controlState, updateState, usbVideo, control, engageFromPointer };
 }

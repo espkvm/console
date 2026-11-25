@@ -311,6 +311,9 @@
   "Tools": "Інструменты",
   "Screenshot, clip, recording": "Здымак экрана, кліп, запіс",
   "Save a screenshot to the microSD card (SCREENSHOTS)": "Захаваць здымак экрана на карту microSD (SCREENSHOTS)",
+  "Screenshots are unavailable during USB screen sharing.": "Здымкі экрана недаступныя падчас трансляцыі экрана праз USB.",
+  "Changing this setting briefly reconnects the target's USB devices. Your computer may ask you to allow them again.": "Змяненне гэтага параметра ненадоўга перападключае USB-прылады мэтавага камп’ютара. Камп’ютар можа папрасіць зноў дазволіць іх падключэнне.",
+  "Screen analysis and MJPEG are unavailable during USB screen sharing.": "Аналіз экрана і MJPEG недаступныя падчас трансляцыі экрана праз USB.",
   "The dashcam waits while a recording runs": "Відэарэгістратар чакае, пакуль ідзе запіс",
   "Timelapse to {file}": "Таймлапс у {file}",
   "Recording to {file}": "Запіс у {file}",
@@ -2263,5 +2266,13 @@
   "Invitation for browsers in this language": "Запрашэнне для браўзераў на гэтай мове",
   "Get told when a new version is out? The browser checks whether a newer ESP-KVM is published and offers it, and counts this device for the project: a random id, the board and the version, once a day. The device itself never reaches out.": "Паведамляць пра выхад новай версіі? Браўзер правярае, ці выйшла навейшая ESP-KVM, і прапануе яе, а таксама ўлічвае гэтую прыладу для праекта: выпадковы id, плата і версія, раз на дзень. Сама прылада ніколі нікуды не звяртаецца.",
   "The browser asks the address below whether a newer build exists and offers to install it. With the project's own address it also tells check.espkvm.io, at most once a day, this device's random id, its board, its version and the chip revision, so the author can count the devices in use. The counts also go on to Google Analytics, under a hash of the id, never the id or your address. The id is not taken from the hardware; erasing the flash makes a new one. The device itself asks only when New firmware is ticked for a channel under Notifications: once a day, and it sends nothing about itself when it does.": "Браўзер пытаецца ў адраса ніжэй, ці ёсць навейшая зборка, і прапануе яе ўсталяваць. З адрасам самога праекта ён таксама паведамляе check.espkvm.io, не часцей за раз на дзень, выпадковы id гэтай прылады, яе плату, версію і рэвізію чыпа, каб аўтар мог палічыць прылады ў карыстанні. Лічбы таксама трапляюць у Google Analytics пад хэшам id, ніколі не сам id і не ваш адрас. Id не бярэцца з жалеза. Ачыстка флэш-памяці стварае новы. Сама прылада пытаецца, толькі калі для канала ў «Апавяшчэннях» адзначана «Новая прашыўка»: раз на дзень, і пры гэтым нічога пра сябе не адпраўляе.",
-  "Latin letters, digits and symbols only.": "Толькі лацінскія літары, лічбы і знакі."
+  "Latin letters, digits and symbols only.": "Толькі лацінскія літары, лічбы і знакі.",
+  "USB screen sharing": "Абагульванне экрана праз USB",
+  "Allow USB video": "Дазволіць відэа праз USB",
+  "USB sharing turns off after restart. HDMI returns when sharing stops.": "Абагульванне праз USB выключаецца пасля перазапуску. Пасля спынення абагульвання відэа зноў паступае праз HDMI.",
+  "Start OS Services on the connected computer.": "Запусціце OS Services на падлучаным камп’ютары.",
+  "Choose a display mode up to 1920 × 1200 on the computer.": "Выберыце на камп’ютары рэжым экрана да 1920 × 1200.",
+  "Let the sender choose": "Аўтаматычны выбар на камп’ютары",
+  "Pairing fingerprint": "Адбітак для спалучэння",
+  "Compare this fingerprint before approving the device on your computer.": "Параўнайце гэты адбітак, перш чым пацвердзіць прыладу на камп’ютары."
 }
