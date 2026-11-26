@@ -1451,6 +1451,11 @@ const showOverlay = computed(
     !loaded.value),
 );
 
+const screenshotCanvas = computed(() =>
+  useWebsocket.value && !showOverlay.value && !props.textView ? canvas.value : null,
+);
+defineExpose({ screenshotCanvas });
+
 /* One class per sizing mode: shrink-only, fill the stage, or one pixel each. */
 const fitClass = computed(() =>
   props.fit === "fit" ? "screen-fit" : props.fit === "stretch" ? "screen-stretch" : "screen-actual",

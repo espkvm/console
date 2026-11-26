@@ -75,6 +75,8 @@
   "Marked in the clip being saved; it will run a little longer": "Pažymėta išsaugomoje ištraukoje. Ji truks šiek tiek ilgiau",
   "Saving a clip: the last {before} and the next {after}. It appears in Recordings when ready.": "Išsaugoma ištrauka: paskutinės {before} ir kitos {after}. Ji atsiras skiltyje Įrašai, kai bus paruošta.",
   "Screenshot saved to {file}": "Ekrano kopija išsaugota į {file}",
+  "Download screenshot": "Atsisiųsti ekrano kopiją",
+  "Could not download the screenshot": "Nepavyko atsisiųsti ekrano kopijos",
   "the device would not take that codec": "įrenginys nepriėmė šio kodeko",
   "WiFi - {ssid}, standing in for the cable": "WiFi - {ssid}, vietoj kabelio",
   "connected": "prisijungta",

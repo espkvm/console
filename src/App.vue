@@ -52,7 +52,7 @@ import SerialPanel from "./components/SerialPanel.vue";
 import ToolsPanel from "./components/ToolsPanel.vue";
 import LogPanel from "./components/LogPanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
-import { pictureOf } from "./ui/picture";
+import { downloadScreenshot, pictureOf } from "./ui/picture";
 import { pipSupported, pipWindow, togglePip } from "./ui/pip";
 import { findScreen } from "./ui/screenCalib";
 import { measureLatency } from "./ui/latency";
@@ -593,6 +593,7 @@ useWakeLock(computed(() => Boolean(status.value?.signal) && !paused.value && !up
 const connDetail = ref<string | null>(null);
 const theme = ref<"dark" | "light">("dark");
 const surface = ref<HTMLElement | null>(null);
+const screenView = ref<InstanceType<typeof ScreenView> | null>(null);
 
 const engageMode = computed(
   () => (enumName(schema.value, values.value, "ptr_engage") as "click" | "hover" | "anywhere") ?? "click",
@@ -1364,9 +1365,7 @@ const h264Blocked = computed(() => {
 });
 
 /*
- * Recording and screenshots go to the microSD card on the device, so they carry
- * on without this tab - the buttons only start, stop and show what is running.
- * Both read their state from the video status the console polls anyway.
+ * Recordings and HDMI screenshots go to the device's microSD card.
  */
 const record = computed(() => status.value?.record ?? null);
 /* Bumped whenever a file lands on the card, so an open list refreshes itself. */
@@ -1479,16 +1478,23 @@ function span(seconds: number): string {
 const captureItems = computed(() => {
   if (signedInToWatch.value) return { shot: false, clip: false, rec: false };
   return {
-    shot: Boolean(status.value && status.value.screenshotBlocked !== undefined) && uiShown("screenshot"),
+    shot: (usbCaptureActive.value || status.value?.screenshotBlocked !== undefined) && uiShown("screenshot"),
     clip: Boolean(record.value && clipState.value) && uiShown("clip"),
     rec: Boolean(record.value) && uiShown("record"),
   };
 });
 const captureAny = computed(() => captureItems.value.shot || captureItems.value.clip || captureItems.value.rec);
-const screenshotBlocked = computed(() =>
-  input.target.value.usbVideo
-    ? t("Screenshots are unavailable during USB screen sharing.")
-    : status.value?.screenshotBlocked ? t(status.value.screenshotBlocked) : null,
+const screenshotBlocked = computed(() => {
+  if (!usbCaptureActive.value) {
+    return status.value?.screenshotBlocked ? t(status.value.screenshotBlocked) : null;
+  }
+  if (updateHoldsStream.value) return t("Video paused for the update");
+  if (paused.value) return t("Video paused");
+  return screenView.value?.screenshotCanvas ? null : t("There is no picture to watch yet");
+});
+const screenshotLabel = computed(() => usbCaptureActive.value ? t("Download screenshot") : t("Screenshot"));
+const screenshotTitle = computed(() =>
+  usbCaptureActive.value ? screenshotLabel.value : t("Save a screenshot to the microSD card (SCREENSHOTS)"),
 );
 const textAny = computed(() => uiShown("select") || uiShown("copy"));
 
@@ -1561,12 +1567,20 @@ async function screenshot() {
     toast.error(screenshotBlocked.value);
     return;
   }
+  const usb = usbCaptureActive.value;
   shotBusy.value = true;
   try {
+    if (usb) {
+      const canvas = screenView.value?.screenshotCanvas;
+      if (!canvas || !await downloadScreenshot(canvas)) toast.error(t("Could not download the screenshot"));
+      return;
+    }
     toast.info(t("Screenshot saved to {file}", { file: await takeScreenshot() }));
     capturesChanged.value++;
   } catch (err) {
-    toast.error(err instanceof Error ? t(err.message) : String(err));
+    toast.error(usb
+      ? t("Could not download the screenshot")
+      : err instanceof Error ? t(err.message) : String(err));
   } finally {
     shotBusy.value = false;
   }
@@ -2437,7 +2451,7 @@ const paletteCommands = computed<Command[]>(() => {
 
   /* Capture and text */
   const cap = captureItems.value;
-  if (cap.shot) add({ id: "cap:shot", title: t("Screenshot"), group: t("Capture"), keywords: "photo picture save", run: () => screenshot() });
+  if (cap.shot) add({ id: "cap:shot", title: screenshotLabel.value, group: t("Capture"), keywords: "photo picture save", run: () => screenshot() });
   if (cap.clip && clipState.value) add({ id: "cap:clip", title: t("Save clip"), group: t("Capture"), keywords: "dashcam", run: () => clip() });
   if (cap.rec && record.value) add({ id: "cap:rec", title: record.value.on ? t("Stop recording") : t("Start recording"), group: t("Capture"), keywords: "video record", run: () => toggleRecording() });
   if (uiShown("select")) add({ id: "text:select", title: selectingText.value ? t("Stop selecting text") : t("Select text on the screen"), group: t("Screen text"), run: () => toggleSelectText() });
@@ -3188,6 +3202,7 @@ const LED_BITS: Array<[number, string]> = [
       >
         <div class="stage-view">
           <ScreenView
+            ref="screenView"
             :status="status"
             :serial="serialReady && !serialOpen"
             :engaged="engaged"
@@ -3781,15 +3796,15 @@ const LED_BITS: Array<[number, string]> = [
           :title="t('Screenshot, clip, recording')"
         >
           <button
-            v-if="captureItems.shot && status"
+            v-if="captureItems.shot"
             type="button"
             class="am-item"
             role="menuitem"
-            :title="screenshotBlocked || t('Save a screenshot to the microSD card (SCREENSHOTS)')"
+            :title="screenshotBlocked || screenshotTitle"
             :disabled="!!screenshotBlocked || shotBusy"
             @click="screenshot"
           >
-            <Icon name="camera" :size="15" /> {{ t("Screenshot") }}
+            <Icon name="camera" :size="15" /> {{ screenshotLabel }}
           </button>
           <button
             v-if="captureItems.clip && clipState"
@@ -3845,15 +3860,14 @@ const LED_BITS: Array<[number, string]> = [
             <Icon name="copy" :size="15" /> {{ t("Copy the screen as text") }}
           </button>
         </ActionMenu>
-        <!-- Absent on firmware with no recorder. -->
         <button
-          v-if="status && status.screenshotBlocked !== undefined && !signedInToWatch"
+          v-if="captureItems.shot"
           type="button"
           class="btn btn-sm btn-icon menu-only"
           data-ui="screenshot"
-          :data-label="t('Screenshot')"
-          :aria-label="t('Save a screenshot to the microSD card')"
-          :title="screenshotBlocked || t('Save a screenshot to the microSD card (SCREENSHOTS)')"
+          :data-label="screenshotLabel"
+          :aria-label="usbCaptureActive ? screenshotLabel : t('Save a screenshot to the microSD card')"
+          :title="screenshotBlocked || screenshotTitle"
           :disabled="!!screenshotBlocked || shotBusy"
           @click="screenshot"
         >

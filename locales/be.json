@@ -75,6 +75,8 @@
   "Marked in the clip being saved; it will run a little longer": "Адзначана ў кліпе, які захоўваецца. Ён будзе крыху даўжэйшы",
   "Saving a clip: the last {before} and the next {after}. It appears in Recordings when ready.": "Захаванне кліпа: апошнія {before} і наступныя {after}. Ён з’явіцца ў Запісах, калі будзе гатовы.",
   "Screenshot saved to {file}": "Здымак экрана захаваны ў {file}",
+  "Download screenshot": "Спампаваць здымак экрана",
+  "Could not download the screenshot": "Не ўдалося спампаваць здымак экрана",
   "the device would not take that codec": "прылада не прыняла гэты кодэк",
   "WiFi - {ssid}, standing in for the cable": "WiFi - {ssid}, замест кабеля",
   "connected": "падключана",
