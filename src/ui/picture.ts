@@ -26,3 +26,20 @@ export function pictureOf(el: HTMLElement | null): Picture | null {
   }
   return null;
 }
+
+export async function downloadScreenshot(canvas: HTMLCanvasElement): Promise<boolean> {
+  const image = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!image) return false;
+
+  const url = URL.createObjectURL(image);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `espkvm-screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
+    link.click();
+  } finally {
+    // Give the browser time to start reading the download before releasing the blob.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  return true;
+}
